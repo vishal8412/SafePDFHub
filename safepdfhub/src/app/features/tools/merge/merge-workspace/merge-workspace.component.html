@@ -1,0 +1,132 @@
+<div class="workspace-shell">
+  <div class="workspace-header">
+  <div class="file-info">
+    {{ files.length }} files • {{ totalSize  }}
+  </div>
+
+  <button class="clear-all" (click)="clearWorkspace()">
+    ✕ Clear all
+  </button>
+</div>
+
+  <div class="file-row" #scrollContainer *ngIf="files.length > 0">
+    <div #previewCard
+      class="file-card"
+      *ngFor="let file of files; let i = index; trackBy: trackByFile"
+      draggable="true"
+      [class.dragging]="dragIndex === i"
+      [class.hovered]="hoverIndex === i && dragIndex !== i"
+      [class.dimmed]="isDragging && dragIndex !== i"
+      [class.active]="activeIndex === i && activeIndex !== -1"
+      (click)="onPreview(i)"
+      (touchstart)="onTouchStart($event, i)"
+      (touchmove)="onTouchMove($event)"
+      (touchend)="onTouchEnd()"
+      (dragstart)="onDragStart(i)"
+      (dragover)="onDragOver($event, i)"
+      (dragend)="onResetDrag()"
+      (drop)="onDrop(i)"
+    >
+
+      <!-- DROP INDICATOR -->
+      <div class="drop-indicator" *ngIf="hoverIndex === i"></div>
+
+      <!-- ORDER BADGE -->
+      <div class="order">{{ i + 1 }}</div>
+
+      <!-- REMOVE BUTTON -->
+      <button
+        class="remove"
+        (click)="onRemove(i); $event.stopPropagation()"
+      >
+        ✕
+      </button>
+      
+      <!-- <div class="drag-handle">⋮⋮</div> -->
+      <div class="drag-handle">
+        <button
+  class="card-menu"
+  (click)="onOpenActions(i);
+           $event.stopPropagation()"
+>
+  ⋮
+</button>
+</div>
+  <!-- =====================
+      PREVIEW AREA
+  ===================== -->
+  <div class="preview-wrapper">
+
+  <!-- 🟡 SKELETON -->
+  <div *ngIf="previewLoading[i]" class="skeleton shimmer"></div>
+
+  <!-- 🟢 IMAGE -->
+  <img
+    *ngIf="!previewLoading[i] && previews[i]"
+    [src]="previews[i]"
+    class="preview-img"
+  />
+
+  <!-- 🔴 ERROR -->
+  <div *ngIf="previewError[i]" class="error-state">
+
+  <div class="error-icon">⚠️</div>
+
+  <div class="error-title">
+    Preview Failed
+  </div>
+
+  <div class="error-sub">
+    This file may be corrupted or protected
+  </div>
+
+  <button
+    class="retry-btn"
+    (click)="onRetry(i); $event.stopPropagation()"
+  >
+    Retry
+  </button>
+
+</div>
+
+  <!-- 📊 PROGRESS -->
+  <div *ngIf="previewLoading[i]" class="progress-bar">
+    <div
+      class="progress-fill"
+      [style.width.%]="previewProgress[i]"
+    ></div>
+  </div>
+
+  <!-- MOBILE REORDER -->
+   <!-- <div class="mobile-reorder" *ngIf="activeIndex === i">
+      <button (click)="moveLeft(i); $event.stopPropagation()">←</button>
+      <button (click)="moveRight(i); $event.stopPropagation()">→</button>
+    </div> -->
+
+</div>
+
+
+      <!-- =====================
+           FILE META
+      ===================== -->
+      <div class="meta">
+
+        <div class="file-name" title="{{ file.name }}">
+          {{ file.name }}
+        </div>
+
+        <div class="file-size">
+          {{ (file.size / (1024 * 1024)).toFixed(2) }} MB
+        </div>
+
+        <div class="file-extra">
+          <span *ngIf="pageCounts[i]">{{ pageCounts[i] }} pages</span>
+        </div>
+
+      </div>
+
+
+    </div>
+
+  </div>
+  </div>

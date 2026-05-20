@@ -1,0 +1,58 @@
+<footer class="footer">
+
+  <div class="container">
+
+    <!-- BRAND -->
+    <div class="col brand">
+      <h3>SafePDFHub</h3>
+      <p>
+        Privacy-first PDF tools.<br>
+        No uploads. Everything runs in your browser.
+      </p>
+
+      <!-- CTA -->
+      <button class="cta">🚀 Explore All Tools</button>
+    </div>
+
+    <!-- SEO TOOLS -->
+    <div class="col">
+      <h4>Popular Tools</h4>
+      <a *ngFor="let tool of toolsSeo"
+         [routerLink]="['/', tool.slug]">
+        {{ tool.label }}
+      </a>
+    </div>
+
+    <!-- PRODUCT -->
+    <div class="col">
+      <h4>Product</h4>
+      <a routerLink="/tools">All PDF Tools</a>
+      <a routerLink="/features">Features</a>
+      <a routerLink="/pricing">Pricing</a>
+      <a routerLink="/faq">FAQ</a>
+    </div>
+
+    <!-- LEGAL -->
+    <div class="col">
+      <h4>Legal</h4>
+      <a routerLink="/contact">Contact</a>
+      <a routerLink="/privacy">Privacy Policy</a>
+      <a routerLink="/terms">Terms</a>
+    </div>
+
+  </div>
+
+  <!-- TRUST STRIP (IMPROVED) -->
+  <div class="trust">
+    <div>⚡ Lightning Fast</div>
+    <div>🔒 100% Private</div>
+    <div>☁️ No Uploads</div>
+    <div>🇪🇺 Privacy Friendly</div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="bottom">
+    © 2026 SafePDFHub • Privacy-first PDF tools
+  </div>
+
+</footer>

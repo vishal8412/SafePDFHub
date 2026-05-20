@@ -1,0 +1,54 @@
+<div class="smart-panel">
+
+  <!-- HEADER -->
+  <div class="panel-header">
+
+    <div class="panel-icon">⚡</div>
+
+    <h2>{{ title }}</h2>
+
+    <p class="panel-sub">
+      {{ subtitle }}
+    </p>
+
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="action-grid">
+
+    <div
+      *ngFor="let action of actions"
+
+      class="action-card"
+
+      [class.primary]="action.primary"
+
+      (click)="actionClick.emit(action.id)"
+    >
+
+      <div class="icon">
+        {{ action.icon }}
+      </div>
+
+      <div class="title">
+        {{ action.title }}
+      </div>
+
+      <div class="desc">
+        {{ action.desc }}
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- TRUST STRIP -->
+  <div class="trust-strip">
+
+    <div *ngFor="let item of trustItems">
+      {{ item }}
+    </div>
+
+  </div>
+
+</div>

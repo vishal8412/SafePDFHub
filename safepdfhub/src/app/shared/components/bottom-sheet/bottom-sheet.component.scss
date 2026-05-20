@@ -1,0 +1,301 @@
+.sheet-backdrop {
+
+  position: fixed;
+  inset: 0;
+
+  z-index: 3000;
+
+  display: flex;
+  align-items: flex-end;
+
+  background:
+    rgba(3, 10, 18, 0.58);
+
+  backdrop-filter: blur(12px);
+
+  animation:
+    fadeIn 180ms ease;
+}
+
+/* =========================
+   SHEET CONTAINER
+========================= */
+
+.sheet {
+
+  width: 100%;
+
+  border-radius:
+    28px 28px 0 0;
+
+  padding:
+    14px 14px
+    calc(24px + env(safe-area-inset-bottom));
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(17, 33, 51, 0.98),
+      rgba(10, 24, 38, 1)
+    );
+
+  border-top:
+    1px solid rgba(255,255,255,0.06);
+
+  box-shadow:
+    0 -20px 60px rgba(0,0,0,0.45);
+
+  animation: sheetIn var(--duration-normal) var(--ease-premium);
+}
+
+/* =========================
+   HANDLE
+========================= */
+
+.sheet-handle {
+
+  width: 52px;
+  height: 5px;
+
+  border-radius: 999px;
+
+  margin:
+    0 auto 16px;
+
+  background:
+    rgba(255,255,255,0.14);
+}
+
+/* =========================
+   TITLE
+========================= */
+
+.sheet-title {
+
+  text-align: center;
+
+  font-size: 15px;
+  font-weight: 700;
+
+  color:
+    rgba(255,255,255,0.92);
+
+  margin-bottom: 14px;
+}
+
+/* =========================
+   ACTION BUTTON
+========================= */
+
+.sheet-action {
+
+  width: 100%;
+  height: 52px;
+
+  border: none;
+  border-radius: 16px;
+
+  margin-bottom: 10px;
+
+  background:
+    rgba(255,255,255,0.045);
+
+  color: white;
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 16px;
+
+  cursor: pointer;
+
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+
+  will-change:
+    transform;
+}
+
+.sheet-action:hover {
+
+  transform:
+    translateY(-1px);
+
+  background:
+    rgba(255,255,255,0.075);
+
+  box-shadow:
+    0 10px 30px rgba(0,0,0,0.18);
+}
+
+.sheet-action:active {
+
+  transform:
+    scale(0.985);
+}
+
+/* =========================
+   DANGER ACTION
+========================= */
+
+.sheet-action.danger {
+
+  color: #ff8a6b;
+}
+
+/* =========================
+   ICON
+========================= */
+
+.icon {
+
+  width: 28px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-right: 12px;
+
+  font-size: 18px;
+
+  opacity: 0.95;
+}
+
+/* =========================
+   LABEL
+========================= */
+
+.label {
+
+  font-size: 15px;
+  font-weight: 500;
+
+  letter-spacing: 0.1px;
+}
+
+/* =========================
+   DIVIDER
+========================= */
+
+.divider {
+
+  height: 1px;
+
+  margin:
+    12px 4px;
+
+  background:
+    rgba(255,255,255,0.06);
+}
+
+/* =========================
+   MOBILE ANIMATION
+========================= */
+
+@keyframes sheetIn {
+
+  from {
+    transform:
+      translateY(100%);
+  }
+
+  to {
+    transform:
+      translateY(0);
+  }
+}
+
+/* =========================
+   BACKDROP FADE
+========================= */
+
+@keyframes fadeIn {
+
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* =========================
+   DESKTOP MODE
+========================= */
+
+@media (min-width: 768px) {
+
+  .sheet-backdrop {
+
+    align-items: center;
+    justify-content: center;
+
+    padding: 24px;
+  }
+
+  .sheet {
+
+    width: 400px;
+
+    border-radius: 28px;
+
+    padding: 14px;
+
+    border:
+      1px solid rgba(255,255,255,0.06);
+
+    box-shadow:
+      0 30px 90px rgba(0,0,0,0.42);
+
+    animation:
+      desktopSheetIn 220ms
+      cubic-bezier(0.22,1,0.36,1);
+  }
+
+  .sheet-handle {
+    display: none;
+  }
+
+  .sheet-title {
+
+    font-size: 17px;
+
+    margin-bottom: 16px;
+  }
+
+  .sheet-action {
+
+    height: 50px;
+
+    border-radius: 15px;
+  }
+}
+
+/* =========================
+   DESKTOP ANIMATION
+========================= */
+
+@keyframes desktopSheetIn {
+
+  from {
+
+    opacity: 0;
+
+    transform:
+      translateY(10px)
+      scale(0.96);
+  }
+
+  to {
+
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}

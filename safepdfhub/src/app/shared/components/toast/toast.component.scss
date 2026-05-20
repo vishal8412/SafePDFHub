@@ -1,0 +1,131 @@
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  min-width: 260px;
+  max-width: 320px;
+
+  padding: 12px 14px;
+  border-radius: 12px;
+
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(12px);
+
+  color: #fff;
+  font-size: 13px;
+
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+
+  cursor: pointer;
+
+  /* ENTRY ANIMATION */
+  animation: slideIn 0.45s cubic-bezier(.22,1,.36,1);
+
+  /* EXIT (handled by Angular removal timing visually) */
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.toast.success {
+  border-left: 3px solid #22c55e;
+}
+
+.toast.error {
+  border-left: 3px solid #ef4444;
+}
+
+.toast.info {
+  border-left: 3px solid #3b82f6;
+}
+
+.icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.content {
+  flex: 1;
+  line-height: 1.4;
+}
+
+/* PROGRESS BAR */
+.progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+
+  background: linear-gradient(90deg, #22d3ee, #f97316);
+
+  animation: progressBar linear forwards;
+  animation-duration: 2.5s;
+}
+
+/* pause on hover */
+.progress.pause {
+  animation-play-state: paused;
+}
+
+.meta {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 6px;
+}
+
+.actions button {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+
+  transition: 0.2s;
+}
+
+.actions button:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* ENTRY MOTION */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* PROGRESS SHRINK */
+@keyframes progressBar {
+  from { width: 100%; }
+  to { width: 0%; }
+}

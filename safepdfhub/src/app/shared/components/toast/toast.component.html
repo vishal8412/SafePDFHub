@@ -1,0 +1,49 @@
+<div class="toast-container">
+  <div
+    class="toast"
+    *ngFor="let t of toasts(); let i = index; trackBy: trackById"
+    [ngClass]="t.type"
+    [style.transform]="'translateY(' + (i * 12) + 'px)'"
+    (mouseenter)="onEnter(t.id)"
+    (mouseleave)="onLeave()"
+    (click)="remove(t.id)"
+  >
+
+    <!-- ICON -->
+    <div class="icon">
+      {{ t.type === 'success' ? '✓' : t.type === 'error' ? '⚠️' : 'ℹ️' }}
+    </div>
+
+    <!-- TEXT -->
+    <div class="content">
+
+  <!-- MAIN TEXT -->
+  <div class="text">
+    {{ t.text }}
+  </div>
+
+  <!-- FILE NAME -->
+  <div class="meta" *ngIf="t.meta?.fileName">
+    {{ t.meta?.fileName }}
+  </div>
+
+  <!-- ACTION BUTTONS -->
+  <div class="actions" *ngIf="t.actions?.length">
+    <button
+      *ngFor="let a of t.actions"
+      (click)="handleAction($event, a, t.id)"
+    >
+      {{ a.label }}
+    </button>
+  </div>
+
+</div>
+
+    <!-- PROGRESS BAR -->
+    <div class="progress"
+     [style.animationDuration.ms]="2500"
+     [class.pause]="hovered() === t.id">
+    </div>
+
+  </div>
+</div>

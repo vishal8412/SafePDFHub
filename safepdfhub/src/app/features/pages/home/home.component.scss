@@ -1,0 +1,166 @@
+:host {
+  display: block;
+  background: #061b2d;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+}
+
+/* ================= HERO ================= */
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 80px 10%;
+  gap: 40px;
+}
+
+.hero-left h1 {
+  font-size: 56px;
+  line-height: 1.2;
+}
+
+.hero-left span {
+  background: linear-gradient(90deg, #00ffd5, #00aaff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-left p {
+  margin: 20px 0;
+  color: #9bb3c7;
+  font-size: 18px;
+}
+
+.actions {
+  display: flex;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.btn {
+  padding: 12px 26px;
+  border-radius: 30px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.primary {
+  background: linear-gradient(90deg, #ff7a7a, #ffb347);
+  color: #000;
+}
+
+.secondary {
+  border: 1px solid #00ffd5;
+  color: #00ffd5;
+}
+
+/* HERO PREVIEW */
+.preview-card {
+  background: #0d2a44;
+  padding: 30px;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.fake-file {
+  background: #163a5a;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.merge-btn {
+  margin-top: 10px;
+  background: #00ffd5;
+  border: none;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+/* ================= TRUST ================= */
+.trust {
+  text-align: center;
+  padding: 30px;
+}
+
+.trust-grid {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  color: #00ffd5;
+}
+
+/* ================= HOW ================= */
+.how {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.steps {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+}
+
+.step .circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #00ffd5;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+}
+
+/* ================= TOOLS ================= */
+.tools {
+  padding: 80px 10%;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 25px;
+}
+
+.tool-card {
+  background: #0d2a44;
+  padding: 30px;
+  border-radius: 16px;
+  text-align: center;
+  text-decoration: none;
+  color: white;
+  transition: 0.3s;
+}
+
+.tool-card:hover {
+  transform: translateY(-8px);
+  background: #13395a;
+}
+
+/* ================= WHY ================= */
+.why {
+  padding: 80px 10%;
+  text-align: center;
+}
+
+.why-grid {
+  display: flex;
+  gap: 30px;
+  justify-content: center;
+}
+
+.why-card {
+  background: #0d2a44;
+  padding: 30px;
+  border-radius: 16px;
+}
+
+/* ================= CTA ================= */
+.cta {
+  text-align: center;
+  padding: 80px;
+}

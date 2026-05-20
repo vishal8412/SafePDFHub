@@ -1,0 +1,46 @@
+<div
+  class="dialog-backdrop"
+  *ngIf="open"
+  (click)="close.emit()"
+>
+
+  <div
+    class="dialog"
+    (click)="$event.stopPropagation()"
+  >
+
+    <div class="dialog-icon">
+      ⚠️
+    </div>
+
+    <div class="dialog-title">
+      {{ title }}
+    </div>
+
+    <div class="dialog-message">
+      {{ message }}
+    </div>
+
+    <div class="dialog-actions">
+
+      <button
+        class="btn secondary"
+        (click)="close.emit()"
+      >
+        {{ cancelText }}
+      </button>
+
+      <button
+        autofocus
+        class="btn primary"
+        [class.danger]="danger"
+        (click)="confirm.emit()"
+      >
+        {{ confirmText }}
+      </button>
+
+    </div>
+
+  </div>
+
+</div>

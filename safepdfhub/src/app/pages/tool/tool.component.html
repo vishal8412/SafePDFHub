@@ -1,0 +1,399 @@
+<section class="tool-page" [class.workspace-mode]="isWorkspaceMode">
+ 
+  <div class="hero" *ngIf="!isWorkspaceMode">
+    <div class="hero-badge">
+        🔒 Files never leave your browser
+      </div>
+    <h1>Merge PDFs instantly</h1>
+    <p class="hero-sub">
+      Fast and private browser-based processing. No uploads required.
+    </p>
+
+  </div>
+ 
+  <!-- =====================
+       UPLOAD AREA
+  ===================== -->
+
+  <div
+  class="upload-box"
+  [class.compact]="isWorkspaceMode"
+  (drop)="onDropFiles($event)"
+  (dragover)="allowDrop($event)"
+>
+
+  <ng-container *ngIf="!isWorkspaceMode">
+    <p class="upload-text">Drag & drop PDFs here</p>
+
+    <label class="upload-btn">
+      Select PDF files
+      <input type="file" multiple (change)="onFileSelect($event)" hidden />
+    </label>
+
+    <div class="limits">
+      Max per file: {{ MAX_FILE_MB }} MB • Max total: {{ MAX_TOTAL_MB }} MB
+    </div>
+  </ng-container>
+
+  <!-- 🔥 COMPACT MODE -->
+  <ng-container *ngIf="isWorkspaceMode && !isCompressTool">
+    <div class="upload-compact" (click)="addMoreFiles()">
+      <span>+ Add more files</span>
+      <input #fileInput type="file" multiple (change)="onFileSelect($event)" hidden />
+    </div>
+  </ng-container>
+
+  <div class="workspace-toolbar" *ngIf="isWorkspaceMode && isCompressTool">
+
+  <!-- LEFT INFO -->
+  <div class="workspace-toolbar-left">
+
+    <div class="workspace-toolbar-title">
+      📄 {{ workspace.files.length }}
+      {{ workspace.files.length === 1 ? 'PDF Loaded' : 'PDFs Loaded' }}
+    </div>
+
+    <div class="workspace-toolbar-meta">
+
+      <span>
+        {{ workspace.pageCounts[0] || 0 }} pages
+      </span>
+
+      <span class="dot"></span>
+
+      <span>
+        {{ getTotalSize() }}
+      </span>
+
+    </div>
+
+  </div>
+
+  <!-- RIGHT ACTION -->
+  <button
+    class="workspace-add-btn"
+    (click)="addMoreFiles()"
+  >
+
+    <span class="plus">＋</span>
+
+    <span>Add More Files</span>
+
+  </button>
+
+  <input
+    #fileInput
+    type="file"
+    multiple
+    (change)="onFileSelect($event)"
+    hidden
+  />
+
+</div>
+
+</div>
+
+  <!-- =====================
+       FILE LIST (HORIZONTAL)
+  ===================== -->
+
+<div class="workspace" *ngIf="isWorkspaceMode">
+
+  <!-- =========================
+     MERGE WORKSPACE
+========================= -->
+
+<app-merge-workspace
+  *ngIf="isWorkspaceMode && !isCompressTool"
+  [files]="workspace.files"
+  [previews]="workspace.previews"
+  [fileIds]="workspace.workspaceFiles.map(f => f.id)"
+  [pageCounts]="workspace.pageCounts"
+  [previewLoading]="workspace.previewLoading"
+  [previewProgress]="workspace.previewProgress"
+  [previewError]="workspace.previewError"
+  [totalSize]="getTotalSize()"
+  [activeIndex]="workspace.activeIndex"
+  [dragIndex]="workspace.dragIndex"
+  [hoverIndex]="workspace.hoverIndex"
+  [isDragging]="workspace.isDragging"
+  (visiblePreview)="onVisiblePreview($event)"
+  (merge)="mergePdf()"
+  (removeFile)="removeFile($event)"
+  (clearAll)="confirmClearAll()"
+  (preview)="preview(workspace.files[$event],$event)"
+  (retryPreview)="retryPreview($event)"
+  (openActions)="openFileActions($event)"
+  (dragStart)="onDragStart($event)"
+  (dragOver)="onWorkspaceHover($event)"
+  (dropReorder)="onDropReorder($event.from,$event.to)"
+  (dragReset)="resetDrag()"
+></app-merge-workspace>
+
+  <!-- =========================
+     MERGE WORKSPACE
+========================= -->
+  <app-compress-workspace
+
+  *ngIf="
+    isWorkspaceMode
+    && isCompressTool
+  "
+
+  [files]="workspace.files"
+
+  [previews]="workspace.previews"
+
+  [pageCounts]="workspace.pageCounts"
+
+  [estimatedReduction]="estimatedReduction"
+
+  [estimatedFinalSize]="estimatedFinalSize"
+
+  [analyzedPdfType]="analyzedPdfType"
+
+  [compressionLevel]="compressionLevel"
+
+  (compressionLevelChange)="
+    compressionLevel = $event;
+    analyzeCompression();
+  "
+
+  (compress)="compressPdf()"
+
+/>
+
+  
+
+  <!-- =====================
+       ACTION BAR
+  ===================== -->
+  <div class="action-bar" *ngIf="workspace.files.length && !workspace.hasMerged && !isCompressTool">
+
+  <div class="cta-container">
+
+    <button
+      class="merge-btn"
+      (click)="mergePdf()"
+      [disabled]="workspace.loading || workspace.files.length < 2"
+    >
+      {{ workspace.loading ? 'Merging...' : 'Merge ' + workspace.files.length + ' PDFs' }}
+    </button>
+
+    <div class="trust-inline">
+      🔒 Private • ⚡ Fast • No Upload
+    </div>
+
+  </div>
+ </div>
+</div>
+  
+<!-- =====================
+      SMART SUGGESTIONS
+  ===================== -->
+<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode">
+
+  
+  <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
+
+  <button class="workflow-btn" (click)="runWorkflow()">
+
+    ⚡ Optimize Automatically
+
+  </button>
+
+</div>
+
+  <h3>⚡ {{ suggestionTitle }}</h3>
+
+  <div class="suggestion-list">
+    <button
+  *ngFor="let s of suggestions; let i = index"
+  [class.primary]="i === 0"
+  (click)="s.action()"
+  class="suggestion-chip"
+>
+  {{ s.label }}
+</button>
+  </div>
+
+
+</div>
+
+  <!-- =====================
+      SMART PANEL
+  ===================== -->
+
+<app-action-panel
+  *ngIf="(!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode"
+
+  [title]="'What do you want to do?'"
+
+  [subtitle]="'Choose a tool to get started instantly'"
+
+  [actions]="quickActions"
+
+  [trustItems]="trustItems"
+
+  (actionClick)="handleQuickAction($event)"
+>
+</app-action-panel>
+
+  
+  <!-- =====================
+     SUCCESS PANEL
+===================== -->
+<!-- <div class="success-panel" *ngIf="workspace.hasMerged && isWorkspaceMode">
+
+  <h2>🎉 Your PDF is ready</h2>
+
+  <div class="success-actions">
+    <a
+      class="download-btn"
+      [href]="workspace.lastMergedUrl"
+      download="merged.pdf"
+    >
+      Download again
+    </a>
+
+    <button class="secondary-btn" (click)="resetAfterMerge()">
+      Merge more files
+    </button>
+  </div>
+
+ 
+  <div class="next-tools" *ngIf="recommendedTools.length">
+
+  <h3>Continue with your file</h3>
+
+  <div class="tool-grid">
+
+    <div
+      class="tool-card"
+      *ngFor="let tool of recommendedTools"
+      (click)="goToTool(tool.slug)"
+    >
+      <div class="tool-title">{{ tool.title }}</div>
+      <div class="tool-desc">{{ tool.description }}</div>
+    </div>
+
+  </div>
+
+</div>
+
+</div> -->
+
+  <!-- =====================
+       VIEWER MODAL
+  ===================== -->
+  <div class="viewer-overlay" *ngIf="showViewer">
+
+    <!-- HEADER -->
+    <div class="viewer-header">
+
+      <div class="viewer-controls">
+        <button (click)="zoomOut()">➖</button>
+        <button (click)="zoomIn()">➕</button>
+      </div>
+
+      <button class="close-btn" (click)="closeViewer()">✕</button>
+
+    </div>
+
+
+    <!-- BODY -->
+<div class="viewer-body">
+
+  <div *ngIf="viewerLoading" class="viewer-loading">
+    <div class="preview-loader">
+      <div class="loader-spinner"></div>
+    <!-- shimmer text -->
+      <div class="loading-text">
+        Rendering preview...
+      </div>
+    <!-- progress illusion -->
+      <div class="loading-bar">
+        <div class="loading-bar-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="viewer-content">
+
+    <div
+      class="viewer-pages"
+      [class.loading]="viewerLoading"
+      [style.zoom]="zoom"
+    >
+
+      <img
+        *ngFor="let page of viewerPages"
+        [src]="page"
+        class="viewer-page"
+      />
+
+    </div>
+
+    <!-- END CTA -->
+    <div
+      class="viewer-end-cta"
+      *ngIf="viewerPages.length >= 20"
+    >
+
+      <div class="viewer-end-content">
+
+        <div class="viewer-end-badge">
+          ⚡ Fast Preview
+        </div>
+
+        <div class="viewer-end-title">
+          Preview optimized for speed
+        </div>
+
+        <div class="viewer-end-subtitle">
+          Open full document in browser viewer for smooth navigation and faster performance.
+        </div>
+
+        <button
+          class="viewer-open-btn"
+          (click)="openFullPdf()"
+        >
+          Open Full PDF
+          <span>↗</span>
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+  </div>
+
+   <!-- =====================
+       DIALOGUE MODAL
+  ===================== -->
+  <app-dialog
+  [open]="showClearDialog"
+  title="Remove all files?"
+  message="This will remove all selected PDFs from your workspace."
+  confirmText="Remove all"
+  cancelText="Cancel"
+  [danger]="true"
+  (close)="showClearDialog = false"
+  (confirm)="confirmClearAll()"
+></app-dialog>
+
+<!-- =====================
+       BOTTOM SHEET
+  ===================== -->
+<app-bottom-sheet
+  [open]="showFileSheet"
+  title="File actions"
+  [actions]="fileActions"
+  (close)="showFileSheet = false"
+></app-bottom-sheet>
+
+</section>

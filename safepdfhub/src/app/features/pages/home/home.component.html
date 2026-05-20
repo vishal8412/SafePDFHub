@@ -1,0 +1,111 @@
+<!-- ================= HERO ================= -->
+<section class="hero">
+
+  <div class="hero-left">
+    <h1>
+      Edit PDFs <span>Privately</span>
+    </h1>
+
+    <p>
+      Powerful PDF tools that run 100% in your browser.
+      <b>No uploads. No tracking.</b>
+    </p>
+
+    <div class="actions">
+      <a routerLink="/merge-pdf" class="btn primary">Merge PDF</a>
+      <a routerLink="/compress-pdf" class="btn secondary">Compress PDF</a>
+    </div>
+
+    <div class="trust-inline">
+      <span>⚡ Fast</span>
+      <span>🔒 Private</span>
+      <span>☁️ No Uploads</span>
+    </div>
+  </div>
+
+  <!-- PRODUCT PREVIEW -->
+  <div class="hero-right">
+    <div class="preview-card">
+      <div class="fake-file">document1.pdf</div>
+      <div class="fake-file">document2.pdf</div>
+      <button class="merge-btn">Merge →</button>
+    </div>
+  </div>
+
+</section>
+
+<!-- ================= TRUST ================= -->
+<section class="trust">
+  <div class="trust-grid">
+    <div>⚡ Lightning Fast</div>
+    <div>🔒 100% Private</div>
+    <div>☁️ No Uploads</div>
+    <div>🚀 Works in Browser</div>
+  </div>
+</section>
+
+<!-- ================= HOW IT WORKS ================= -->
+<section class="how">
+  <h2>How it works</h2>
+
+  <div class="steps">
+    <div class="step">
+      <div class="circle">1</div>
+      <p>Upload your PDF</p>
+    </div>
+
+    <div class="step">
+      <div class="circle">2</div>
+      <p>Choose tool</p>
+    </div>
+
+    <div class="step">
+      <div class="circle">3</div>
+      <p>Download instantly</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TOOLS ================= -->
+<section class="tools">
+  <h2>All PDF Tools</h2>
+
+  <div class="tool-grid">
+    <a
+      class="tool-card"
+      *ngFor="let tool of tools"
+      [routerLink]="tool.route"
+    >
+      <div class="icon">{{ tool.icon }}</div>
+      <h3>{{ tool.name }}</h3>
+    </a>
+  </div>
+</section>
+
+<!-- ================= WHY ================= -->
+<section class="why">
+  <h2>Why SafePDFHub?</h2>
+
+  <div class="why-grid">
+    <div class="why-card">
+      ⚡ <h3>Super Fast</h3>
+      <p>Instant processing in your browser</p>
+    </div>
+
+    <div class="why-card">
+      🔒 <h3>Privacy First</h3>
+      <p>Your files never leave your device</p>
+    </div>
+
+    <div class="why-card">
+      🆓 <h3>Free Tools</h3>
+      <p>No signup required</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CTA ================= -->
+<section class="cta">
+  <h2>Ready to edit your PDFs?</h2>
+  <a routerLink="/merge-pdf" class="btn primary">Start Now</a>
+</section>

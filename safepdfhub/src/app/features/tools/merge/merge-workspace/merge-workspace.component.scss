@@ -1,0 +1,578 @@
+.workspace-shell {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(11, 36, 56, 0.92),
+      rgba(7, 26, 43, 0.96)
+    );
+
+  border: 1px solid rgba(255,255,255,0.05);
+
+  border-radius: 24px;
+
+  padding: 18px;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.03),
+    0 20px 60px rgba(0,0,0,0.28);
+
+  backdrop-filter: blur(20px);
+
+  margin-top: 18px;
+  padding-bottom: 28px;
+}
+
+/* =========================
+   FILE ROW (HORIZONTAL SCROLL)
+========================= */
+
+.file-row {
+  display: flex;
+  padding: 12px 10px 10px;
+  gap: 14px;
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+cursor: -webkit-grab; 
+cursor: grab;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+
+  // scroll-behavior: smooth;
+  scroll-behavior: auto;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.file-row::after {
+  content: "";
+  min-width: 20px;
+}
+
+/* custom scrollbar */
+.file-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.file-row::-webkit-scrollbar-thumb {
+  background: rgba(255, 122, 77, 0.6);
+  border-radius: 999px;
+}
+
+/* =========================
+   FILE CARD (FIXED SIZE)
+========================= */
+.file-card {
+  width: 180px;
+  min-width: 180px;
+  height: auto; // 🔥 FIX
+  position: relative;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px; // 🔥 consistent spacing
+
+  background: linear-gradient(180deg, #102a44, #0c2238);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 16px;
+
+  transition:
+    transform var(--duration-normal) var(--ease-premium),
+    opacity var(--duration-normal) var(--ease-standard);
+  animation: cardEnter 0.25s ease;
+  will-change: transform;
+}
+
+.file-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+}
+
+.file-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,255,255,0.03),
+      transparent 40%
+    );
+
+  pointer-events: none;
+}
+
+.file-card.dimmed {
+  opacity: 0.5;
+}
+
+.file-card.hovered {
+  transform: scale(1.05);
+}
+
+.file-card.active {
+  transform: scale(1.04);
+  border: 1px solid rgba(255,122,77,0.6);
+  box-shadow: 0 10px 35px rgba(255,122,77,0.25);
+}
+
+.file-card:active {
+  transform: scale(0.97);
+}
+
+/* =========================
+   DRAG STATES
+========================= */
+.file-card.dragging {
+  z-index: 999;
+  transform: scale(1.04);
+  box-shadow:
+    0 30px 80px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(255,122,77,0.35);
+  transition: none !important;
+  animation: dragPulse 1.2s infinite alternate;
+}
+
+@keyframes dragPulse {
+  from {
+    box-shadow:
+      0 20px 40px rgba(0,0,0,0.32);
+  }
+  to {
+    box-shadow:
+      0 30px 70px rgba(255,122,77,0.28);
+  }
+}
+
+/* =========================
+   FILE ROW (HORIZONTAL SCROLL)
+========================= */
+.workspace {
+  margin-top: 16px;
+  padding-bottom: 10px;
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0 8px;
+  padding: 0 8px;
+}
+
+
+.file-info {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.clear-all {
+  padding: 6px 12px;
+  border-radius: 8px;
+
+  background: rgba(255, 107, 74, 0.08);
+  border: 1px solid rgba(255, 107, 74, 0.25);
+
+  color: #ff7a4d;
+  font-size: 12px;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 107, 74, 0.15);
+  }
+}
+
+.drag-handle {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+
+  width: 28px;
+  height: 28px;
+
+  border-radius: 8px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(255,255,255,0.06);
+
+  color: rgba(255,255,255,0.7);
+
+  font-size: 12px;
+
+  touch-action: none;
+}
+
+.drop-indicator {
+  position: absolute;
+  left: -8px;
+  top: 0;
+  bottom: 0;
+
+  width: 4px;
+  border-radius: 4px;
+  background: #ff7a4d;
+}
+
+/* =========================
+   BADGES
+========================= */
+.order {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+
+  width: 22px;
+  height: 22px;
+
+  // background: #00d2a8;
+  // color: #002b2b;
+
+  // font-size: 12px;
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  // font-weight: 600;
+
+  background: linear-gradient(135deg, #22d3ee, #00d2a8);
+  color: #00363a;
+
+  box-shadow:
+    0 4px 10px rgba(0,210,168,0.4);
+
+  font-size: 11px;
+  font-weight: 700;
+  z-index: 5;
+}
+
+.remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+
+  width: 26px;
+  height: 26px;
+
+  border-radius: 50%;
+  border: none;
+
+  background: #ff6b4a;
+  color: white;
+
+  cursor: pointer;
+  z-index: 5;
+
+  transition: transform 0.2s ease;
+}
+
+.remove:hover {
+  transform: scale(1.1);
+}
+
+/* =========================
+   PREVIEW AREA (FIXED)
+========================= */
+.preview-wrapper {
+  width: 100%;
+  height: 140px;
+
+  border-radius: 10px;
+  overflow: hidden;
+
+  background: #0a1c2e;
+
+  position: relative;
+}
+
+.preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+
+  border-radius: 8px;
+
+  filter: blur(6px) scale(1.05); // 🔥 nicer blur illusion
+  transition: all 0.35s ease;
+}
+
+.file-card:not(.loading) .preview-img {
+  filter: blur(0) scale(1);
+}
+
+/* =========================
+   SKELETON LOADER
+========================= */
+.skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  background: #10263d;
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.15),
+    transparent
+  );
+
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+
+/* =========================
+   FILE META
+========================= */
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-name {
+  font-size: 12px;
+  font-weight: 500;
+
+  color: #e6eef7;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 11px;
+  color: #8fa3b8;
+}
+
+.file-extra {
+  font-size: 10px;
+  color: #7f95ac;
+  margin-top: 2px;
+}
+
+.card-menu {
+
+  width: 30px;
+  height: 30px;
+
+  border-radius: 10px;
+  border: none;
+
+  background:
+    rgba(255,255,255,0.06);
+
+  color: white;
+
+  cursor: pointer;
+}
+
+/* =========================
+    MOBILE REORDER
+========================= */
+.mobile-reorder {
+  display: none;
+}
+
+
+
+/* =========================
+   TABLET
+========================= */
+@media (max-width: 1024px) {
+
+  .tool-page {
+    padding: 20px;
+  }
+
+  .file-card {
+    width: 170px;
+    min-width: 170px;
+  }
+
+}
+
+/* =========================
+   MOBILE
+========================= */
+@media (max-width: 768px) {
+
+  .tool-page {
+    padding: 14px;
+  }
+
+  .hero {
+    margin-bottom: 20px;
+
+    h1 {
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    .hero-sub {
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 0 10px;
+    }
+  }
+
+  .upload-box {
+    padding: 24px 16px;
+    border-radius: 18px;
+  }
+
+  .upload-text {
+    font-size: 16px;
+  }
+
+  .upload-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  .workspace-header {
+    padding: 0;
+    margin-bottom: 12px;
+  }
+
+  .file-row {
+    gap: 10px;
+    padding: 4px 0 12px;
+    padding-left: 2px;
+    padding-right: 40px;
+    scroll-snap-type: x mandatory;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .file-card {
+    width: 145px;
+    min-width: 145px;
+    border-radius: 14px;
+    scroll-snap-align: start;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+
+  .preview-wrapper {
+    height: 120px;
+  }
+
+  .file-name {
+    font-size: 11px;
+  }
+
+  .merge-btn {
+    height: 54px;
+    padding: 0 54px;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 16px;
+  }
+
+  .trust-inline {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .action-card {
+    padding: 14px;
+  }
+
+  .trust-strip {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+
+    .action-bar {
+    position: sticky;
+    bottom: 10px;
+    z-index: 40;
+
+    padding: 12px;
+
+    background:
+      linear-gradient(
+        180deg,
+        rgba(7,26,43,0),
+        rgba(7,26,43,0.95)
+      );
+
+    backdrop-filter: blur(12px);
+  }
+
+}
+
+@media (max-width: 480px) {
+
+  .hero h1 {
+    font-size: 24px;
+  }
+
+  .file-card {
+    width: 160px;
+  min-width: 160px;
+  }
+
+  .preview-wrapper {
+    height: 105px;
+  }
+
+  .merge-btn {
+    font-size: 16px;
+    padding: 16px 52px;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .smart-suggestions {
+   margin-top: 34px;
+  }
+
+  .workflow-cta {
+    margin-bottom: 22px;
+  }
+
+  .suggestion-list {
+    margin-top: 14px;
+  }
+
+}
+

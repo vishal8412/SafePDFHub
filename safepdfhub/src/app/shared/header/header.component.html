@@ -1,0 +1,34 @@
+<header class="header">
+
+  <div class="container">
+
+    <a class="logo" routerLink="/">
+      SafePDFHub
+    </a>
+
+    <!-- DESKTOP NAV -->
+    <nav class="desktop-nav">
+      <a routerLink="/features">Features</a>
+      <a routerLink="/pricing">Pricing</a>
+      <a routerLink="/faq">FAQ</a>
+      <a routerLink="/sponsors">Sponsors</a>
+    </nav>
+
+    <!-- MOBILE MENU BUTTON -->
+    <button class="menu-btn" (click)="mobileMenuOpen = !mobileMenuOpen">
+      ☰
+    </button>
+
+  </div>
+
+  <!-- MOBILE DRAWER -->
+  <div class="mobile-menu" *ngIf="mobileMenuOpen">
+
+    <a routerLink="/features">Features</a>
+    <a routerLink="/pricing">Pricing</a>
+    <a routerLink="/faq">FAQ</a>
+    <a routerLink="/sponsors">Sponsors</a>
+
+  </div>
+
+</header>

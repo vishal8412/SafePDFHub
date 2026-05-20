@@ -1,0 +1,655 @@
+
+/* =========================
+   COMPRESS WORKSPACE
+========================= */
+
+.compress-workspace {
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 22px;
+}
+
+/* =========================
+   HERO CARD
+========================= */
+
+.compress-hero-card {
+
+  border-radius: 28px;
+
+  padding: 22px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(17,33,51,0.95),
+      rgba(10,24,38,1)
+    );
+
+  border:
+    1px solid rgba(255,255,255,0.06);
+
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.28);
+}
+
+.compress-stats {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 16px;
+}
+
+.stat-box {
+
+  border-radius: 20px;
+
+  padding: 18px;
+
+  background:
+    rgba(255,255,255,0.04);
+
+  border:
+    1px solid rgba(255,255,255,0.05);
+}
+
+.stat-box.highlight {
+
+  border-color:
+    rgba(255,122,77,0.28);
+
+  background:
+    rgba(255,122,77,0.08);
+}
+
+.stat-box.success {
+
+  border-color:
+    rgba(34,197,94,0.22);
+
+  background:
+    rgba(34,197,94,0.08);
+}
+
+.stat-label {
+
+  font-size: 13px;
+
+  color:
+    rgba(255,255,255,0.58);
+
+  margin-bottom: 10px;
+}
+
+.stat-value {
+
+  font-size: 24px;
+  font-weight: 800;
+}
+
+/* =========================
+   COMPRESSION PANEL
+========================= */
+
+.compression-panel {
+
+  border-radius: 26px;
+
+  padding: 22px;
+
+  background:
+    rgba(255,255,255,0.03);
+
+  border:
+    1px solid rgba(255,255,255,0.05);
+}
+
+.panel-title {
+
+  font-size: 18px;
+  font-weight: 700;
+
+  margin-bottom: 18px;
+}
+
+.compression-levels {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 14px;
+}
+
+.level-card {
+
+  position: relative;
+
+  border: none;
+
+  border-radius: 20px;
+
+  padding: 20px;
+
+  text-align: left;
+
+  background:
+    rgba(255,255,255,0.04);
+
+  border:
+    1px solid rgba(255,255,255,0.05);
+
+  color: white;
+
+  cursor: pointer;
+
+  transition:
+    all var(--duration-normal)
+    var(--ease-premium);
+}
+
+.level-card:hover {
+
+  transform:
+    translateY(-3px);
+
+  background:
+    rgba(255,255,255,0.06);
+}
+
+.level-card.active {
+
+  border-color:
+    rgba(255,122,77,0.38);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,122,77,0.12),
+      rgba(255,255,255,0.04)
+    );
+
+  box-shadow:
+    0 16px 40px rgba(255,122,77,0.14);
+}
+
+.level-badge {
+
+  position: absolute;
+
+  top: 12px;
+  right: 12px;
+
+  padding: 4px 8px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(255,122,77,0.16);
+
+  color: #ffb089;
+
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.level-title {
+
+  font-size: 18px;
+  font-weight: 700;
+
+  margin-bottom: 8px;
+}
+
+.level-desc {
+
+  font-size: 13px;
+
+  color:
+    rgba(255,255,255,0.58);
+
+  line-height: 1.5;
+}
+
+/* =========================
+   ANALYSIS CARD
+========================= */
+
+.analysis-card {
+
+  border-radius: 24px;
+
+  padding: 22px;
+
+  background:
+    rgba(255,255,255,0.03);
+
+  border:
+    1px solid rgba(255,255,255,0.05);
+}
+
+.analysis-title {
+
+  font-size: 17px;
+  font-weight: 700;
+
+  margin-bottom: 18px;
+}
+
+.analysis-content {
+
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 12px;
+}
+
+.analysis-chip {
+
+  padding: 12px 14px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(255,255,255,0.05);
+
+  border:
+    1px solid rgba(255,255,255,0.06);
+
+  font-size: 13px;
+}
+
+/* =========================
+   TABLET & MOBILE
+========================= */
+
+@media (max-width: 768px) {
+
+  .compress-stats {
+
+    grid-template-columns: 1fr;
+  }
+
+  .compression-levels {
+
+    grid-template-columns: 1fr;
+  }
+
+  .stat-value {
+
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .compress-btn {
+    font-size: 16px;
+    padding: 16px 52px;
+  }
+}
+
+
+/* =========================
+   COMPRESS LAYOUT
+========================= */
+
+.compress-layout {
+
+  max-width: 920px;
+
+  margin: 0 auto;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 22px;
+}
+
+/* =========================
+   MERGE BUTTON
+========================= */
+.compress-btn {
+  padding: 14px 64px;
+  cursor: pointer;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #ff8a3d, #ff5f2e);
+  color: white;
+  border: none;
+  box-shadow: 0 10px 30px rgba(255, 100, 40, 0.4);
+  transition: all 0.25s ease;
+
+  &:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 15px 40px rgba(255, 100, 40, 0.6);
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+  
+/* =========================
+   PREVIEW CARD
+========================= */
+
+.compress-preview-card {
+
+  padding: 22px;
+
+  border-radius: 28px;
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(11,36,56,0.94),
+      rgba(7,26,43,0.98)
+    );
+
+  border:
+    1px solid rgba(255,255,255,0.05);
+
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.24);
+}
+
+.preview-top {
+
+  display: flex;
+  align-items: center;
+
+  gap: 20px;
+}
+
+.preview-thumb {
+
+  width: 120px;
+  height: 150px;
+
+  border-radius: 16px;
+
+  overflow: hidden;
+
+  background: #0f2235;
+}
+
+.preview-thumb img {
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+.preview-meta {
+
+  flex: 1;
+}
+
+.pdf-name {
+
+  font-size: 22px;
+  font-weight: 700;
+
+  margin-bottom: 12px;
+}
+
+.pdf-size,
+.pdf-pages {
+
+  color:
+    rgba(255,255,255,0.65);
+
+  margin-bottom: 6px;
+}
+
+/* =========================
+   STATS
+========================= */
+
+.compress-stats {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 16px;
+}
+
+.stat-card {
+
+  padding: 20px;
+
+  border-radius: 22px;
+
+  background:
+    rgba(255,255,255,0.04);
+
+  border:
+    1px solid rgba(255,255,255,0.05);
+}
+
+.stat-card.highlight {
+
+  border-color:
+    rgba(255,122,77,0.3);
+
+  background:
+    rgba(255,122,77,0.08);
+}
+
+.stat-card.success {
+
+  border-color:
+    rgba(34,197,94,0.22);
+
+  background:
+    rgba(34,197,94,0.08);
+}
+
+.stat-label {
+
+  font-size: 13px;
+
+  opacity: 0.65;
+
+  margin-bottom: 10px;
+}
+
+.stat-value {
+
+  font-size: 28px;
+  font-weight: 800;
+}
+
+/* =========================
+   LEVELS
+========================= */
+
+.compress-levels {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, 1fr);
+
+  gap: 16px;
+}
+
+.compress-level {
+
+  position: relative;
+
+  padding: 22px;
+
+  border-radius: 24px;
+
+  background:
+    rgba(255,255,255,0.04);
+
+  border:
+    1px solid rgba(255,255,255,0.05);
+
+  color: white;
+
+  cursor: pointer;
+
+  transition:
+    all .25s cubic-bezier(0.22,1,0.36,1);
+}
+
+.compress-level:hover {
+
+  transform:
+    translateY(-3px);
+}
+
+.compress-level.active {
+
+  border-color:
+    rgba(255,122,77,0.35);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255,122,77,0.14),
+      rgba(255,255,255,0.04)
+    );
+
+  box-shadow:
+    0 16px 40px rgba(255,122,77,0.16);
+}
+
+.level-name {
+
+  font-size: 20px;
+  font-weight: 700;
+
+  margin-bottom: 8px;
+}
+
+.level-desc {
+
+  font-size: 13px;
+
+  opacity: 0.65;
+}
+
+.recommended-badge {
+
+  position: absolute;
+
+  top: 12px;
+  right: 12px;
+
+  padding: 4px 8px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(255,122,77,0.18);
+
+  color: #ffb089;
+
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* =========================
+   ANALYSIS
+========================= */
+
+.analysis-panel {
+
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 12px;
+}
+
+.analysis-chip {
+
+  padding: 12px 16px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(255,255,255,0.04);
+
+  border:
+    1px solid rgba(255,255,255,0.06);
+
+  font-size: 13px;
+}
+
+/* =========================
+   ACTION
+========================= */
+
+.compress-action {
+
+  display: flex;
+  justify-content: center;
+
+  margin-top: 10px;
+}
+
+/* =========================
+   MOBILE
+========================= */
+
+@media (max-width: 768px) {
+
+  .preview-top {
+
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .preview-thumb {
+
+    width: 100px;
+    height: 130px;
+  }
+
+  .compress-btn {
+    height: 54px;
+    padding: 0 54px;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 16px;
+  }
+
+  .compress-stats {
+
+    grid-template-columns: 1fr;
+  }
+
+  .compress-levels {
+
+    grid-template-columns: 1fr;
+  }
+
+  .pdf-name {
+
+    font-size: 18px;
+  }
+
+  .stat-value {
+
+    font-size: 22px;
+  }
+}

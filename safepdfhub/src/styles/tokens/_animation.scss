@@ -1,0 +1,58 @@
+/* =========================================
+   SAFEPDFHUB MOTION TOKENS
+========================================= */
+
+/* =========================
+   DURATIONS
+========================= */
+
+:root {
+
+  --duration-instant: 80ms;
+
+  --duration-fast: 160ms;
+
+  --duration-normal: 240ms;
+
+  --duration-slow: 360ms;
+
+  --duration-extra-slow: 520ms;
+
+  /* =========================
+     EASING CURVES
+  ========================= */
+
+  /* smooth standard UI */
+  --ease-standard:
+    cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* premium smooth */
+  --ease-premium:
+    cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* softer interactions */
+  --ease-soft:
+    cubic-bezier(0.25, 0.8, 0.25, 1);
+
+  /* springy app feel */
+  --ease-spring:
+    cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* smoother acceleration */
+  --ease-smooth:
+    cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* =========================
+     SHADOW TRANSITIONS
+  ========================= */
+
+  --shadow-hover:
+    0 10px 30px rgba(0,0,0,0.18);
+
+  --shadow-floating:
+    0 20px 60px rgba(0,0,0,0.35);
+
+  --shadow-glow:
+    0 0 0 1px rgba(255,122,77,0.25),
+    0 10px 35px rgba(255,122,77,0.18);
+}

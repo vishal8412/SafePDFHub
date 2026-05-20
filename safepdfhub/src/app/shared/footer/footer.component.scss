@@ -1,0 +1,155 @@
+.footer {
+  margin-top: 60px;
+  padding: 50px 20px;
+  background: linear-gradient(180deg, #071a2f, #04101f);
+  border-top: 1px solid #1f2f4a;
+}
+
+.container {
+  max-width: 1200px;
+  margin: auto;
+
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 40px;
+}
+
+/* BRAND */
+.brand h3 {
+  color: #2dd4bf;
+  margin-bottom: 10px;
+}
+
+.brand p {
+  color: #94a3b8;
+  line-height: 1.6;
+}
+
+/* CTA */
+.cta {
+  margin-top: 16px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ff6a00, #ff9a3c);
+  color: white;
+  cursor: pointer;
+  font-weight: 500;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(255, 106, 0, 0.25);
+}
+
+/* COLUMNS */
+.col h4 {
+  margin-bottom: 12px;
+  color: white;
+  font-size: 16px;
+}
+
+.col a {
+  display: block;
+  color: #94a3b8;
+  margin: 8px 0;
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.col a:hover {
+  color: #2dd4bf;
+  transform: translateX(4px);
+}
+
+/* TRUST STRIP */
+.trust {
+  margin-top: 30px;
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  flex-wrap: wrap;
+
+  color: #22c55e;
+  font-weight: 500;
+}
+
+/* BOTTOM */
+.bottom {
+  text-align: center;
+  margin-top: 20px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+
+  .container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 32px;
+  }
+
+}
+
+@media (max-width: 640px) {
+
+  .footer {
+    margin-top: 48px;
+    padding: 42px 16px 28px;
+  }
+
+  .container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px 22px;
+  }
+
+  .brand {
+    grid-column: span 2;
+  }
+
+  .brand p {
+    max-width: 280px;
+  }
+
+  .cta {
+    margin-top: 18px;
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+
+  .col h4 {
+    font-size: 15px;
+    margin-bottom: 10px;
+  }
+
+  .col a {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .trust {
+    gap: 12px;
+    margin-top: 34px;
+    font-size: 14px;
+    justify-content: center;
+  }
+
+  .trust div {
+    padding: 8px 14px;
+    border-radius: 999px;
+    min-width: 140px;
+    text-align: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .bottom {
+    margin-top: 24px;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 0 10px;
+  }
+
+}

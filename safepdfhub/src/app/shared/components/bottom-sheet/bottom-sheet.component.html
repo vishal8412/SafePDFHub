@@ -1,0 +1,52 @@
+<div
+  class="sheet-backdrop"
+  *ngIf="open"
+  (click)="close.emit()"
+>
+
+  <div
+    class="sheet"
+    (click)="$event.stopPropagation()"
+    (touchstart)="onTouchStart($event)"
+    (touchmove)="onTouchMove($event)"
+    (touchend)="onTouchEnd()"
+  >
+
+    <!-- HANDLE -->
+    <div class="sheet-handle"></div>
+
+    <!-- TITLE -->
+    <div
+      class="sheet-title"
+      *ngIf="title"
+    >
+      {{ title }}
+    </div>
+
+    <!-- ACTIONS -->
+    <button
+      *ngFor="let item of actions"
+      class="sheet-action"
+      [class.danger]="item.danger"
+      (click)="runAction(item.action)"
+    >
+
+      <span class="icon">
+
+  <lucide-icon
+    *ngIf="item.icon"
+    [img]="item.icon"
+    size="19"
+  ></lucide-icon>
+
+</span>
+
+      <span class="label">
+        {{ item.label }}
+      </span>
+
+    </button>
+
+  </div>
+
+</div>

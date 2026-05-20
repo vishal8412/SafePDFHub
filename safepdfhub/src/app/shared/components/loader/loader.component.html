@@ -1,0 +1,30 @@
+<div class="app-loader" *ngIf="loader.loading()">
+
+  <div class="bg-glow"></div>
+
+  <div class="loader-content">
+
+    <!-- 🔥 LOGO -->
+    <h1 class="logo">
+      Safe<span>PDF</span>Hub
+    </h1>
+
+    <!-- 🔥 PROGRESS -->
+    <div class="progress-wrapper">
+      <div class="progress-bar">
+        <div 
+          class="progress-fill"
+          [style.width.%]="loader.progress()"
+        ></div>
+      </div>
+    </div>
+
+    <!-- 🔥 STATUS -->
+    <p class="status-text">
+      {{ loader.text() }}
+      <span class="typing"></span>
+    </p>
+
+  </div>
+
+</div>

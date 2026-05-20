@@ -1,0 +1,16 @@
+<div
+  class="upload-box"
+  (drop)="onDrop($event)"
+  (dragover)="allowDrop($event)"
+>
+  <p>Drag & drop PDF files here</p>
+
+  <label class="upload-btn">
+    Select PDF files
+    <input type="file" multiple (change)="onFileSelect($event)" hidden />
+  </label>
+
+  <div class="limits">
+    Max per file: {{ MAX_FILE_MB }} MB • Max total: {{ MAX_TOTAL_MB }} MB
+  </div>
+</div>

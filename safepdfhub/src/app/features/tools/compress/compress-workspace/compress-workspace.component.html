@@ -1,0 +1,179 @@
+<div class="compress-layout">
+
+  <!-- PREVIEW -->
+
+  <div class="compress-preview-card">
+
+    <div class="preview-top">
+
+      <div class="preview-thumb">
+
+        <img
+          *ngIf="previews[0]"
+          [src]="previews[0]"
+        />
+
+      </div>
+
+      <div class="preview-meta">
+
+        <div class="pdf-name">
+          {{ files[0]?.name }}
+        </div>
+
+        <div class="pdf-size">
+          {{ formatFileSize(files[0]?.size || 0) }}
+        </div>
+
+        <div class="pdf-pages">
+          {{ pageCounts[0] || 0 }} pages
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- STATS -->
+
+  <div class="compress-stats">
+
+    <div class="stat-card">
+
+      <div class="stat-label">
+        Original
+      </div>
+
+      <div class="stat-value">
+        {{ formatFileSize(files[0]?.size || 0) }}
+      </div>
+
+    </div>
+
+    <div class="stat-card highlight">
+
+      <div class="stat-label">
+        Estimated
+      </div>
+
+      <div class="stat-value">
+        {{ estimatedFinalSize | number:'1.1-1' }} MB
+      </div>
+
+    </div>
+
+    <div class="stat-card success">
+
+      <div class="stat-label">
+        Reduction
+      </div>
+
+      <div class="stat-value">
+        {{ estimatedReduction }}%
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- LEVELS -->
+
+  <div class="compress-levels">
+
+    <button
+      class="compress-level"
+      [class.active]="compressionLevel === 'light'"
+      (click)="selectLevel('light')"
+    >
+
+      <div class="level-name">
+        Light
+      </div>
+
+      <div class="level-desc">
+        Better quality
+      </div>
+
+    </button>
+
+    <button
+      class="compress-level"
+      [class.active]="compressionLevel === 'recommended'"
+      (click)="selectLevel('recommended')"
+    >
+
+      <div class="recommended-badge">
+        Recommended
+      </div>
+
+      <div class="level-name">
+        Balanced
+      </div>
+
+      <div class="level-desc">
+        Best overall
+      </div>
+
+    </button>
+
+    <button
+      class="compress-level"
+      [class.active]="compressionLevel === 'strong'"
+      (click)="selectLevel('strong')"
+    >
+
+      <div class="level-name">
+        Strong
+      </div>
+
+      <div class="level-desc">
+        Maximum reduction
+      </div>
+
+    </button>
+
+  </div>
+
+  <!-- ANALYSIS -->
+
+  <div class="analysis-panel">
+
+    <div class="analysis-chip">
+      ⚡ Browser-only processing
+    </div>
+
+    <div class="analysis-chip">
+      🔒 No uploads
+    </div>
+
+    <div
+      class="analysis-chip"
+      *ngIf="analyzedPdfType === 'text'"
+    >
+      📄 Text PDF detected
+    </div>
+
+    <div
+      class="analysis-chip"
+      *ngIf="analyzedPdfType === 'scanned'"
+    >
+      🖼️ Scanned PDF detected
+    </div>
+
+  </div>
+
+  <!-- ACTION -->
+
+  <div class="compress-action">
+
+    <button
+      class="compress-btn"
+      (click)="startCompress()"
+    >
+      Compress PDF
+    </button>
+
+  </div>
+
+</div>

@@ -1,0 +1,98 @@
+ .smart-panel {
+   margin-top: 40px;
+   text-align: center;
+
+   .panel-header {
+     margin-bottom: 30px;
+
+     .panel-icon {
+       font-size: 28px;
+       margin-bottom: 10px;
+     }
+
+     h2 {
+       font-size: 22px;
+       font-weight: 600;
+     }
+
+     .panel-sub {
+       opacity: 0.7;
+       font-size: 14px;
+     }
+   }
+ }
+
+/* ACTION GRID */
+ .action-grid {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+   gap: 16px;
+   max-width: 700px;
+   margin: 0 auto 30px;
+ }
+
+ .action-card {
+   padding: 18px;
+   border-radius: 16px;
+   cursor: pointer;
+   text-align: left;
+
+   background: rgba(255,255,255,0.04);
+   border: 1px solid rgba(255,255,255,0.08);
+
+   transition: all
+   var(--duration-normal)
+   var(--ease-premium);
+
+   .icon {
+     font-size: 22px;
+     margin-bottom: 8px;
+   }
+
+   .title {
+     font-weight: 600;
+     margin-bottom: 4px;
+   }
+
+   .desc {
+     font-size: 12px;
+     opacity: 0.7;
+   }
+
+   &:hover {
+     transform: translateY(-6px) scale(1.02);
+     background: rgba(255,255,255,0.08);
+     box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+   }
+ }
+
+/* PRIMARY CARD */
+ .action-card.primary {
+   border: 1px solid rgba(249,115,22,0.5);
+
+   background: linear-gradient(
+     135deg,
+     rgba(249,115,22,0.15),
+     rgba(249,115,22,0.05)
+   );
+
+   &:hover {
+     box-shadow: 0 12px 40px rgba(249,115,22,0.25);
+   }
+ }
+
+/* TRUST STRIP */
+ .trust-strip {
+   display: flex;
+   justify-content: center;
+   gap: 24px;
+   font-size: 13px;
+   opacity: 0.8;
+
+   div {
+     background: rgba(255,255,255,0.04);
+     padding: 8px 14px;
+     border-radius: 999px;
+     border: 1px solid rgba(255,255,255,0.06);
+   }
+ }
