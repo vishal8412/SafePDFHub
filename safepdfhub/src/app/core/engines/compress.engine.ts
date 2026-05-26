@@ -200,6 +200,6 @@ export class CompressEngine {
   }
 
   private rename(name: string): string {
-    return name.replace(/\.pdf$/i, '-compressed.pdf');
+    return name.replace(/\.pdf$/i, '-compressed-${originalName}.pdf');
   }
 }

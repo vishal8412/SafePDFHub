@@ -29,6 +29,7 @@ import { MergeWorkspaceComponent } from '../../features/tools/merge/merge-worksp
 import { WorkspaceStateService } from '../../core/services/workspace-state.service';
 import { WorkspaceOperationsService } from '../../core/services/workspace-operations.service';
 import { NgZone } from '@angular/core';
+import { TOOL_BEHAVIORS, ToolBehavior } from '../../config/tool-behavior.config';
 
 type WorkflowStep = 'merge' | 'compress' | 'split';
 
@@ -46,6 +47,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   @ViewChild(MergeWorkspaceComponent) mergeWorkspace!: MergeWorkspaceComponent;
 
   tool!: Tool;
+  behavior!: ToolBehavior;
   recommendedTools: Tool[] = [];
   suggestions: { label: string; action: () => void }[] = [];
   suggestionTitle = 'Suggested for you';
@@ -72,7 +74,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   private lastPositions = new Map<number, DOMRect>();
   private isBrowser = false;
-
+  
   get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
   constructor(
@@ -93,44 +95,112 @@ export class ToolComponent implements OnInit, OnDestroy {
     @Inject(PLATFORM_ID) private platformId: Object
   ) { }
 
-  ngOnInit() {
-    // this.loader.show('Merging your files...');
-    this.setRecommendations();
-    this.isBrowser = isPlatformBrowser(this.platformId);
-    this.workspaceUploadFileCapacity();
-    const slug = this.route.snapshot.paramMap.get('slug');
+ngOnInit() {
+  this.isBrowser = isPlatformBrowser(this.platformId);
+  this.workspaceUploadFileCapacity();
+  this.route.paramMap.subscribe(params => {
+    const slug = params.get('slug');
     const match = TOOLS.find(t => t.slug === slug);
     if (!match) {
       this.router.navigate(['/']);
       return;
     }
+
+    // READ NAVIGATION STATE
+    const navigation = this.isBrowser? window.history.state: {};
+    const filesFromState = navigation?.files;
+    const autoAction = navigation?.autoAction;
+    const shouldPreserve = Array.isArray(filesFromState) && filesFromState.length > 0;
+
+    // ALWAYS RESET FIRST
+    this.resetWorkspaceState();
+
+    // SET TOOL
     this.tool = match;
+    this.behavior = TOOL_BEHAVIORS.find(b => b.slug === this.tool.slug)!;
+    
+    this.setRecommendations();
+    this.analyzeCompression();
+
     this.title.setTitle(this.tool.title);
     this.meta.updateTag({
       name: 'description',
       content: this.tool.description
     });
 
-    const nav = this.router.getCurrentNavigation();
-    const filesFromState = nav?.extras?.state?.['files'];
-    const autoAction = nav?.extras?.state?.['autoAction'];
-
-    if (filesFromState?.length) {
+    // RESTORE FILES IF PROVIDED
+    if (shouldPreserve) {
       this.onFileSelect({
-        target: { files: filesFromState }
+        target: {
+          files: filesFromState
+        }
       });
-
-      // 🔥 AUTO EXECUTE
       if (autoAction === 'compress') {
-        setTimeout(() => this.compressPdf(), 300);
+        setTimeout(() => {
+          this.compressPdf();
+        }, 300);
       }
-
       if (autoAction === 'merge') {
-        setTimeout(() => this.mergePdf(), 300);
+        setTimeout(() => {
+          this.mergePdf();
+        }, 300);
       }
     }
+  });
+}
+
+get isMergeTool(): boolean {
+  return this.tool?.slug === 'merge-pdf';
+}
+
+get isSplitTool(): boolean {
+  return this.tool?.slug === 'split-pdf';
+}
+
+private resetWorkspaceState() {
+
+  // cleanup previews
+  this.workspace.previews.forEach(p => {
+
+    if (p) {
+      URL.revokeObjectURL(p);
+    }
+
+  });
+
+  // cleanup merged file
+  if (this.workspace.lastMergedUrl) {
+
+    URL.revokeObjectURL(
+      this.workspace.lastMergedUrl
+    );
 
   }
+
+  // clear workspace
+  this.workspaceOps.clear();
+
+  // reset ui state
+  this.workspace.activeIndex = -1;
+
+  this.workspace.hasMerged = false;
+
+  this.workspace.lastMergedUrl = null;
+
+  this.workspace.dragIndex = null;
+
+  this.workspace.hoverIndex = null;
+
+  this.workspace.isDragging = false;
+
+  // viewer reset
+  this.viewerPages = [];
+
+  this.viewerFile = null;
+
+  this.showViewer = false;
+
+}
 
 workspaceUploadFileCapacity() {
   if (!this.isBrowser) return;
@@ -154,14 +224,28 @@ workspaceUploadFileCapacity() {
     );
   }
 
-  goToTool(slug: string, autoAction?: string) {
-    this.router.navigate(['/tool', slug], {
-      state: {
-        files: this.workspace.files,
-        autoAction
-      }
-    });
-  }
+goToTool(
+  slug: string,
+  autoAction?: string,
+  preserveFiles = false
+) {
+
+  const navigationState =
+    preserveFiles
+      ? {
+          files: this.workspace.files,
+          autoAction
+        }
+      : undefined;
+
+  this.router.navigate(
+    ['/tool', slug],
+    {
+      state: navigationState
+    }
+  );
+
+}
 
   private updateWorkflow() {
     this.workflowSteps = this.workflowService.detectWorkflow(
@@ -250,6 +334,10 @@ workspaceUploadFileCapacity() {
   // FILE INPUT
   // =====================
   onFileSelect(event: any) {
+    if (this.behavior.replaceOnUpload) {
+     this.workspaceOps.clear();
+     this.workspace.activeIndex = -1;
+    }
     const selected = this.validateFiles(
       Array.from(event.target.files || []) as File[]
     );
@@ -319,6 +407,10 @@ for (let i = startIndex; i < end; i++) {
 
   onDropFiles(event: DragEvent) {
     event.preventDefault();
+    if (this.behavior.replaceOnUpload) {
+     this.workspaceOps.clear();
+     this.workspace.activeIndex = -1;
+    }
     const dropped = this.validateFiles(
       Array.from(event.dataTransfer?.files || []) as File[]
     );
@@ -476,44 +568,49 @@ for (let i = startIndex; i < end; i++) {
  // UPLOAD
  // =====================  
   triggerUpload() {
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
-    input?.click();
+   this.fileInput?.nativeElement?.click();
   }
 
   // =====================
   // SUGGESTIONS          
   // =====================
 
-  quickActions = [
-  {
-    id: 'merge',
-    icon: '📄',
-    title: 'Merge PDFs',
-    desc: 'Combine multiple PDFs into one',
-    primary: true
-  },
+  get quickActions() {
+  return [
 
-  {
-    id: 'compress',
-    icon: '⚡',
-    title: 'Compress',
-    desc: 'Reduce file size'
-  },
+    {
+      id: 'merge',
+      icon: '📄',
+      title: 'Merge PDFs',
+      desc: 'Combine multiple PDFs into one',
+      active: this.isMergeTool
+    },
 
-  {
-    id: 'split',
-    icon: '✂️',
-    title: 'Split',
-    desc: 'Extract pages'
-  },
+    {
+      id: 'compress',
+      icon: '⚡',
+      title: 'Compress',
+      desc: 'Reduce file size',
+      active: this.isCompressTool
+    },
 
-  {
-    id: 'convert',
-    icon: '📄➡️📝',
-    title: 'Convert',
-    desc: 'PDF to Word'
-  }
-];
+    {
+      id: 'split',
+      icon: '✂️',
+      title: 'Split',
+      desc: 'Extract pages',
+      active: this.isSplitTool
+    },
+
+    {
+      id: 'convert',
+      icon: '📄➡️📝',
+      title: 'Convert',
+      desc: 'PDF to Word',
+      active: false
+    }
+  ];
+}
 
 trustItems = [
   '🔒 100% Private',
@@ -530,7 +627,7 @@ handleQuickAction(action: string) {
       break;
 
     case 'compress':
-      this.goToTool('compress-pdf');
+      this.goToTool('compress-pdf', 'compress', true);
       break;
 
     case 'split':
@@ -950,7 +1047,7 @@ closeViewer() {
   // =====================
 
   get isCompressTool(): boolean {
-    return this.tool.slug === 'compress-pdf';
+    return this.tool?.slug === 'compress-pdf';
   }
 
   async analyzeCompression() {
@@ -999,7 +1096,7 @@ closeViewer() {
       this.suggestionTitle = 'Your file is large';
       suggestions.push({
         label: 'Compress to reduce size',
-        action: () => this.goToTool('compress-pdf', 'compress'),
+        action: () => this.goToTool('compress-pdf', 'compress', true),
         priority: 1
       });
     }
@@ -1076,7 +1173,8 @@ closeViewer() {
         action: () =>
           this.goToTool(
             'compress-pdf',
-            'compress'
+            'compress',
+            true
           )
       },
       {

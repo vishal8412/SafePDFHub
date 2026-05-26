@@ -4,9 +4,9 @@
     <div class="hero-badge">
         🔒 Files never leave your browser
       </div>
-    <h1>Merge PDFs instantly</h1>
+    <h1>{{ behavior.heroTitle }}</h1>
     <p class="hero-sub">
-      Fast and private browser-based processing. No uploads required.
+      {{ behavior.heroDescription }}
     </p>
 
   </div>
@@ -17,21 +17,30 @@
 
   <div
   class="upload-box"
-  [class.compact]="isWorkspaceMode"
+  [class.compact]="isWorkspaceMode && !isCompressTool"
+  [class.compress-toolbar]="isWorkspaceMode && isCompressTool"
   (drop)="onDropFiles($event)"
   (dragover)="allowDrop($event)"
+  
 >
 
   <ng-container *ngIf="!isWorkspaceMode">
-    <p class="upload-text">Drag & drop PDFs here</p>
+    <p class="upload-text">{{ behavior.uploadTitle }}</p>
 
     <label class="upload-btn">
-      Select PDF files
-      <input type="file" multiple (change)="onFileSelect($event)" hidden />
+      {{ behavior.uploadButtonText }}
+      <input
+       type="file"
+       [accept]="behavior.acceptedTypes"
+       capture="environment"
+       [attr.multiple]="behavior.allowMultiple ? '' : null"
+       (change)="onFileSelect($event)"
+       hidden
+      />
     </label>
 
     <div class="limits">
-      Max per file: {{ MAX_FILE_MB }} MB • Max total: {{ MAX_TOTAL_MB }} MB
+      {{ behavior.uploadHint }}
     </div>
   </ng-container>
 
@@ -39,11 +48,15 @@
   <ng-container *ngIf="isWorkspaceMode && !isCompressTool">
     <div class="upload-compact" (click)="addMoreFiles()">
       <span>+ Add more files</span>
-      <input #fileInput type="file" multiple (change)="onFileSelect($event)" hidden />
+      <input #fileInput type="file" 
+        [attr.multiple]="behavior.allowMultiple ? '' : null"
+        accept=".pdf,application/pdf" 
+        capture="environment"
+        (change)="onFileSelect($event)" hidden />
     </div>
   </ng-container>
 
-  <div class="workspace-toolbar" *ngIf="isWorkspaceMode && isCompressTool">
+  <div class="workspace-toolbar" *ngIf="isWorkspaceMode && !isCompressTool && !isMergeTool">
 
   <!-- LEFT INFO -->
   <div class="workspace-toolbar-left">
@@ -84,7 +97,8 @@
   <input
     #fileInput
     type="file"
-    multiple
+    [attr.multiple]="behavior.allowMultiple ? '' : null"
+    [accept]="behavior.acceptedTypes"
     (change)="onFileSelect($event)"
     hidden
   />
@@ -154,21 +168,26 @@
 
   [compressionLevel]="compressionLevel"
 
-  (compressionLevelChange)="
-    compressionLevel = $event;
-    analyzeCompression();
-  "
+  (compressionLevelChange)="compressionLevel = $event; analyzeCompression();"
 
   (compress)="compressPdf()"
 
+  (replaceFile)="triggerUpload()"
+
 />
 
-  
+<input
+  #fileInput
+  type="file"
+  accept=".pdf,application/pdf"
+  (change)="onFileSelect($event)"
+  hidden
+/> 
 
   <!-- =====================
        ACTION BAR
   ===================== -->
-  <div class="action-bar" *ngIf="workspace.files.length && !workspace.hasMerged && !isCompressTool">
+  <div class="action-bar" *ngIf="workspace.files.length > 1 && !workspace.hasMerged && !isCompressTool">
 
   <div class="cta-container">
 
@@ -191,9 +210,8 @@
 <!-- =====================
       SMART SUGGESTIONS
   ===================== -->
-<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode">
-
-  
+<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode && !isCompressTool">
+ 
   <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
 
   <button class="workflow-btn" (click)="runWorkflow()">

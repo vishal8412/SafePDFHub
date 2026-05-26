@@ -29,30 +29,17 @@ export class CompressWorkspaceComponent {
 
   @Input() estimatedFinalSize = 0;
 
-  @Input()
-  analyzedPdfType:
-    'text'
-    | 'scanned'
-    | null = null;
+  @Input() analyzedPdfType: 'text' | 'scanned' | null = null;
 
-  @Input()
-  compressionLevel:
-    'light'
-    | 'recommended'
-    | 'strong'
-    = 'recommended';
+  @Input() compressionLevel: 'light' | 'recommended' | 'strong' = 'recommended';
 
-  @Output()
-  compressionLevelChange =
-    new EventEmitter<
-      'light'
-      | 'recommended'
-      | 'strong'
-    >();
+  @Output() compressionLevelChange = new EventEmitter<'light' | 'recommended' | 'strong'>();
+  
+  @Output() compress = new EventEmitter<void>();
+  
+  @Output() replaceFile = new EventEmitter<void>();
 
-  @Output()
-  compress =
-    new EventEmitter<void>();
+  isCompressing = false;
 
   formatFileSize(bytes: number): string {
 
@@ -81,7 +68,19 @@ export class CompressWorkspaceComponent {
   }
 
   startCompress() {
-
+    if (this.isCompressing) {
+      return;
+    }
+    this.isCompressing = true;
     this.compress.emit();
+    // temporary demo loading
+    setTimeout(() => {
+      this.isCompressing = false;
+    }, 3000);
   }
+
+  triggerReplace() {
+    this.replaceFile.emit();
+  }
+
 }

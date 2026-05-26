@@ -1,179 +1,321 @@
-<div class="compress-layout">
+<div class="compress-v2">
 
-  <!-- PREVIEW -->
+  <!-- LEFT -->
+  <div class="preview-section">
 
-  <div class="compress-preview-card">
+    <div class="preview-card">
 
-    <div class="preview-top">
+      <div class="preview-header">
 
-      <div class="preview-thumb">
-
-        <img
-          *ngIf="previews[0]"
-          [src]="previews[0]"
-        />
-
-      </div>
-
-      <div class="preview-meta">
-
-        <div class="pdf-name">
-          {{ files[0]?.name }}
+        <div class="preview-badge">
+          ⚡ Smart Compression
         </div>
 
-        <div class="pdf-size">
-          {{ formatFileSize(files[0]?.size || 0) }}
-        </div>
-
-        <div class="pdf-pages">
+        <div class="preview-pages">
           {{ pageCounts[0] || 0 }} pages
         </div>
 
       </div>
 
-    </div>
+      <div class="preview-image-wrap">
 
-  </div>
+        <img
+          *ngIf="previews[0]"
+          [src]="previews[0]"
+          class="preview-image"
+        />
 
-  <!-- STATS -->
-
-  <div class="compress-stats">
-
-    <div class="stat-card">
-
-      <div class="stat-label">
-        Original
       </div>
 
-      <div class="stat-value">
+<div class="preview-bottom">
+
+  <div class="preview-footer">
+
+  <div class="file-top-row">
+
+    <div class="file-info">
+
+      <div class="file-name">
+        {{ files[0]?.name }}
+      </div>
+
+      <div class="file-size">
         {{ formatFileSize(files[0]?.size || 0) }}
       </div>
 
     </div>
 
-    <div class="stat-card highlight">
-
-      <div class="stat-label">
-        Estimated
-      </div>
-
-      <div class="stat-value">
-        {{ estimatedFinalSize | number:'1.1-1' }} MB
-      </div>
-
-    </div>
-
-    <div class="stat-card success">
-
-      <div class="stat-label">
-        Reduction
-      </div>
-
-      <div class="stat-value">
-        {{ estimatedReduction }}%
-      </div>
-
-    </div>
-
-  </div>
-
-  <!-- LEVELS -->
-
-  <div class="compress-levels">
-
     <button
-      class="compress-level"
-      [class.active]="compressionLevel === 'light'"
-      (click)="selectLevel('light')"
+      class="replace-btn"
+      (click)="triggerReplace()"
     >
-
-      <div class="level-name">
-        Light
-      </div>
-
-      <div class="level-desc">
-        Better quality
-      </div>
-
-    </button>
-
-    <button
-      class="compress-level"
-      [class.active]="compressionLevel === 'recommended'"
-      (click)="selectLevel('recommended')"
-    >
-
-      <div class="recommended-badge">
-        Recommended
-      </div>
-
-      <div class="level-name">
-        Balanced
-      </div>
-
-      <div class="level-desc">
-        Best overall
-      </div>
-
-    </button>
-
-    <button
-      class="compress-level"
-      [class.active]="compressionLevel === 'strong'"
-      (click)="selectLevel('strong')"
-    >
-
-      <div class="level-name">
-        Strong
-      </div>
-
-      <div class="level-desc">
-        Maximum reduction
-      </div>
-
-    </button>
-
-  </div>
-
-  <!-- ANALYSIS -->
-
-  <div class="analysis-panel">
-
-    <div class="analysis-chip">
-      ⚡ Browser-only processing
-    </div>
-
-    <div class="analysis-chip">
-      🔒 No uploads
-    </div>
-
-    <div
-      class="analysis-chip"
-      *ngIf="analyzedPdfType === 'text'"
-    >
-      📄 Text PDF detected
-    </div>
-
-    <div
-      class="analysis-chip"
-      *ngIf="analyzedPdfType === 'scanned'"
-    >
-      🖼️ Scanned PDF detected
-    </div>
-
-  </div>
-
-  <!-- ACTION -->
-
-  <div class="compress-action">
-
-    <button
-      class="compress-btn"
-      (click)="startCompress()"
-    >
-      Compress PDF
+      ↻ Replace PDF
     </button>
 
   </div>
 
 </div>
+
+  <!-- ACTION -->
+  <button
+    class="compress-v2-btn"
+    (click)="startCompress()"
+    [class.loading]="isCompressing"
+    [disabled]="isCompressing"
+  >
+
+    <ng-container *ngIf="!isCompressing">
+      Compress PDF
+    </ng-container>
+
+    <ng-container *ngIf="isCompressing">
+
+      <span class="btn-loader"></span>
+
+      <span>
+        Optimizing PDF...
+      </span>
+
+    </ng-container>
+
+  </button>
+
+</div>
+
+</div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="optimize-panel">
+
+    <!-- TITLE -->
+    <div class="panel-top">
+
+      <div class="panel-label">
+        AI Optimization Engine
+      </div>
+
+      <h2>
+        Compress your PDF intelligently
+      </h2>
+
+      <p>
+        Optimize file size while preserving document quality and readability.
+      </p>
+
+    </div>
+
+    <!-- STATS -->
+<div class="stats-grid">
+
+  <div class="stat-box">
+  <div class="stat-head">
+    <div class="stat-icon">
+      📄
+    </div>
+
+    <div class="stat-title">
+      Original Size
+    </div>
+   </div>
+    <div class="stat-value">
+      {{ formatFileSize(files[0]?.size || 0) }}
+    </div>
+
+  </div>
+
+  <div class="stat-box highlight">
+<div class="stat-head">
+  
+    <div class="stat-icon">
+      ⚡
+    </div>
+
+    <div class="stat-title">
+      Optimized Size
+    </div>
+</div>
+    <div class="stat-value">
+      {{ estimatedFinalSize | number:'1.1-1' }} MB
+    </div>
+
+  </div>
+
+  <div class="stat-box success">
+<div class="stat-head">
+  
+    <div class="stat-icon">
+      💾
+    </div>
+
+    <div class="stat-title">
+      Space Saved
+    </div>
+</div>
+    <div class="stat-value">
+      {{ estimatedReduction }}%
+    </div>
+
+  </div>
+
+</div>
+
+    <!-- SAVINGS BAR -->
+    <div class="savings-panel">
+
+      <div class="savings-header">
+
+        <span>Space Saved</span>
+
+        <span>{{ estimatedReduction }}%</span>
+
+      </div>
+
+      <div class="savings-track">
+
+        <div
+          class="savings-fill"
+          [style.width.%]="estimatedReduction"
+        ></div>
+
+      </div>
+
+    </div>
+
+    <!-- MODES -->
+    <div class="compression-modes">
+
+      <!-- HIGH -->
+      <button
+        class="mode-card"
+        [class.active]="compressionLevel === 'light'"
+        (click)="selectLevel('light')"
+      >
+
+        <div class="mode-title">
+          High Quality
+        </div>
+
+        <div class="mode-desc">
+          Best visual quality for professional documents
+        </div>
+
+      </button>
+
+      <!-- SMART -->
+      <button
+        class="mode-card recommended"
+        [class.active]="compressionLevel === 'recommended'"
+        (click)="selectLevel('recommended')"
+      >
+
+        <div class="recommended-pill">
+          Recommended
+        </div>
+
+        <div class="mode-title">
+          Smart Compression
+        </div>
+
+        <div class="mode-desc">
+          Best balance between quality and file size
+        </div>
+
+      </button>
+
+      <!-- MAX -->
+      <button
+        class="mode-card"
+        [class.active]="compressionLevel === 'strong'"
+        (click)="selectLevel('strong')"
+      >
+
+        <div class="mode-title">
+          Maximum Reduction
+        </div>
+
+        <div class="mode-desc">
+          Smallest possible size for sharing and uploads
+        </div>
+
+      </button>
+
+    </div>
+
+<!-- AI ANALYSIS -->
+<div class="analysis-box">
+
+  <div class="analysis-title">
+    Smart Analysis
+  </div>
+
+  <div class="analysis-list">
+
+    <div class="analysis-item">
+      ✔ Browser-secure local processing
+    </div>
+
+    <div class="analysis-item">
+      ✔ Compression optimized for readability
+    </div>
+
+    <div class="analysis-item">
+      ✔ No uploads — everything stays private
+    </div>
+
+    <div
+      class="analysis-item"
+      *ngIf="analyzedPdfType === 'text'"
+    >
+      ✔ Text-based PDF detected — best compression expected
+    </div>
+
+    <div
+      class="analysis-item"
+      *ngIf="analyzedPdfType === 'scanned'"
+    >
+      ✔ Scanned PDF detected — image optimization enabled
+    </div>
+
+    <div class="analysis-estimation">
+
+  <span>Estimated Reduction</span>
+
+  <strong>{{ estimatedReduction }}%</strong>
+
+</div>
+
+  </div>
+
+</div>
+
+
+  <!-- SMART TOOLS -->
+  <div class="smart-tools">
+
+    <div class="smart-tools-title">
+      ⚡ Continue working with your PDF
+    </div>
+
+    <div class="smart-tools-list">
+
+      <button class="tool-chip">
+        Convert to Word
+      </button>
+
+      <button class="tool-chip">
+        Split PDF
+      </button>
+
+      <button class="tool-chip">
+        Protect PDF
+      </button>
+
+    </div>
+
+  </div>
+  
+  </div>
+  
+</div>
+

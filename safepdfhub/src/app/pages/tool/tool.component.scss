@@ -2,7 +2,7 @@
    PAGE LAYOUT
 ========================= */
 .tool-page {
-  padding: 24px 32px;
+  padding: 6px 20px 0px;
   // background: radial-gradient(circle at top, rgba(34,211,238,0.08), transparent 60%),#071a2b;
   min-height: calc(100vh - 80px);
   color: #e6eef7;
@@ -21,7 +21,7 @@
 
 .hero {
   text-align: center;
-  margin-bottom: 38px;
+  margin-bottom: 24px;
 
   h1 {
     font-size: 34px;
@@ -159,7 +159,7 @@
   padding: 12px 22px;
 
   border-radius: 999px;
-  background: linear-gradient(135deg, #ff7a4d, #ff9a4d);
+  background: linear-gradient(90deg, #ff7a4d, #ff9a4d);
 
   color: white;
   font-weight: 600;
@@ -204,11 +204,29 @@
   }
 }
 
+/* =========================================
+   COMPRESS WORKSPACE TOOLBAR FIX
+========================================= */
+
+.upload-box.compress-toolbar {
+
+  padding: 0;
+
+  margin-bottom: 10px;
+
+  border: none;
+
+  background: transparent;
+
+  box-shadow: none;
+}
+
 /* =========================
    FILE ROW (HORIZONTAL SCROLL)
 ========================= */
 .workspace {
-  margin-top: 16px;
+  // margin-top: 16px;
+  // margin-top: 8px;
   padding-bottom: 10px;
 }
 
@@ -535,7 +553,8 @@
 
 // SMART SUGGESTION PANEL
 .smart-suggestions {
-  margin-top: 20px;
+  margin-top: 40px;
+  margin-bottom: 40px;
   text-align: center;
 
   h3 {
