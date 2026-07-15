@@ -18,13 +18,12 @@
       </div>
 
       <div class="preview-image-wrap">
-
-        <img
-          *ngIf="previews[0]"
-          [src]="previews[0]"
-          class="preview-image"
-        />
-
+        <img *ngIf="previews[0]" [src]="previews[0]" class="preview-image"/>
+        <div class="progress-overlay" *ngIf="compressing">
+          <div class="progress-circle">
+            {{ progress }}%
+          </div>
+       </div>
       </div>
 
 <div class="preview-bottom">
@@ -57,28 +56,31 @@
 </div>
 
   <!-- ACTION -->
-  <button
-    class="compress-v2-btn"
-    (click)="startCompress()"
-    [class.loading]="isCompressing"
-    [disabled]="isCompressing"
-  >
+<button class="compress-v2-btn" (click)="startCompress()" [disabled]="compressing">
+  <ng-container *ngIf="!compressing">
+    Compress PDF
+  </ng-container>
+  <ng-container *ngIf="compressing">
+    Compressing {{ progress }}%
+  </ng-container>
+</button>
 
-    <ng-container *ngIf="!isCompressing">
-      Compress PDF
-    </ng-container>
+<!-- TRUST STRIP -->
+<div class="trust-strip-premium">
 
-    <ng-container *ngIf="isCompressing">
+  <div class="trust-item">
+    🔒 100% Private
+  </div>
 
-      <span class="btn-loader"></span>
+  <div class="trust-item">
+    ⚡ Instant Processing
+  </div>
 
-      <span>
-        Optimizing PDF...
-      </span>
+  <div class="trust-item">
+    🌍 No Uploads
+  </div>
 
-    </ng-container>
-
-  </button>
+</div>
 
 </div>
 
@@ -100,7 +102,8 @@
       </h2>
 
       <p>
-        Optimize file size while preserving document quality and readability.
+        Reduce PDF size with smart browser-side optimization.
+        Best results for scanned and image-heavy PDFs.
       </p>
 
     </div>
@@ -251,7 +254,7 @@
 
   <div class="analysis-list">
 
-    <div class="analysis-item">
+    <!-- <div class="analysis-item">
       ✔ Browser-secure local processing
     </div>
 
@@ -275,7 +278,54 @@
       *ngIf="analyzedPdfType === 'scanned'"
     >
       ✔ Scanned PDF detected — image optimization enabled
-    </div>
+    </div> -->
+
+    <!-- PDF TYPE -->
+<div
+  class="analysis-item"
+  *ngIf="pdfInsights?.type"
+>
+  📄 PDF Type:
+  <strong>
+    {{ pdfInsights?.type | titlecase }}
+  </strong>
+</div>
+
+<!-- DPI -->
+<div
+  class="analysis-item"
+  *ngIf="pdfInsights?.estimatedDpi"
+>
+  🖼 Estimated DPI:
+  <strong>
+    {{ pdfInsights?.estimatedDpi }}
+  </strong>
+</div>
+
+<div *ngIf="pdfInsights?.imageHeavy">
+    🖼 Image-heavy document detected
+</div>
+
+<div *ngIf="pdfInsights?.largePages">
+    📐 Large page dimensions detected
+</div>
+
+<!-- IMAGE HEAVY -->
+<div
+  class="analysis-item"
+  *ngIf="pdfInsights?.imageHeavy"
+>
+  ⚡ Image-heavy document detected
+</div>
+
+<!-- LARGE PAGES -->
+<div
+  class="analysis-item"
+  *ngIf="pdfInsights?.largePages"
+>
+  📐 Large page dimensions detected
+</div>
+
 
     <div class="analysis-estimation">
 

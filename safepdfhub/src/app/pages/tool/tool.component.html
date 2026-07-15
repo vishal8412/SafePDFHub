@@ -16,13 +16,12 @@
   ===================== -->
 
   <div
-  class="upload-box"
-  [class.compact]="isWorkspaceMode && !isCompressTool"
-  [class.compress-toolbar]="isWorkspaceMode && isCompressTool"
-  (drop)="onDropFiles($event)"
-  (dragover)="allowDrop($event)"
-  
->
+    class="upload-box"
+    [class.compact]="isWorkspaceMode && !isCompressTool"
+    [class.compress-toolbar]="isWorkspaceMode && !isCompressTool"
+    (drop)="onDropFiles($event)"
+    (dragover)="allowDrop($event)"
+  >
 
   <ng-container *ngIf="!isWorkspaceMode">
     <p class="upload-text">{{ behavior.uploadTitle }}</p>
@@ -45,7 +44,7 @@
   </ng-container>
 
   <!-- 🔥 COMPACT MODE -->
-  <ng-container *ngIf="isWorkspaceMode && !isCompressTool">
+  <ng-container *ngIf="isWorkspaceMode && !isCompressTool && !isSplitTool">
     <div class="upload-compact" (click)="addMoreFiles()">
       <span>+ Add more files</span>
       <input #fileInput type="file" 
@@ -55,55 +54,6 @@
         (change)="onFileSelect($event)" hidden />
     </div>
   </ng-container>
-
-  <div class="workspace-toolbar" *ngIf="isWorkspaceMode && !isCompressTool && !isMergeTool">
-
-  <!-- LEFT INFO -->
-  <div class="workspace-toolbar-left">
-
-    <div class="workspace-toolbar-title">
-      📄 {{ workspace.files.length }}
-      {{ workspace.files.length === 1 ? 'PDF Loaded' : 'PDFs Loaded' }}
-    </div>
-
-    <div class="workspace-toolbar-meta">
-
-      <span>
-        {{ workspace.pageCounts[0] || 0 }} pages
-      </span>
-
-      <span class="dot"></span>
-
-      <span>
-        {{ getTotalSize() }}
-      </span>
-
-    </div>
-
-  </div>
-
-  <!-- RIGHT ACTION -->
-  <button
-    class="workspace-add-btn"
-    (click)="addMoreFiles()"
-  >
-
-    <span class="plus">＋</span>
-
-    <span>Add More Files</span>
-
-  </button>
-
-  <input
-    #fileInput
-    type="file"
-    [attr.multiple]="behavior.allowMultiple ? '' : null"
-    [accept]="behavior.acceptedTypes"
-    (change)="onFileSelect($event)"
-    hidden
-  />
-
-</div>
 
 </div>
 
@@ -118,7 +68,7 @@
 ========================= -->
 
 <app-merge-workspace
-  *ngIf="isWorkspaceMode && !isCompressTool"
+  *ngIf="isWorkspaceMode && isMergeTool"
   [files]="workspace.files"
   [previews]="workspace.previews"
   [fileIds]="workspace.workspaceFiles.map(f => f.id)"
@@ -144,15 +94,33 @@
   (dragReset)="resetDrag()"
 ></app-merge-workspace>
 
+<!-- ========================
+    SPLIT WORKSPACE
+========================= -->
+<app-split-workspace
+  *ngIf="isWorkspaceMode && isSplitTool"
+  [fileName]="workspace.files[0]?.name || ''"
+  [pageCount]="workspace.pageCounts[0] || 0"
+  [fileSize]="getTotalSize()"
+
+  [resultFiles]="splitResultFiles"
+  [resultMode]="splitResultMode"
+  [resultDuration]="splitResultDuration"
+  [showResult]="showSplitResult"
+
+  [generatedFiles]="generatedSplitFiles"
+
+  (changePdf)="splitPdfUpload()"
+  (downloadZip)="downloadZipAgain()"
+  (continueTool)="handleContinueTool($event)"
+  (split)="splitPdf($event)">
+</app-split-workspace>
+
+
   <!-- =========================
      MERGE WORKSPACE
 ========================= -->
-  <app-compress-workspace
-
-  *ngIf="
-    isWorkspaceMode
-    && isCompressTool
-  "
+  <app-compress-workspace *ngIf="isWorkspaceMode && isCompressTool"
 
   [files]="workspace.files"
 
@@ -164,9 +132,11 @@
 
   [estimatedFinalSize]="estimatedFinalSize"
 
-  [analyzedPdfType]="analyzedPdfType"
+  
 
   [compressionLevel]="compressionLevel"
+
+  [pdfInsights]="pdfInsights"
 
   (compressionLevelChange)="compressionLevel = $event; analyzeCompression();"
 
@@ -210,7 +180,7 @@
 <!-- =====================
       SMART SUGGESTIONS
   ===================== -->
-<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode && !isCompressTool">
+<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool">
  
   <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
 

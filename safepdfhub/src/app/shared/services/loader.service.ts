@@ -32,7 +32,10 @@ export class LoaderService {
       this._loading.set(true);
       this.startTime = Date.now();
 
-      this._progress.set(2);
+      setTimeout(() => {
+        this._progress.set(2);
+      });
+      
       this._text.set(customText || this.steps[0]);
 
       this.startFakeProgress();

@@ -1,15 +1,4 @@
-import {
-  Component,
-  OnInit,
-  ChangeDetectorRef,
-  OnDestroy,
-  Inject,
-  PLATFORM_ID,
-  ViewChild,
-  ElementRef,
-  HostListener
-} from '@angular/core';
-
+import {Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener} from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Meta, Title } from '@angular/platform-browser';
@@ -26,17 +15,22 @@ import { ActionPanelComponent } from '../../shared/components/action-panel/actio
 import { AppIcons } from '../../shared/icons';
 import { CompressWorkspaceComponent } from '../../features/tools/compress/compress-workspace/compress-workspace.component';
 import { MergeWorkspaceComponent } from '../../features/tools/merge/merge-workspace/merge-workspace.component';
+import { SplitRequest, SplitWorkspaceComponent } from '../../features/tools/split/split-workspace/split-workspace.component';
 import { WorkspaceStateService } from '../../core/services/workspace-state.service';
 import { WorkspaceOperationsService } from '../../core/services/workspace-operations.service';
 import { NgZone } from '@angular/core';
 import { TOOL_BEHAVIORS, ToolBehavior } from '../../config/tool-behavior.config';
+import { SplitEngine } from '../../core/engines/split.engine';
+import { SplitGroup } from '../../core/split/split.types';
+import { SplitExportService } from '../../core/split/split-export.service';
+import { SplitZipService } from '../../core/split/split-zip.service';
 
 type WorkflowStep = 'merge' | 'compress' | 'split';
 
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, DialogComponent, BottomSheetComponent, ActionPanelComponent],
+  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, DialogComponent, BottomSheetComponent, ActionPanelComponent],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
 })
@@ -67,13 +61,34 @@ export class ToolComponent implements OnInit, OnDestroy {
   
   viewerFile: File | null = null;
 
+  // Compress PDF
   compressionLevel: 'light' | 'recommended' | 'strong' = 'recommended';
   estimatedReduction = 0;
   estimatedFinalSize = 0;
-  analyzedPdfType: 'text' | 'scanned' | null = null;
+  analyzedPdfType: 'text' | 'scanned' | 'mixed' | null = null;
+  pdfInsights: any = null;
+  compressing = false;
+  compressionProgress = 0;
+  showCompressResult = false;
+  compressedFile: File | null = null;
+  compressOriginalSize = 0;
+  compressFinalSize = 0;
+  compressReduction = 0;
+  compressDuration = '';
 
+  private analysisRequestId = 0;
   private lastPositions = new Map<number, DOMRect>();
   private isBrowser = false;
+
+  // Split PDF
+  splitResultFiles = 0;
+  splitResultMode = '';
+  splitResultDuration = '';
+  showSplitResult = false;
+  generatedSplitFiles: File[] = [];
+
+  lastZipBlob: Blob | null = null;
+  lastZipName = '';
   
   get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
@@ -87,6 +102,9 @@ export class ToolComponent implements OnInit, OnDestroy {
     private toast: ToastService,
     private mergeEngine: MergeEngine,
     private compressEngine: CompressEngine,
+    private splitEngine: SplitEngine,
+    private splitExportService: SplitExportService,
+    private splitZipService: SplitZipService,
     private workflowService: WorkflowService,
     private previewService: PreviewService,
     public workspace: WorkspaceStateService,
@@ -120,8 +138,7 @@ ngOnInit() {
     this.behavior = TOOL_BEHAVIORS.find(b => b.slug === this.tool.slug)!;
     
     this.setRecommendations();
-    this.analyzeCompression();
-
+  
     this.title.setTitle(this.tool.title);
     this.meta.updateTag({
       name: 'description',
@@ -262,8 +279,10 @@ goToTool(
 
   async runWorkflow() {
     if (!this.workspace.files.length || this.workspace.loading) return;
-    this.loader.show();
-    this.loader.setText('Optimizing your PDF...');
+    setTimeout(() => {
+      this.loader.show();
+      this.loader.setText('Optimizing PDF...');
+    });
     this.loader.setProgress?.(0);
     this.workspace.loading = true;
     try {
@@ -385,6 +404,12 @@ for (let i = startIndex; i < end; i++) {
 }
 
     this.generateSuggestions();
+
+    if (this.isCompressTool) {
+      setTimeout(() => {
+        this.analyzeCompression();
+      });
+    }
     
     const isFirstUpload = startIndex === 0;
     if (isFirstUpload) {
@@ -453,6 +478,12 @@ for (let i = startIndex; i < end; i++) {
 }
 
     this.generateSuggestions();
+
+    if (this.isCompressTool) {
+      setTimeout(() => {
+        this.analyzeCompression();
+      });
+    }
     
     const isFirstUpload = startIndex === 0;
     if (isFirstUpload) {
@@ -570,6 +601,148 @@ for (let i = startIndex; i < end; i++) {
   triggerUpload() {
    this.fileInput?.nativeElement?.click();
   }
+
+ // =====================
+ // SPLIT PDF
+ // ===================== 
+ async splitPdf(request: SplitRequest) {
+  const startedAt = performance.now(); 
+  const totalPages = this.workspace.pageCounts[0];
+  let groups: SplitGroup[] = [];
+  switch (request.mode) {
+    case 'range': groups = this.splitEngine.splitByRanges(request.ranges!);
+      break;
+    case 'every-page': groups = this.splitEngine.splitEveryPage(totalPages);
+      break;
+    case 'every-n': groups = this.splitEngine.splitEveryN(totalPages,request.everyN!);
+      break;
+    case 'extract': groups = this.splitEngine.extractPages(request.pages!);
+      break;
+  }
+  
+  const MAX_OUTPUT_FILES = 100000;
+  
+  if (groups.length > MAX_OUTPUT_FILES) {
+    this.toast.show(
+      `Maximum ${MAX_OUTPUT_FILES} output PDFs allowed.`,
+      'error'
+    );
+   return;
+  }
+
+  if (request.mode === 'every-page' && totalPages > 10000) {
+     this.toast.show(
+      'Every Page mode supports maximum 250 pages.',
+      'error'
+     );
+   return;
+  }
+  
+  try {
+   this.loader.show();
+   this.loader.setText('Splitting PDF...');
+  //  this.loader.setText(`Generating PDF ${i + 1}/${groups.length}`);
+
+   const output = await this.splitExportService.export(
+    this.workspace.files[0], 
+    groups, 
+    p => {
+      this.loader.setProgress?.(p);
+      this.loader.setText(`Generating PDFs ${p}%`);
+    });
+
+   this.loader.setText('Creating ZIP...');
+
+   const zipBlob = await this.splitZipService.createZip(output.files);
+   const originalFileName = this.workspace.files[0].name;
+   const baseName = originalFileName.replace(/\.pdf$/i, '');
+  //  this.splitZipService.downloadZip(zipBlob,`${baseName}_split.zip`);
+   this.lastZipBlob = zipBlob;
+   this.lastZipName = `${baseName}_split.zip`;
+
+  //  this.generatedSplitFiles = output.files;
+   this.splitResultFiles = output.files.length;
+   this.splitResultMode = request.mode;
+   const duration = ((performance.now() - startedAt) / 1000).toFixed(1);
+   this.splitResultDuration = `${duration}s`;
+  
+   await this.ngZone.run(async () => {
+    this.generatedSplitFiles = [...output.files];
+    this.splitResultFiles = output.files.length;
+    this.splitResultMode = request.mode;
+    this.splitResultDuration = `${duration}s`;
+    this.showSplitResult = true;
+    this.cd.markForCheck();
+    this.cd.detectChanges();
+    await new Promise(r => requestAnimationFrame(r));
+   });
+
+   window.scrollTo({
+    top:0
+   });
+
+   await new Promise(r => setTimeout(r,150));
+   this.splitZipService.downloadZip(zipBlob,`${baseName}_split.zip`);
+   this.loader.hide();
+  
+   requestAnimationFrame(() => {
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    });
+  
+   this.toast.show(
+    `${output.files.length} PDFs created`,
+    'success'
+   );
+
+  //  this.loader.hide();
+
+  } catch(error) {
+   this.loader.hide();
+   this.toast.show('Split failed','error');
+  } finally {
+   this.loader.hide();
+  }
+
+ }
+
+ downloadZipAgain() {
+  if (!this.lastZipBlob) {
+    return;
+  }
+  this.splitZipService.downloadZip(this.lastZipBlob,this.lastZipName);
+}
+
+handleContinueTool(tool:string){
+ switch(tool){
+   case 'compress': this.goToTool('compress-pdf');
+   break;
+   case 'merge': this.goToTool('merge-pdf');
+   break;
+   case 'protect': this.goToTool('protect-pdf');
+   break;
+ }
+}
+
+ resetSplitWorkspace() {
+  this.showSplitResult = false;
+  this.generatedSplitFiles = [];
+  this.splitResultFiles = 0;
+  this.splitResultMode = '';
+  this.splitResultDuration = '';
+  this.workspaceOps.clear();
+  this.workspace.activeIndex = -1;
+}
+
+splitPdfUpload() {
+ this.resetSplitWorkspace();
+ this.cd.detectChanges();
+ setTimeout(() => {
+   this.fileInput?.nativeElement?.click();
+ },100);
+}
 
   // =====================
   // SUGGESTIONS          
@@ -716,12 +889,12 @@ handleQuickAction(action: string) {
     if (e.key === 'ArrowLeft') {
       this.setActive(Math.max(0, this.workspace.activeIndex - 1));
     }
-    if (e.key === ' ') {
-      e.preventDefault();
-      if (this.workspace.activeIndex >= 0) {
-        this.preview(this.workspace.files[this.workspace.activeIndex], this.workspace.activeIndex);
-      }
-    }
+    // if (e.key === ' ') {
+    //   e.preventDefault();
+    //   if (this.workspace.activeIndex >= 0) {
+    //     this.preview(this.workspace.files[this.workspace.activeIndex], this.workspace.activeIndex);
+    //   }
+    // }
     if (e.key === 'Enter') {
       e.preventDefault();
       if (this.workspace.activeIndex >= 0) {
@@ -966,6 +1139,8 @@ closeViewer() {
         }
       ]);
       await this.generatePreview(result,mergedId);
+      console.log('Compressed Result Size:',result.size);
+
       this.workspace.hasMerged = true;
       this.workspace.lastMergedUrl = URL.createObjectURL(result);
       this.loader.setText('Done ✨');
@@ -989,33 +1164,52 @@ closeViewer() {
       this.toast.show('Please add a PDF first', 'error');
       return;
     }
-    this.loader.show();
-    this.loader.setText('Optimizing PDF...');
+    setTimeout(() => {
+      this.loader.show();
+      this.loader.setText('Optimizing PDF...');
+    });
     this.workspace.loading = true;
+    this.compressing = true;
+    this.compressionProgress = 0;
+    const startedAt = performance.now();
     try {
-      const result = await this.compressEngine.compress(
-        this.workspace.files[0],
-        (p) => this.loader.setProgress?.(p)
-      );
+      const result = await this.compressEngine.compress(this.workspace.files[0],this.compressionLevel,
+       (p) => {
+        this.compressionProgress = p;
+        this.cd.markForCheck();
+       });
 
+      this.compressedFile = result;
+      this.compressOriginalSize = this.workspace.files[0].size;
+      this.compressFinalSize = result.size;
+      this.compressReduction = Math.max(0, Math.round(((this.compressOriginalSize - this.compressFinalSize) / this.compressOriginalSize) * 100));
+      this.compressDuration = ((performance.now() - startedAt)/ 1000).toFixed(1) + 's';
+
+      console.log('Result Size:',result.size);
+
+      const originalSize = this.workspace.files[0].size;
+      const compressedSize = result.size;
+      this.estimatedFinalSize = compressedSize / 1024 / 1024;
+      this.estimatedReduction = Math.max(0,Math.round(((originalSize - compressedSize) / originalSize) * 100));
       this.downloadFile(result);
       const mergedId = crypto.randomUUID();
-      this.workspaceOps.replaceAll([
-        {
-          id: mergedId,
-          file: result,
-          preview: '',
-          pageCount: 0,
-          previewLoading: true,
-          previewProgress: 0,
-          previewError: false,
-          previewQueued: false
-        }
-      ]);
-      await this.generatePreview(
-        result,
-        mergedId
-      );
+      setTimeout(async () => {
+        this.workspaceOps.replaceAll([
+          {
+            id: mergedId,
+            file: result,
+            preview: '',
+            pageCount: 0,
+            previewLoading: true,
+            previewProgress: 0,
+            previewError: false,
+            previewQueued: false
+          }
+        ]);
+
+        this.generatePreview(result,mergedId);
+        this.cd.detectChanges();
+      });
 
       this.workspace.hasMerged = true;
       this.workspace.lastMergedUrl = URL.createObjectURL(result);
@@ -1023,6 +1217,7 @@ closeViewer() {
       setTimeout(() => {
         this.loader.hide();
         this.toast.show('Optimization completed', 'success');
+        this.showCompressResult = true;
       }, 400);
     } catch (e) {
       console.error(e);
@@ -1030,9 +1225,13 @@ closeViewer() {
       setTimeout(() => this.loader.hide(), 500);
       this.toast.show('Optimization failed', 'error');
     } finally {
-      this.workspace.loading = false;
-      this.cd.markForCheck();
-    }
+        this.compressing = false;
+        this.compressionProgress = 100;
+        setTimeout(() => {
+          this.workspace.loading = false;
+          this.cd.detectChanges();
+        });
+     }
   }
 
   resetAfterMerge() {
@@ -1050,24 +1249,74 @@ closeViewer() {
     return this.tool?.slug === 'compress-pdf';
   }
 
-  async analyzeCompression() {
-    if (!this.workspace.files.length) return;
-    const file = this.workspace.files[0];
-    this.analyzedPdfType = await this.compressEngine.detectPdfType(file);
-    const sizeMB = file.size / 1024 / 1024;
-    let ratio = 0.65;
-    if (this.analyzedPdfType === 'scanned') {
-      ratio = 0.82;
-    }
-    if (this.compressionLevel === 'light') {
-      ratio *= 0.6;
-    }
-    if (this.compressionLevel === 'strong') {
-      ratio *= 1.2;
-    }
-    this.estimatedReduction = Math.min(Math.round(ratio * 100),92);
-    this.estimatedFinalSize = sizeMB * (1 - this.estimatedReduction / 100);
+ async analyzeCompression() {
+  if (!this.workspace.files.length) {
+    return;
   }
+  
+  const requestId = ++this.analysisRequestId;
+  const file = this.workspace.files[0];
+  const sizeMB = file.size / 1024 / 1024;
+  const result = await this.compressEngine.analyzeFile(file);
+  if (requestId !== this.analysisRequestId) {
+    return;
+  }
+  this.analyzedPdfType = result.type;
+  this.pdfInsights = result.analysis;
+  const pages = result.pages;
+  let reduction = 0;
+
+  // TEXT PDFs
+  if (this.analyzedPdfType === 'text') {
+    if (sizeMB < 20) {
+      reduction = 2;
+    }
+    else if (sizeMB < 100) {
+      reduction = 5;
+    }
+    else {
+      reduction = 8;
+    }
+
+  }
+  // Mixed PDFs
+  else if (this.analyzedPdfType === 'mixed') {
+    switch (this.compressionLevel) {
+    case 'light':
+      reduction = 20;
+      break;
+    case 'recommended':
+      reduction = 45;
+      break;
+    case 'strong':
+      reduction = 65;
+      break;
+  }
+}
+
+// SCANNED PDFs
+  else {
+    switch (this.compressionLevel) {
+      case 'light':
+        reduction = 15;
+        break;
+      case 'recommended':
+        reduction = 35;
+        break;
+      case 'strong':
+        reduction = 55;
+        break;
+    }
+  }
+
+  // very huge PDFs
+  if (pages > 1000) {
+    reduction = Math.min(reduction, 10);
+  }
+
+  this.estimatedReduction = reduction;
+  this.estimatedFinalSize = sizeMB * (1 - reduction / 100);
+}
 
   getTotalSize(): string {
     return (this.workspace.files.reduce((a, f) => a + f.size, 0) /(1024 * 1024)).toFixed(2) + ' MB';

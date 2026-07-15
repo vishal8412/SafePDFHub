@@ -1,0 +1,327 @@
+<div class="split-workspace" *ngIf="!showResult">
+  <!-- PDF Summary -->
+  <div class="split-summary">
+   <div class="summary-left">
+     <div class="pdf-badge">
+        PDF
+     </div>
+     <div class="summary-content">
+        <div class="summary-title">
+          {{ fileName }}
+        </div>
+        <div class="summary-subtitle">
+          {{ pageCount }} pages • {{ fileSize }}
+        </div>
+     </div>
+   </div>
+
+    <button class="change-file-btn" (click)="onReplace()">
+        Change PDF →
+    </button>
+
+  </div>
+
+  <!-- Split Methods -->
+
+  <div class="split-section">
+    <h3>
+      How do you want to split?
+    </h3>
+
+    <div class="recommendation-card">
+      <div class="recommendation-title">
+       💡 Recommended:
+        {{ recommendedMode }}
+      </div>
+      <div class="recommendation-text">
+        {{ recommendationText }}
+      </div>
+      <button class="recommend-btn" (click)="applyRecommendedMode()">
+        Use Recommended Mode
+      </button>
+    </div>
+
+    <div class="split-pills">
+      <button [class.active]="mode==='range'" (click)="mode='range'">
+        ✂️ Range
+      </button>
+
+      <button [class.active]="mode==='every-page'" (click)="mode='every-page'">
+        📄 Every Page
+      </button>
+
+      <button [class.active]="mode==='every-n'" (click)="mode='every-n'">
+        🔢 Every N
+      </button>
+
+      <button [class.active]="mode==='extract'" (click)="mode='extract'">
+        🎯 Extract
+      </button>
+    </div>
+
+    <div class="mode-description">
+
+  <ng-container [ngSwitch]="mode">
+
+    <span *ngSwitchCase="'range'">
+      Create custom PDF groups using page ranges.
+    </span>
+
+    <span *ngSwitchCase="'every-page'">
+      Every page becomes an individual PDF.
+    </span>
+
+    <span *ngSwitchCase="'every-n'">
+      Split document every N pages.
+    </span>
+
+    <span *ngSwitchCase="'extract'">
+      Extract only specific pages.
+    </span>
+
+  </ng-container>
+
+</div>
+
+  </div>
+
+  <!-- Settings -->
+<div class="settings-card">
+    
+    <h3 *ngIf="mode==='range'">
+        Page Ranges
+    </h3>
+    <h3 *ngIf="mode==='every-page'">
+        Split Configuration
+    </h3>
+    <h3 *ngIf="mode==='every-n'">
+        Pages Per File
+    </h3>
+    <h3 *ngIf="mode==='extract'">
+        Pages To Extract
+    </h3>
+
+    <ng-container *ngIf="mode==='range'">
+      <input class="split-input" type="text" placeholder="1-5,6-10" [(ngModel)]="pageRanges">
+      <!-- <div class="input-helper">
+        Example: 1-5, 6-10, 11-20
+      </div> -->
+      <!-- <div class="example-chips">
+        <button type="button" class="chip" (click)="pageRanges='1-5,6-10'">
+          1-5,6-10
+        </button>
+        <button type="button" class="chip" (click)="pageRanges='1-10,11-20'">
+          1-10,11-20
+        </button>
+        <button type="button" class="chip" (click)="pageRanges='1-50,51-100'">
+          1-50,51-100
+        </button>
+      </div> -->
+
+      <div class="validation-error" *ngIf="rangeValidation">
+      ⚠️ {{ rangeValidation }}
+      </div>
+
+      <div class="smart-suggestions" *ngIf="smartSuggestions.length">
+       <h4>Smart Suggestions</h4>
+       <div class="example-chips">
+        <button *ngFor="let item of smartSuggestions" class="chip" (click)="pageRanges=item">
+          {{ item }}
+        </button>
+       </div>
+      </div>
+
+    </ng-container>
+
+    <ng-container *ngIf="mode==='every-n'">
+      <input class="split-input" type="number" min="1" [(ngModel)]="everyN">
+      <div class="validation-error" *ngIf="everyNValidation">
+          ⚠️ {{ everyNValidation }}
+      </div>
+      <div class="warning-card" *ngIf="warningMessage">
+          ⚠️ {{ warningMessage }}
+      </div>
+    </ng-container>
+
+    <ng-container *ngIf="mode==='extract'">
+      <input class="split-input" type="text" placeholder="1,5,8" [(ngModel)]="selectedPages">
+      <div class="input-helper">
+        Example: 1,5,8,20
+      </div>
+      <div class="validation-error" *ngIf="extractValidation">
+        ⚠️ {{ extractValidation }}
+      </div>
+    </ng-container>
+    
+    <ng-container *ngIf="mode==='every-page'">
+      <div class="info-box"> Every page becomes a separate PDF </div>
+    </ng-container>
+
+    <div class="split-analysis" *ngIf="(mode === 'range' && pageRanges) || (mode === 'every-n') || (mode === 'extract' && selectedPages) || pageCount > 0">
+      <div class="analysis-item">
+        <span>📄 Files</span>
+        <strong>{{ estimatedFiles }}</strong>
+      </div>
+      <div class="analysis-item">
+        <span>📚 Pages</span>
+        <strong>{{ pageCount }}</strong>
+      </div>
+      <div class="analysis-item">
+        <span>⚡ Avg/File</span>
+        <strong>{{ avgPagesPerFile }}</strong>
+      </div>
+      <div class="analysis-item">
+        <span>🎯 Recommended</span>
+        <strong>{{ recommendedMode }}</strong>
+      </div>
+      <div class="analysis-item">
+        <span>💾 Avg Size</span>
+        <strong>{{ estimatedOutputSize }}</strong>
+      </div>
+      <div class="analysis-item">
+        <span>⏱ Time</span>
+        <strong>{{ estimatedTime }}</strong>
+      </div>
+      <div class="analysis-item">
+        <span>🧠 Memory</span>
+        <strong>{{ memoryUsage }}</strong>
+      </div>
+    </div>
+
+    <!-- Preview Files -->
+    <div class="generated-preview" *ngIf="generatedPreview.length">
+      <h4>Generated Files</h4>
+      <div class="preview-row" *ngFor="let item of generatedPreview">
+    📄 {{ item }}
+      </div>
+      <div class="preview-more" *ngIf="mode === 'every-page' && pageCount > 5">
+        + {{ pageCount - 5 }} more files...
+      </div>
+    </div>
+
+</div>
+
+<!-- Footer -->
+
+<div class="split-footer">
+  <!-- <div class="privacy-badge">
+    🔒 Browser Processing
+  </div> -->
+  <button class="split-btn" [disabled]="!canSplit" (click)="onSplit()">
+    {{ actionLabel }}
+  </button>
+</div>
+
+</div>
+
+<!-- Result State Workspace -->
+
+<div class="split-result-workspace" *ngIf="showResult">
+
+  <div class="result-hero">
+    <div class="success-ring">
+     <div class="success-icon-wrapper">
+      <div class="split-sheet">
+       <span></span>
+       <span></span>
+      </div>
+     </div>
+    </div>
+    <h2>PDF Successfully Split</h2>
+    <p>{{ resultFiles }} Files Generated</p>
+    <p>ZIP Ready</p>
+  </div>
+
+  <div class="result-grid">
+
+    <div class="result-stat">
+      <span>PDF Files</span>
+      <strong>{{ resultFiles }}</strong>
+    </div>
+
+    <div class="result-stat">
+      <span>Mode</span>
+      <strong>{{ resultMode }}</strong>
+    </div>
+
+    <div class="result-stat">
+      <span>Duration</span>
+      <strong>{{ resultDuration }}</strong>
+    </div>
+
+  </div>
+
+  <div class="result-files" *ngIf="generatedFiles.length">
+  
+  <h3>Generated Files</h3>
+
+  <div class="search-wrapper">
+    <span class="search-icon">🔍</span>
+    <input class="search-input" type="text" placeholder="Search generated files..." [(ngModel)]="searchTerm">
+  </div>
+    
+  <div class="file-row" *ngFor="let file of paginatedFiles; trackBy: trackByFileName">
+   <div class="file-name">📄 {{ file.name }}</div>
+   <button class="download-btn" (click)="downloadFile(file)"> Download</button>
+  </div>
+  
+  <div class="pagination">
+   <button class="page-btn" (click)="prevPage()" [disabled]="currentPage === 1">
+    ←
+   </button>
+   <div class="page-status">Page {{ currentPage }}<span>of</span>{{ totalPages }}</div>
+   <button class="page-btn" (click)="nextPage()" [disabled]="currentPage >= totalPages">
+    →
+   </button>
+  </div>
+
+  <div class="result-actions">
+    <button class="download-all-btn" (click)="downloadAllAgain()">
+      ⬇ Download ZIP Again
+    </button>
+  </div>
+
+  <div class="continue-working">
+   <h3>Continue Working</h3>
+   <div class="continue-grid">
+
+  <div class="continue-card" (click)="continueWork('compress')">
+    <div class="continue-header">
+    <div class="continue-icon compress">⚡</div>
+    <div>
+      <div class="card-title">Compress PDF</div>
+      <div class="card-desc">Reduce file size</div>
+     </div>
+    </div>
+  </div>
+
+  <div class="continue-card" (click)="continueWork('merge')">
+    <div class="continue-header">
+    <div class="continue-icon merge">📄</div>
+    <div>
+      <div class="card-title">Merge PDF</div>
+      <div class="card-desc">Combine multiple PDFs</div>
+     </div>
+    </div>
+  </div>
+
+  <div class="continue-card" (click)="continueWork('protect')">
+    <div class="continue-header">
+    <div class="continue-icon protect">🔒</div>
+    <div>
+      <div class="card-title">Protect PDF</div>
+      <div class="card-desc">Add password protection</div>
+     </div>
+    </div>
+  </div>
+
+</div>
+  </div>
+
+  <div class="result-actions">
+    <button class="download-all-btn" (click)="onReplace()">
+      Split Another PDF
+    </button>
+  </div>
+
+</div>

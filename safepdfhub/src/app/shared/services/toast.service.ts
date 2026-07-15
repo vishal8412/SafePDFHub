@@ -81,7 +81,10 @@ export class ToastService {
     return;
   }
 
-  this.addToast(toast);
+  setTimeout(() => {
+    this.addToast(toast);
+  });
+  
 }
 
   // ======================

@@ -51,15 +51,9 @@ export class WorkflowService {
       }
 
       else if (step === 'compress') {
-        const compressed = await this.compressEngine.compress(
-          workingFiles[0],
-          (p) => {
-            onProgress?.(
-              this.mapProgress(p, currentStep, totalSteps),
-              'compress'
+        const compressed = await this.compressEngine.compress(workingFiles[0],'recommended',
+              (p: number) => {onProgress?.(this.mapProgress(p,currentStep,totalSteps),'compress');}
             );
-          }
-        );
 
         workingFiles = [compressed];
       }

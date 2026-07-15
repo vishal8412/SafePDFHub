@@ -1,3 +1,12 @@
+$primary: #00D4B3;
+$secondary: #22D3EE;
+
+$bg: #071A2B;
+$card: #0B2438;
+
+$text: #EAF4FF;
+$muted: #8FA3B8;
+
 /* =========================
    PAGE LAYOUT
 ========================= */
@@ -157,13 +166,10 @@
 .upload-btn {
   display: inline-block;
   padding: 12px 22px;
-
   border-radius: 999px;
   background: linear-gradient(90deg, #ff7a4d, #ff9a4d);
-
   color: white;
   font-weight: 600;
-
   cursor: pointer;
 }
 
