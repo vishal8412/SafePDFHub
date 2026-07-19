@@ -70,7 +70,7 @@ export class CompressEngine {
   if (typeof Worker !== 'undefined') {
     this.worker = new Worker(new URL('../workers/pdf-compression.worker',import.meta.url));
   }
-}
+ }
 
 // =====================
 // MAIN ENTRY
@@ -105,25 +105,16 @@ export class CompressEngine {
     return this.safeCompress(file, level, onProgress);
   }
   // TEXT PDFs
-  if (analysis.type === 'text' && !analysis.imageHeavy && file.size < 10 * 1024 * 1024) {
-    console.log('FORCED STRONG COMPRESSION');
-    return this.safeCompress(
-      file,
-      level,
-      onProgress
-    );
+  switch (analysis.type) {
+   case 'text':
+     return this.safeCompress(file,level,onProgress);
+   case 'mixed':
+     return this.smartCompress(file,level,onProgress);
+   case 'scanned':
+     return this.strongCompress(file,level,onProgress);
+   default:
+     return this.safeCompress(file,level,onProgress);
   }
-
-if (analysis.avgTextDensity > 70 && analysis.imageRatio < 0.30) {
-  console.log('DOCUMENT PDF');
-  return this.safeCompress(
-    file,
-    level,
-    onProgress
-  );
-}
-
-  return this.strongCompress(file, level, onProgress);
 
 }
 
@@ -182,9 +173,13 @@ if (analysis.avgTextDensity > 70 && analysis.imageRatio < 0.30) {
       updateFieldAppearances: false
   });
 
-  onProgress?.(100);
+  if (compressedBytes.length >= file.size) {
+   console.log('Already optimized PDF');
+   return file;
+  }
 
-console.log('SAFE COMPRESS',file.size);
+  onProgress?.(100);
+  console.log('SAFE COMPRESS',file.size);
 
   return new File([new Uint8Array(compressedBytes)],this.rename(file.name),
   {
@@ -197,12 +192,7 @@ console.log('SAFE COMPRESS',file.size);
 // STRONG (SCANNED PDF)
 // =====================
 
-async strongCompress(
-  file: File,
-  level: 'light' | 'recommended' | 'strong',
-  onProgress?: (p: number) => void
-): Promise<File> {
-
+async strongCompress(file: File, level: 'light' | 'recommended' | 'strong',onProgress?: (p: number) => void): Promise<File> {
   const pdfjs = await loadPdfJs();
   const buffer = await file.arrayBuffer();
   const sourcePdf = await PDFDocument.load(buffer);
@@ -211,7 +201,6 @@ async strongCompress(
   const newPdf = await PDFDocument.create();
 
   // PROFESSIONAL SETTINGS
-
   let quality = 0.82;
   let MAX_WIDTH = 1800;
   let MAX_HEIGHT = 2400;
@@ -238,7 +227,6 @@ async strongCompress(
   }
 
   // HUGE PDF PROTECTION
-
   if (totalPages > 1000) {
     quality *= 0.9;
     MAX_WIDTH *= 0.8;
@@ -246,9 +234,7 @@ async strongCompress(
   }
 
   // PAGE LOOP
-
   const BATCH_SIZE = 10;
-
   for (let batchStart = 1; batchStart <= totalPages; batchStart += BATCH_SIZE) {
     const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, totalPages);
     for (let i = batchStart; i <= batchEnd; i++) {
@@ -256,7 +242,6 @@ async strongCompress(
       const analysis = await this.analyzePage(page);
 
     // VECTOR PAGE PRESERVATION
-  
     if (analysis.type === 'text') {
       console.log('PAGE',i,analysis.type,analysis.textDensity);
       const copiedPages = await newPdf.copyPages(sourcePdf,[i - 1]);
@@ -292,7 +277,6 @@ async strongCompress(
     // RENDER PDF PAGE
     const scaledViewport = page.getViewport({scale: finalWidth /viewport.width});
     await page.render({canvasContext: ctx, viewport: scaledViewport}).promise;
-
     page.cleanup();
 
     // CONVERT TO JPEG
@@ -333,29 +317,21 @@ async strongCompress(
   console.log('newPdf pages:',newPdf.getPageCount());
 
   const pdfBytes = await newPdf.save({useObjectStreams: true});
-
-  const compressedFile =
-    new File(
-      [new Uint8Array(pdfBytes)],
-      this.rename(file.name),
-      {
-        type: 'application/pdf'
-      }
-    );
-
-    console.log('pdfBytes length:', pdfBytes.length);
-console.log('compressedFile size:', compressedFile.size);
+  const compressedFile = new File([new Uint8Array(pdfBytes)],this.rename(file.name),{type: 'application/pdf'});
+  console.log('pdfBytes length:', pdfBytes.length);
+  console.log('compressedFile size:', compressedFile.size);
 
   // =====================================
   // DO NOT RETURN LARGER FILES
   // =====================================
-
   console.log('ORIGINAL:', file.size);
   console.log('COMPRESSED:', compressedFile.size);
   console.log('RATIO:',(compressedFile.size / file.size) * 100);
-  // if (compressedFile.size >= file.size * 0.98) {
-  //   return file;
-  // }
+
+  if (compressedFile.size >= file.size) {
+    console.warn('Compression increased size. Returning original.');
+    return file;
+  }
   const reduction = ((file.size - compressedFile.size) / file.size) * 100;
   if (reduction < 1) {
     console.log('Compression gain too small');
@@ -369,20 +345,31 @@ console.log('compressedFile size:', compressedFile.size);
 // =====================
 // Smart Compress
 // =====================
-async smartCompress(
-  file: File,
-  level:
-    | 'light'
-    | 'recommended'
-    | 'strong',
-  onProgress?: (p:number)=>void
-): Promise<File> {
+async smartCompress(file: File, level: 'light' | 'recommended' | 'strong', onProgress?: (p:number)=>void): Promise<File> {
+  const pdfjs = await loadPdfJs();
+  const buffer = await file.arrayBuffer();
+  const sourcePdf = await PDFDocument.load(buffer);
+  const pdf = await pdfjs.getDocument({data: buffer}).promise;
+  const newPdf = await PDFDocument.create();
+  const totalPages = pdf.numPages;
 
-  return this.strongCompress(
-    file,
-    level,
-    onProgress
-  );
+  for(let i=1;i<=totalPages;i++){
+      const page = await pdf.getPage(i);
+      const analysis = await this.analyzePage(page);
+      if(analysis.type === 'text'){
+         const copied = await newPdf.copyPages(sourcePdf,[i-1]);
+         newPdf.addPage(copied[0]);
+      }
+      else{
+         await this.compressPage(page,newPdf,level);
+      }
+
+      onProgress?.(Math.round(i/totalPages*100));
+  }
+
+  const bytes = await newPdf.save({useObjectStreams:true});
+  const result = new File([new Uint8Array(bytes)],this.rename(file.name),{type:'application/pdf'});
+  return result.size < file.size ? result : file;
 }
 
   // =====================
@@ -499,10 +486,10 @@ async analyzePdfStructure(pdf: any): Promise<PdfAnalysis> {
     | 'scanned'
     | 'mixed';
 
-  if (avgTextDensity > 180 && imageRatio < 0.20) {
+  if (avgTextDensity > 120 && imageRatio < 0.15) {
     type = 'text';
   }
-  else if (avgTextDensity < 40) {
+  else if (avgTextDensity < 30) {
     type = 'scanned';
   }
   else {
@@ -539,9 +526,9 @@ async analyzePage(page: any): Promise<PageAnalysis> {
   }
 
   let type: 'text' | 'mixed' | 'scanned';
-  if (textItems > 80) {
+  if (textItems > 120) {
     type = 'text';
-  } else if (textItems < 40) {
+  } else if (textItems < 30) {
     type = 'scanned';
   } else {
     type = 'mixed';
@@ -640,7 +627,7 @@ private detectAlreadyCompressed(fileSize: number,pages: number): boolean {
   return bytesPerPage < 15000;
 }
 
-private getAdaptiveQuality(pageAnalysis: PageAnalysis, level: 'light' | 'recommended' | 'strong'): number {
+  private getAdaptiveQuality(pageAnalysis: PageAnalysis, level: 'light' | 'recommended' | 'strong'): number {
   switch (level) {
     case 'light':
       return pageAnalysis.type === 'scanned' ? 0.82 : 0.88;
@@ -653,6 +640,34 @@ private getAdaptiveQuality(pageAnalysis: PageAnalysis, level: 'light' | 'recomme
   }
 }
 
+private async compressPage(page: any,newPdf: PDFDocument,level: 'light' | 'recommended' | 'strong') {
+
+  const viewport = page.getViewport({ scale: 1 });
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    return;
+  }
+
+  canvas.width = Math.floor(viewport.width);
+  canvas.height = Math.floor(viewport.height);
+  await page.render({canvasContext: ctx,viewport}).promise;
+  let quality = 0.8;
+  if (level === 'light') {
+    quality = 0.9;
+  }
+  if (level === 'strong') {
+    quality = 0.6;
+  }
+
+  const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!),'image/jpeg',quality));
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const img = await newPdf.embedJpg(bytes);
+  const pdfPage = newPdf.addPage([img.width,img.height]);
+  pdfPage.drawImage(img,{x:0,y:0,width:img.width,height:img.height});
+
+}
   // private supportsWebP(): boolean {
   //   try {
   //     const canvas = document.createElement('canvas');

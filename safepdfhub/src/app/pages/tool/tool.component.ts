@@ -89,6 +89,15 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   lastZipBlob: Blob | null = null;
   lastZipName = '';
+
+  compressionStage:
+  | 'idle'
+  | 'analysis'
+  | 'optimization'
+  | 'rebuild'
+  | 'finalizing'
+  | 'complete'
+  = 'idle';
   
   get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
@@ -406,7 +415,7 @@ for (let i = startIndex; i < end; i++) {
     this.generateSuggestions();
 
     if (this.isCompressTool) {
-      setTimeout(() => {
+      Promise.resolve().then(() => {
         this.analyzeCompression();
       });
     }
@@ -480,7 +489,7 @@ for (let i = startIndex; i < end; i++) {
     this.generateSuggestions();
 
     if (this.isCompressTool) {
-      setTimeout(() => {
+      Promise.resolve().then(() => {
         this.analyzeCompression();
       });
     }
@@ -1173,6 +1182,7 @@ closeViewer() {
     this.compressionProgress = 0;
     const startedAt = performance.now();
     try {
+      this.compressionStage = 'analysis';
       const result = await this.compressEngine.compress(this.workspace.files[0],this.compressionLevel,
        (p) => {
         this.compressionProgress = p;
@@ -1193,7 +1203,7 @@ closeViewer() {
       this.estimatedReduction = Math.max(0,Math.round(((originalSize - compressedSize) / originalSize) * 100));
       this.downloadFile(result);
       const mergedId = crypto.randomUUID();
-      setTimeout(async () => {
+      // setTimeout(async () => {
         this.workspaceOps.replaceAll([
           {
             id: mergedId,
@@ -1207,9 +1217,9 @@ closeViewer() {
           }
         ]);
 
-        this.generatePreview(result,mergedId);
+        await this.generatePreview(result,mergedId);
         this.cd.detectChanges();
-      });
+      // });
 
       this.workspace.hasMerged = true;
       this.workspace.lastMergedUrl = URL.createObjectURL(result);
@@ -1265,57 +1275,40 @@ closeViewer() {
   this.pdfInsights = result.analysis;
   const pages = result.pages;
   let reduction = 0;
-
-  // TEXT PDFs
-  if (this.analyzedPdfType === 'text') {
-    if (sizeMB < 20) {
-      reduction = 2;
-    }
-    else if (sizeMB < 100) {
-      reduction = 5;
-    }
-    else {
-      reduction = 8;
-    }
-
+  const imageRatio = result.analysis.imageRatio;
+  const dpi = result.analysis.estimatedDpi;
+  reduction = imageRatio * 50;
+  if (dpi > 250) {
+    reduction += 15;
   }
-  // Mixed PDFs
-  else if (this.analyzedPdfType === 'mixed') {
-    switch (this.compressionLevel) {
+  if (result.analysis.largePages) {
+    reduction += 10;
+  }
+  switch (this.compressionLevel) {
     case 'light':
-      reduction = 20;
+      reduction *= 0.6;
       break;
     case 'recommended':
-      reduction = 45;
+      reduction *= 1;
       break;
     case 'strong':
-      reduction = 65;
+      reduction *= 1.4;
       break;
   }
-}
 
-// SCANNED PDFs
-  else {
-    switch (this.compressionLevel) {
-      case 'light':
-        reduction = 15;
-        break;
-      case 'recommended':
-        reduction = 35;
-        break;
-      case 'strong':
-        reduction = 55;
-        break;
-    }
-  }
+  reduction = Math.min(Math.round(reduction),80);
 
   // very huge PDFs
   if (pages > 1000) {
     reduction = Math.min(reduction, 10);
   }
 
+  this.ngZone.run(() => {
   this.estimatedReduction = reduction;
-  this.estimatedFinalSize = sizeMB * (1 - reduction / 100);
+    this.estimatedFinalSize = sizeMB * (1 - reduction / 100);
+    this.cd.markForCheck();
+  });
+
 }
 
   getTotalSize(): string {

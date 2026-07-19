@@ -15,13 +15,12 @@
        UPLOAD AREA
   ===================== -->
 
-  <div
+  <div *ngIf="!(isCompressTool && isWorkspaceMode)" 
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
     [class.compress-toolbar]="isWorkspaceMode && !isCompressTool"
     (drop)="onDropFiles($event)"
-    (dragover)="allowDrop($event)"
-  >
+    (dragover)="allowDrop($event)">
 
   <ng-container *ngIf="!isWorkspaceMode">
     <p class="upload-text">{{ behavior.uploadTitle }}</p>
@@ -55,7 +54,7 @@
     </div>
   </ng-container>
 
-</div>
+ </div>
 
   <!-- =====================
        FILE LIST (HORIZONTAL)
@@ -121,29 +120,22 @@
      MERGE WORKSPACE
 ========================= -->
   <app-compress-workspace *ngIf="isWorkspaceMode && isCompressTool"
-
   [files]="workspace.files"
-
   [previews]="workspace.previews"
-
   [pageCounts]="workspace.pageCounts"
+  
+  [compressing]="compressing"
+  [progress]="compressionProgress"
 
   [estimatedReduction]="estimatedReduction"
-
   [estimatedFinalSize]="estimatedFinalSize"
 
-  
-
   [compressionLevel]="compressionLevel"
-
   [pdfInsights]="pdfInsights"
 
   (compressionLevelChange)="compressionLevel = $event; analyzeCompression();"
-
   (compress)="compressPdf()"
-
   (replaceFile)="triggerUpload()"
-
 />
 
 <input
