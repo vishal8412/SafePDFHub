@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { MergeEngine } from '../engines/merge.engine';
 import { CompressEngine } from '../engines/compress.engine';
+import { CompressionPlanner } from '../compression/compression-planner';
+import { PdfAnalyzer } from '../compression/pdf-analyzer.service';
 
 export type WorkflowStep = 'merge' | 'compress' | 'split';
 
@@ -9,7 +11,9 @@ export class WorkflowService {
 
   constructor(
     private mergeEngine: MergeEngine,
-    private compressEngine: CompressEngine
+    private compressEngine: CompressEngine,
+    private pdfAnalyzer: PdfAnalyzer,
+    private compressionPlanner: CompressionPlanner
   ) {}
 
   detectWorkflow(files: File[], pageCounts: number[]): WorkflowStep[] {
@@ -39,9 +43,7 @@ export class WorkflowService {
     const totalSteps = steps.length;
     let currentStep = 0;
 
-    for (const step of steps) {
-      currentStep++;
-
+    for (const step of steps) {currentStep++;
       if (step === 'merge') {
         const merged = await this.mergeEngine.merge(workingFiles, (p) => {
           onProgress?.(this.mapProgress(p, currentStep, totalSteps), 'merge');
@@ -51,10 +53,11 @@ export class WorkflowService {
       }
 
       else if (step === 'compress') {
-        const compressed = await this.compressEngine.compress(workingFiles[0],'recommended',
-              (p: number) => {onProgress?.(this.mapProgress(p,currentStep,totalSteps),'compress');}
-            );
-
+        const analysis = await this.pdfAnalyzer.analyzeFile(workingFiles[0]);
+        const plan = this.compressionPlanner.createPlan(analysis.analysis,analysis.pages,'recommended');
+        const compressed = await this.compressEngine.compress(workingFiles[0],'recommended',plan,(p) => {
+            onProgress?.(this.mapProgress(p,currentStep,totalSteps),'compress');});
+            
         workingFiles = [compressed];
       }
 

@@ -1,4 +1,4 @@
-import {Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener} from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Meta, Title } from '@angular/platform-browser';
@@ -24,13 +24,18 @@ import { SplitEngine } from '../../core/engines/split.engine';
 import { SplitGroup } from '../../core/split/split.types';
 import { SplitExportService } from '../../core/split/split-export.service';
 import { SplitZipService } from '../../core/split/split-zip.service';
+import { CompressionState } from '../../core/compression/compression.state';
+import { CompressionFacade } from '../../core/compression/compress.facade';
+import { WorkspaceOutputService } from '../../core/workflow/workspace-output.service';
+import { WorkspaceUploadService } from '../../core/workflow/workspace-upload.service';
 
 type WorkflowStep = 'merge' | 'compress' | 'split';
 
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, DialogComponent, BottomSheetComponent, ActionPanelComponent],
+  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent,
+    DialogComponent, BottomSheetComponent, ActionPanelComponent],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
 })
@@ -58,24 +63,10 @@ export class ToolComponent implements OnInit, OnDestroy {
   viewerPages: string[] = [];
   viewerLoading = false;
   zoom = 1;
-  
+
   viewerFile: File | null = null;
 
   // Compress PDF
-  compressionLevel: 'light' | 'recommended' | 'strong' = 'recommended';
-  estimatedReduction = 0;
-  estimatedFinalSize = 0;
-  analyzedPdfType: 'text' | 'scanned' | 'mixed' | null = null;
-  pdfInsights: any = null;
-  compressing = false;
-  compressionProgress = 0;
-  showCompressResult = false;
-  compressedFile: File | null = null;
-  compressOriginalSize = 0;
-  compressFinalSize = 0;
-  compressReduction = 0;
-  compressDuration = '';
-
   private analysisRequestId = 0;
   private lastPositions = new Map<number, DOMRect>();
   private isBrowser = false;
@@ -90,15 +81,6 @@ export class ToolComponent implements OnInit, OnDestroy {
   lastZipBlob: Blob | null = null;
   lastZipName = '';
 
-  compressionStage:
-  | 'idle'
-  | 'analysis'
-  | 'optimization'
-  | 'rebuild'
-  | 'finalizing'
-  | 'complete'
-  = 'idle';
-  
   get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
   constructor(
@@ -110,138 +92,124 @@ export class ToolComponent implements OnInit, OnDestroy {
     private loader: LoaderService,
     private toast: ToastService,
     private mergeEngine: MergeEngine,
+    public compressionState: CompressionState,
+    private compressionFacade: CompressionFacade,
     private compressEngine: CompressEngine,
     private splitEngine: SplitEngine,
     private splitExportService: SplitExportService,
     private splitZipService: SplitZipService,
     private workflowService: WorkflowService,
     private previewService: PreviewService,
+    private workspaceOutput: WorkspaceOutputService,
     public workspace: WorkspaceStateService,
     private workspaceOps: WorkspaceOperationsService,
+    private workspaceUpload: WorkspaceUploadService,
     private ngZone: NgZone,
     @Inject(PLATFORM_ID) private platformId: Object
   ) { }
 
-ngOnInit() {
-  this.isBrowser = isPlatformBrowser(this.platformId);
-  this.workspaceUploadFileCapacity();
-  this.route.paramMap.subscribe(params => {
-    const slug = params.get('slug');
-    const match = TOOLS.find(t => t.slug === slug);
-    if (!match) {
-      this.router.navigate(['/']);
-      return;
-    }
+  ngOnInit() {
+    this.isBrowser = isPlatformBrowser(this.platformId);
+    this.workspaceUploadFileCapacity();
+    this.route.paramMap.subscribe(params => {
+      const slug = params.get('slug');
+      const match = TOOLS.find(t => t.slug === slug);
+      if (!match) {
+        this.router.navigate(['/']);
+        return;
+      }
 
-    // READ NAVIGATION STATE
-    const navigation = this.isBrowser? window.history.state: {};
-    const filesFromState = navigation?.files;
-    const autoAction = navigation?.autoAction;
-    const shouldPreserve = Array.isArray(filesFromState) && filesFromState.length > 0;
+      // READ NAVIGATION STATE
+      const navigation = this.isBrowser ? window.history.state : {};
+      const filesFromState = navigation?.files;
+      const autoAction = navigation?.autoAction;
+      const shouldPreserve = Array.isArray(filesFromState) && filesFromState.length > 0;
 
-    // ALWAYS RESET FIRST
-    this.resetWorkspaceState();
+      // ALWAYS RESET FIRST
+      this.resetWorkspaceState();
 
-    // SET TOOL
-    this.tool = match;
-    this.behavior = TOOL_BEHAVIORS.find(b => b.slug === this.tool.slug)!;
-    
-    this.setRecommendations();
-  
-    this.title.setTitle(this.tool.title);
-    this.meta.updateTag({
-      name: 'description',
-      content: this.tool.description
+      // SET TOOL
+      this.tool = match;
+      this.behavior = TOOL_BEHAVIORS.find(b => b.slug === this.tool.slug)!;
+
+      this.setRecommendations();
+
+      this.title.setTitle(this.tool.title);
+      this.meta.updateTag({
+        name: 'description',
+        content: this.tool.description
+      });
+
+      // RESTORE FILES IF PROVIDED
+      if (shouldPreserve) {
+        this.onFileSelect({
+          target: {
+            files: filesFromState
+          }
+        });
+        if (autoAction === 'compress') {
+          setTimeout(() => {
+            this.compressPdf();
+          }, 300);
+        }
+        if (autoAction === 'merge') {
+          setTimeout(() => {
+            this.mergePdf();
+          }, 300);
+        }
+      }
+    });
+  }
+
+  get isMergeTool(): boolean {
+    return this.tool?.slug === 'merge-pdf';
+  }
+
+  get isSplitTool(): boolean {
+    return this.tool?.slug === 'split-pdf';
+  }
+
+  private resetWorkspaceState() {
+    // cleanup previews
+    this.workspace.previews.forEach(p => {
+      if (p) {
+        URL.revokeObjectURL(p);
+      }
     });
 
-    // RESTORE FILES IF PROVIDED
-    if (shouldPreserve) {
-      this.onFileSelect({
-        target: {
-          files: filesFromState
-        }
-      });
-      if (autoAction === 'compress') {
-        setTimeout(() => {
-          this.compressPdf();
-        }, 300);
-      }
-      if (autoAction === 'merge') {
-        setTimeout(() => {
-          this.mergePdf();
-        }, 300);
-      }
+    // cleanup merged file
+    if (this.workspace.lastMergedUrl) {
+      URL.revokeObjectURL(this.workspace.lastMergedUrl);
     }
-  });
-}
-
-get isMergeTool(): boolean {
-  return this.tool?.slug === 'merge-pdf';
-}
-
-get isSplitTool(): boolean {
-  return this.tool?.slug === 'split-pdf';
-}
-
-private resetWorkspaceState() {
-
-  // cleanup previews
-  this.workspace.previews.forEach(p => {
-
-    if (p) {
-      URL.revokeObjectURL(p);
-    }
-
-  });
-
-  // cleanup merged file
-  if (this.workspace.lastMergedUrl) {
-
-    URL.revokeObjectURL(
-      this.workspace.lastMergedUrl
-    );
-
+    // clear workspace
+    this.workspaceOps.clear();
+    // reset ui state
+    this.workspace.activeIndex = -1;
+    this.workspace.hasMerged = false;
+    this.workspace.lastMergedUrl = null;
+    this.workspace.dragIndex = null;
+    this.workspace.hoverIndex = null;
+    this.workspace.isDragging = false;
+    // viewer reset
+    this.viewerPages = [];
+    this.viewerFile = null;
+    this.showViewer = false;
   }
 
-  // clear workspace
-  this.workspaceOps.clear();
-
-  // reset ui state
-  this.workspace.activeIndex = -1;
-
-  this.workspace.hasMerged = false;
-
-  this.workspace.lastMergedUrl = null;
-
-  this.workspace.dragIndex = null;
-
-  this.workspace.hoverIndex = null;
-
-  this.workspace.isDragging = false;
-
-  // viewer reset
-  this.viewerPages = [];
-
-  this.viewerFile = null;
-
-  this.showViewer = false;
-
-}
-
-workspaceUploadFileCapacity() {
-  if (!this.isBrowser) return;
-  const width = window.innerWidth;
-  if (width < 768) {
-    this.MAX_FILE_MB = 40;
-    this.MAX_TOTAL_MB = 120;
-  } else if (width < 1024) {
-    this.MAX_FILE_MB = 80;
-    this.MAX_TOTAL_MB = 250;
-  } else {
-    this.MAX_FILE_MB = 100;
-    this.MAX_TOTAL_MB = 400;
+  workspaceUploadFileCapacity() {
+    if (!this.isBrowser) return;
+    const width = window.innerWidth;
+    if (width < 768) {
+      this.MAX_FILE_MB = 40;
+      this.MAX_TOTAL_MB = 120;
+    } else if (width < 1024) {
+      this.MAX_FILE_MB = 80;
+      this.MAX_TOTAL_MB = 250;
+    } else {
+      this.MAX_FILE_MB = 100;
+      this.MAX_TOTAL_MB = 400;
+    }
   }
-}
 
   private setRecommendations() {
     if (!this.tool?.nextTools) return;
@@ -250,40 +218,17 @@ workspaceUploadFileCapacity() {
     );
   }
 
-goToTool(
-  slug: string,
-  autoAction?: string,
-  preserveFiles = false
-) {
-
-  const navigationState =
-    preserveFiles
-      ? {
-          files: this.workspace.files,
-          autoAction
-        }
-      : undefined;
-
-  this.router.navigate(
-    ['/tool', slug],
-    {
-      state: navigationState
-    }
-  );
-
-}
+  goToTool(slug: string, autoAction?: string, preserveFiles = false) {
+    const navigationState = preserveFiles ? { files: this.workspace.files, autoAction } : undefined;
+    this.router.navigate(['/tool', slug], { state: navigationState });
+  }
 
   private updateWorkflow() {
-    this.workflowSteps = this.workflowService.detectWorkflow(
-      this.workspace.files,
-      this.workspace.pageCounts
-    );
+    this.workflowSteps = this.workflowService.detectWorkflow(this.workspace.files, this.workspace.pageCounts);
   }
 
   buildWorkflowLabel(steps: WorkflowStep[]) {
-    return steps
-      .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-      .join(' + ');
+    return steps.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' + ');
   }
 
   async runWorkflow() {
@@ -325,13 +270,8 @@ goToTool(
         }
       ]);
 
-      await this.generatePreview(
-        result,
-        mergedId
-      );
-
+      await this.generatePreview(result, mergedId);
       this.workspace.hasMerged = true;
-
       this.loader.setText('Done ✨');
 
       setTimeout(() => {
@@ -361,157 +301,43 @@ goToTool(
   // =====================
   // FILE INPUT
   // =====================
-  onFileSelect(event: any) {
+
+  private prepareUpload(files: File[]): File[] {
     if (this.behavior.replaceOnUpload) {
-     this.workspaceOps.clear();
-     this.workspace.activeIndex = -1;
+      this.workspaceOps.clear();
+      this.workspace.activeIndex = -1;
     }
-    const selected = this.validateFiles(
-      Array.from(event.target.files || []) as File[]
-    );
-    if (!selected.length) return;
+
+    const selected = this.validateFiles(files);
     if (this.workspace.files.length && this.workspace.activeIndex === -1) {
       this.workspace.activeIndex = 0;
     }
+    return selected;
+  }
 
-
-    const startIndex = this.workspace.files.length;
-    this.toast.show(`${event.target.files.length} files added`, 'success');
-
-    // 🔥 extend arrays (IMPORTANT)
-    const items = selected.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      preview: '',
-      pageCount: 0,
-      previewLoading: false,
-      previewProgress: 0,
-      previewError: false,
-      previewQueued: false
-    }));
-    this.workspaceOps.addFiles(items);
-    this.updateWorkflow();
-
-// 🔥 generate preview only for new files
-const immediatePreviewCount = 5;
-
-const end =
-  Math.min(
-    startIndex + immediatePreviewCount,
-    this.workspace.workspaceFiles.length
-  );
-
-for (let i = startIndex; i < end; i++) {
-
-  const item =
-    this.workspace.workspaceFiles[i];
-
-  this.queuePreview(
-    item.file,
-    item.id
-  );
-}
-
-    this.generateSuggestions();
-
-    if (this.isCompressTool) {
-      Promise.resolve().then(() => {
-        this.analyzeCompression();
-      });
+  private async addFilesToWorkspace(files: File[]): Promise<void> {
+    const selected = this.validateFiles(files);
+    if (!selected.length) {
+      return;
     }
-    
-    const isFirstUpload = startIndex === 0;
-    if (isFirstUpload) {
-    // FIRST upload
-    this.workspace.activeIndex = 0;
-    } else {
-    // ADD MORE files
-    const latestIndex = this.workspace.files.length - 1;
-    this.workspace.activeIndex = latestIndex;
-    this.cd.detectChanges();
-    const sub = this.ngZone.onStable.subscribe(() => { 
-      setTimeout(() => {
-        this.mergeWorkspace?.scrollToIndex(latestIndex);
-        sub.unsubscribe();
-    }, 0);
-    });
-    }
+
+    this.toast.show(`${selected.length} files added`,'success');
+
+    const startIndex = this.workspaceUpload.addFiles(selected,this.behavior.replaceOnUpload);
+
+    this.handlePostUploadProcessing();
+    this.queueInitialPreviews(startIndex);
+    this.updateActiveFileAfterUpload(startIndex);
+  }
+
+  onFileSelect(event: any) {
+    this.addFilesToWorkspace(Array.from(event.target.files || []) as File[]);
     event.target.value = '';
   }
 
   onDropFiles(event: DragEvent) {
     event.preventDefault();
-    if (this.behavior.replaceOnUpload) {
-     this.workspaceOps.clear();
-     this.workspace.activeIndex = -1;
-    }
-    const dropped = this.validateFiles(
-      Array.from(event.dataTransfer?.files || []) as File[]
-    );
-    if (!dropped.length) return;
-    if (this.workspace.files.length && this.workspace.activeIndex === -1) {
-      this.workspace.activeIndex = 0;
-    }
-    const startIndex = this.workspace.files.length;
-    const items = dropped.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      preview: '',
-      pageCount: 0,
-      previewLoading: false,
-      previewProgress: 0,
-      previewError: false,
-      previewQueued: false
-    }));
-    this.workspaceOps.addFiles(items);
-    this.updateWorkflow();
-
-// 🔥 generate preview only for new files
-const immediatePreviewCount = 5;
-
-const end =
-  Math.min(
-    startIndex + immediatePreviewCount,
-    this.workspace.workspaceFiles.length
-  );
-
-for (let i = startIndex; i < end; i++) {
-
-  const item =
-    this.workspace.workspaceFiles[i];
-
-  this.queuePreview(
-    item.file,
-    item.id
-  );
-}
-
-    this.generateSuggestions();
-
-    if (this.isCompressTool) {
-      Promise.resolve().then(() => {
-        this.analyzeCompression();
-      });
-    }
-    
-    const isFirstUpload = startIndex === 0;
-    if (isFirstUpload) {
-    // FIRST upload
-    this.workspace.activeIndex = 0;
-    } else {
-    // ADD MORE files
-    const latestIndex = this.workspace.files.length - 1;
-    this.workspace.activeIndex = latestIndex;
-    this.cd.detectChanges();
-    const sub =
-    this.ngZone.onStable.subscribe(() => {
-      setTimeout(() => {
-      this.mergeWorkspace?.scrollToIndex(latestIndex);
-      sub.unsubscribe();
-      }, 0);
-    });
-    }
-
+    this.addFilesToWorkspace(Array.from(event.dataTransfer?.files || []) as File[]);
   }
 
   allowDrop(event: DragEvent) {
@@ -524,35 +350,54 @@ for (let i = startIndex; i < end; i++) {
 
   private previewQueue: Promise<void> = Promise.resolve();
 
-  private queuePreview(
-  file: File,
-  id: string
-) {
+  private queuePreview(file: File, id: string) {
+    const item = this.workspace.workspaceFiles.find(x => x.id === id);
+    if (!item) return;
+    // already queued
+    if (item.previewQueued) return;
+    // already generated
+    if (item.preview) return;
+    item.previewQueued = true;
+    this.previewQueue = this.previewQueue
+      .then(() => this.generatePreview(file, id))
+      .finally(() => { item.previewQueued = false; });
+  }
 
-  const item =
-    this.workspace.workspaceFiles
-      .find(x => x.id === id);
+  private queueInitialPreviews(startIndex: number): void {
+    const immediatePreviewCount = 5;
+    const end = Math.min(startIndex + immediatePreviewCount, this.workspace.workspaceFiles.length);
+    for (let i = startIndex; i < end; i++) {
+      const item = this.workspace.workspaceFiles[i];
+      this.queuePreview(item.file, item.id);
+    }
+  }
 
-  if (!item) return;
+  private updateActiveFileAfterUpload(startIndex: number): void {
+    const isFirstUpload = startIndex === 0;
+    if (isFirstUpload) {
+      this.workspace.activeIndex = 0;
+      return;
+    }
+    const latestIndex = this.workspace.files.length - 1;
+    this.workspace.activeIndex = latestIndex;
+    this.cd.detectChanges();
+    const sub = this.ngZone.onStable.subscribe(() => {
+      setTimeout(() => {
+        this.mergeWorkspace?.scrollToIndex(latestIndex);
+        sub.unsubscribe();
+      }, 0);
+    });
+  }
 
-  // already queued
-  if (item.previewQueued) return;
-
-  // already generated
-  if (item.preview) return;
-
-  item.previewQueued = true;
-
-  this.previewQueue =
-    this.previewQueue
-      .then(() =>
-        this.generatePreview(file, id)
-      )
-      .finally(() => {
-        item.previewQueued = false;
+  private handlePostUploadProcessing(): void {
+    this.updateWorkflow();
+    this.generateSuggestions();
+    if (this.isCompressTool) {
+      Promise.resolve().then(() => {
+        this.analyzeCompression();
       });
-
-}
+    }
+  }
 
   // =====================
   //     VALIDATIONS
@@ -604,229 +449,209 @@ for (let i = startIndex; i < end; i++) {
     return valid;
   }
 
- // =====================
- // UPLOAD
- // =====================  
+  // =====================
+  // UPLOAD
+  // =====================  
   triggerUpload() {
-   this.fileInput?.nativeElement?.click();
+    this.fileInput?.nativeElement?.click();
   }
 
- // =====================
- // SPLIT PDF
- // ===================== 
- async splitPdf(request: SplitRequest) {
-  const startedAt = performance.now(); 
-  const totalPages = this.workspace.pageCounts[0];
-  let groups: SplitGroup[] = [];
-  switch (request.mode) {
-    case 'range': groups = this.splitEngine.splitByRanges(request.ranges!);
-      break;
-    case 'every-page': groups = this.splitEngine.splitEveryPage(totalPages);
-      break;
-    case 'every-n': groups = this.splitEngine.splitEveryN(totalPages,request.everyN!);
-      break;
-    case 'extract': groups = this.splitEngine.extractPages(request.pages!);
-      break;
-  }
-  
-  const MAX_OUTPUT_FILES = 100000;
-  
-  if (groups.length > MAX_OUTPUT_FILES) {
-    this.toast.show(
-      `Maximum ${MAX_OUTPUT_FILES} output PDFs allowed.`,
-      'error'
-    );
-   return;
-  }
+  // =====================
+  // SPLIT PDF
+  // ===================== 
+  async splitPdf(request: SplitRequest) {
+    const startedAt = performance.now();
+    const totalPages = this.workspace.pageCounts[0];
+    let groups: SplitGroup[] = [];
+    switch (request.mode) {
+      case 'range': groups = this.splitEngine.splitByRanges(request.ranges!);
+        break;
+      case 'every-page': groups = this.splitEngine.splitEveryPage(totalPages);
+        break;
+      case 'every-n': groups = this.splitEngine.splitEveryN(totalPages, request.everyN!);
+        break;
+      case 'extract': groups = this.splitEngine.extractPages(request.pages!);
+        break;
+    }
 
-  if (request.mode === 'every-page' && totalPages > 10000) {
-     this.toast.show(
-      'Every Page mode supports maximum 250 pages.',
-      'error'
-     );
-   return;
-  }
-  
-  try {
-   this.loader.show();
-   this.loader.setText('Splitting PDF...');
-  //  this.loader.setText(`Generating PDF ${i + 1}/${groups.length}`);
+    const MAX_OUTPUT_FILES = 100000;
 
-   const output = await this.splitExportService.export(
-    this.workspace.files[0], 
-    groups, 
-    p => {
-      this.loader.setProgress?.(p);
-      this.loader.setText(`Generating PDFs ${p}%`);
-    });
+    if (groups.length > MAX_OUTPUT_FILES) {
+      this.toast.show(`Maximum ${MAX_OUTPUT_FILES} output PDFs allowed.`, 'error');
+      return;
+    }
 
-   this.loader.setText('Creating ZIP...');
+    if (request.mode === 'every-page' && totalPages > 10000) {
+      this.toast.show('Every Page mode supports maximum 250 pages.', 'error');
+      return;
+    }
 
-   const zipBlob = await this.splitZipService.createZip(output.files);
-   const originalFileName = this.workspace.files[0].name;
-   const baseName = originalFileName.replace(/\.pdf$/i, '');
-  //  this.splitZipService.downloadZip(zipBlob,`${baseName}_split.zip`);
-   this.lastZipBlob = zipBlob;
-   this.lastZipName = `${baseName}_split.zip`;
+    try {
+      this.loader.show();
+      this.loader.setText('Splitting PDF...');
+      //  this.loader.setText(`Generating PDF ${i + 1}/${groups.length}`);
 
-  //  this.generatedSplitFiles = output.files;
-   this.splitResultFiles = output.files.length;
-   this.splitResultMode = request.mode;
-   const duration = ((performance.now() - startedAt) / 1000).toFixed(1);
-   this.splitResultDuration = `${duration}s`;
-  
-   await this.ngZone.run(async () => {
-    this.generatedSplitFiles = [...output.files];
-    this.splitResultFiles = output.files.length;
-    this.splitResultMode = request.mode;
-    this.splitResultDuration = `${duration}s`;
-    this.showSplitResult = true;
-    this.cd.markForCheck();
-    this.cd.detectChanges();
-    await new Promise(r => requestAnimationFrame(r));
-   });
+      const output = await this.splitExportService.export(this.workspace.files[0], groups,
+        p => {
+          this.loader.setProgress?.(p);
+          this.loader.setText(`Generating PDFs ${p}%`);
+        });
 
-   window.scrollTo({
-    top:0
-   });
+      this.loader.setText('Creating ZIP...');
 
-   await new Promise(r => setTimeout(r,150));
-   this.splitZipService.downloadZip(zipBlob,`${baseName}_split.zip`);
-   this.loader.hide();
-  
-   requestAnimationFrame(() => {
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
+      const zipBlob = await this.splitZipService.createZip(output.files);
+      const originalFileName = this.workspace.files[0].name;
+      const baseName = originalFileName.replace(/\.pdf$/i, '');
+      // this.splitZipService.downloadZip(zipBlob,`${baseName}_split.zip`);
+      this.lastZipBlob = zipBlob;
+      this.lastZipName = `${baseName}_split.zip`;
+
+      //  this.generatedSplitFiles = output.files;
+      this.splitResultFiles = output.files.length;
+      this.splitResultMode = request.mode;
+      const duration = ((performance.now() - startedAt) / 1000).toFixed(1);
+      this.splitResultDuration = `${duration}s`;
+
+      await this.ngZone.run(async () => {
+        this.generatedSplitFiles = [...output.files];
+        this.splitResultFiles = output.files.length;
+        this.splitResultMode = request.mode;
+        this.splitResultDuration = `${duration}s`;
+        this.showSplitResult = true;
+        this.cd.markForCheck();
+        this.cd.detectChanges();
+        await new Promise(r => requestAnimationFrame(r));
       });
-    });
-  
-   this.toast.show(
-    `${output.files.length} PDFs created`,
-    'success'
-   );
 
-  //  this.loader.hide();
+      window.scrollTo({
+        top: 0
+      });
 
-  } catch(error) {
-   this.loader.hide();
-   this.toast.show('Split failed','error');
-  } finally {
-   this.loader.hide();
+      await new Promise(r => setTimeout(r, 150));
+      this.splitZipService.downloadZip(zipBlob, `${baseName}_split.zip`);
+      this.loader.hide();
+
+      requestAnimationFrame(() => {
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      });
+
+      this.toast.show(`${output.files.length} PDFs created`, 'success');
+      //  this.loader.hide();
+    } catch (error) {
+      this.loader.hide();
+      this.toast.show('Split failed', 'error');
+    } finally {
+      this.loader.hide();
+    }
+
   }
 
- }
-
- downloadZipAgain() {
-  if (!this.lastZipBlob) {
-    return;
+  downloadZipAgain() {
+    if (!this.lastZipBlob) {
+      return;
+    }
+    this.splitZipService.downloadZip(this.lastZipBlob, this.lastZipName);
   }
-  this.splitZipService.downloadZip(this.lastZipBlob,this.lastZipName);
-}
 
-handleContinueTool(tool:string){
- switch(tool){
-   case 'compress': this.goToTool('compress-pdf');
-   break;
-   case 'merge': this.goToTool('merge-pdf');
-   break;
-   case 'protect': this.goToTool('protect-pdf');
-   break;
- }
-}
+  handleContinueTool(tool: string) {
+    switch (tool) {
+      case 'compress': this.goToTool('compress-pdf');
+        break;
+      case 'merge': this.goToTool('merge-pdf');
+        break;
+      case 'protect': this.goToTool('protect-pdf');
+        break;
+    }
+  }
 
- resetSplitWorkspace() {
-  this.showSplitResult = false;
-  this.generatedSplitFiles = [];
-  this.splitResultFiles = 0;
-  this.splitResultMode = '';
-  this.splitResultDuration = '';
-  this.workspaceOps.clear();
-  this.workspace.activeIndex = -1;
-}
+  resetSplitWorkspace() {
+    this.showSplitResult = false;
+    this.generatedSplitFiles = [];
+    this.splitResultFiles = 0;
+    this.splitResultMode = '';
+    this.splitResultDuration = '';
+    this.workspaceOps.clear();
+    this.workspace.activeIndex = -1;
+  }
 
-splitPdfUpload() {
- this.resetSplitWorkspace();
- this.cd.detectChanges();
- setTimeout(() => {
-   this.fileInput?.nativeElement?.click();
- },100);
-}
+  splitPdfUpload() {
+    this.resetSplitWorkspace();
+    this.cd.detectChanges();
+    setTimeout(() => {
+      this.fileInput?.nativeElement?.click();
+    }, 100);
+  }
 
   // =====================
   // SUGGESTIONS          
   // =====================
 
   get quickActions() {
-  return [
-
-    {
-      id: 'merge',
-      icon: '📄',
-      title: 'Merge PDFs',
-      desc: 'Combine multiple PDFs into one',
-      active: this.isMergeTool
-    },
-
-    {
-      id: 'compress',
-      icon: '⚡',
-      title: 'Compress',
-      desc: 'Reduce file size',
-      active: this.isCompressTool
-    },
-
-    {
-      id: 'split',
-      icon: '✂️',
-      title: 'Split',
-      desc: 'Extract pages',
-      active: this.isSplitTool
-    },
-
-    {
-      id: 'convert',
-      icon: '📄➡️📝',
-      title: 'Convert',
-      desc: 'PDF to Word',
-      active: false
-    }
-  ];
-}
-
-trustItems = [
-  '🔒 100% Private',
-  '⚡ Instant Processing',
-  '☁️ No Upload'
-];
-
-handleQuickAction(action: string) {
-
-  switch (action) {
-
-    case 'merge':
-      this.triggerUpload();
-      break;
-
-    case 'compress':
-      this.goToTool('compress-pdf', 'compress', true);
-      break;
-
-    case 'split':
-      this.goToTool('split-pdf');
-      break;
-
-    case 'convert':
-      this.goToTool('pdf-to-word');
-      break;
+    return [
+      {
+        id: 'merge',
+        icon: '📄',
+        title: 'Merge PDFs',
+        desc: 'Combine multiple PDFs into one',
+        active: this.isMergeTool
+      },
+      {
+        id: 'compress',
+        icon: '⚡',
+        title: 'Compress',
+        desc: 'Reduce file size',
+        active: this.isCompressTool
+      },
+      {
+        id: 'split',
+        icon: '✂️',
+        title: 'Split',
+        desc: 'Extract pages',
+        active: this.isSplitTool
+      },
+      {
+        id: 'convert',
+        icon: '📄➡️📝',
+        title: 'Convert',
+        desc: 'PDF to Word',
+        active: false
+      }
+    ];
   }
 
-}
+  trustItems = [
+    '🔒 100% Private',
+    '⚡ Instant Processing',
+    '☁️ No Upload'
+  ];
+
+  handleQuickAction(action: string) {
+    switch (action) {
+      case 'merge':
+        this.triggerUpload();
+        break;
+
+      case 'compress':
+        this.goToTool('compress-pdf', 'compress', true);
+        break;
+
+      case 'split':
+        this.goToTool('split-pdf');
+        break;
+
+      case 'convert':
+        this.goToTool('pdf-to-word');
+        break;
+    }
+  }
 
   // =====================
   // PREVIEW
   // =====================
- private async generatePreview(file: File, id: string) {
+  private async generatePreview(file: File, id: string) {
     const item = this.workspace.workspaceFiles.find(x => x.id === id);
     if (!item) return;
     if (!this.isBrowser) return;
@@ -834,17 +659,15 @@ handleQuickAction(action: string) {
       item.previewLoading = true;
       item.previewError = false;
       item.previewProgress = 0;
-      await new Promise(r =>requestAnimationFrame(r));
+      await new Promise(r => requestAnimationFrame(r));
       const result = await this.previewService.generatePreview(file,
-          (p) => {
-            item.previewProgress = p;
-            if (p === 100 || p % 25 === 0) {
-              requestAnimationFrame(() =>
-                this.cd.markForCheck()
-              );
-            }
+        (p) => {
+          item.previewProgress = p;
+          if (p === 100 || p % 25 === 0) {
+            requestAnimationFrame(() => this.cd.markForCheck());
           }
-        );
+        }
+      );
 
       // cleanup old blob
       if (item.preview) {
@@ -861,10 +684,7 @@ handleQuickAction(action: string) {
       console.error(e);
       item.previewError = true;
       item.previewLoading = false;
-      this.toast.show(
-        'Preview failed',
-        'error'
-      );
+      this.toast.show('Preview failed', 'error');
     }
 
     this.cd.markForCheck();
@@ -875,10 +695,7 @@ handleQuickAction(action: string) {
     item.previewError = false;
     item.previewLoading = true;
     item.previewProgress = 0;
-    this.generatePreview(
-      item.file,
-      item.id
-    );
+    this.generatePreview(item.file, item.id);
   }
 
   // =====================
@@ -950,19 +767,13 @@ handleQuickAction(action: string) {
   removeFile(i: number) {
     const removedFile = this.workspace.workspaceFiles[i];
     if (removedFile?.preview) {
-      URL.revokeObjectURL(
-        removedFile.preview
-      );
+      URL.revokeObjectURL(removedFile.preview);
     }
 
     this.workspaceOps.removeFile(i);
-
-    this.toast.show('File removed','info',4000,
-      {actions: [{
-            label: 'Undo',
-            action: () => {this.workspaceOps.restoreFile(i,removedFile);}
-          }]
-      });
+    this.toast.show('File removed', 'info', 4000, {
+      actions: [{ label: 'Undo', action: () => { this.workspaceOps.restoreFile(i, removedFile); } }]
+    });
   }
 
   private capturePositions() {
@@ -992,126 +803,93 @@ handleQuickAction(action: string) {
   // =====================
   // VIEWER
   // =====================
-async preview(file: File, index: number) {
-  this.workspace.activeIndex = index;
-  this.viewerFile = file;
-  if (!this.isBrowser) return;
-  this.showViewer = true;
-  this.viewerLoading = true;
+  async preview(file: File, index: number) {
+    this.workspace.activeIndex = index;
+    this.viewerFile = file;
+    if (!this.isBrowser) return;
+    this.showViewer = true;
+    this.viewerLoading = true;
 
-  // 🔥 STEP 1: show existing preview instantly (blurred)
-  const quickPreview = this.workspace.previews[index];
+    // 🔥 STEP 1: show existing preview instantly (blurred)
+    const quickPreview = this.workspace.previews[index];
 
-  if (quickPreview) {
-    this.viewerPages = [quickPreview];
-  } else {
-    this.viewerPages = [];
+    if (quickPreview) {
+      this.viewerPages = [quickPreview];
+    } else {
+      this.viewerPages = [];
+    }
+
+    try {
+      // 🔥 STEP 2: generate real pages (sharp)
+      const pages = await this.previewService.generateViewerPages(file);
+
+      // 🔥 STEP 3: smooth replace (delay = visual polish)
+      setTimeout(() => {
+        const oldPages = this.viewerPages.filter(p => !this.workspace.previews.includes(p));
+        this.viewerLoading = false;
+        this.viewerPages = pages;
+        requestIdleCallback(() => {
+          this.previewService.cleanupUrls(oldPages);
+        });
+
+        this.cd.markForCheck();
+      }, 300);
+
+    } catch (e) {
+      console.error(e);
+      this.viewerLoading = false;
+      this.toast.show('Preview failed', 'error');
+    }
   }
 
-  try {
-    // 🔥 STEP 2: generate real pages (sharp)
-    const pages = await this.previewService.generateViewerPages(file);
+  private safeCleanup(callback: () => void) {
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(callback);
+    } else {
+      setTimeout(callback, 200);
+    }
+  }
 
-    // 🔥 STEP 3: smooth replace (delay = visual polish)
-    setTimeout(() => {
-
-  const oldPages =
-    this.viewerPages.filter(
-      p => !this.workspace.previews.includes(p)
-    );
-
-  this.viewerLoading = false;
-
-  this.viewerPages = pages;
-
-  requestIdleCallback(() => {
-
-    this.previewService.cleanupUrls(oldPages);
-
-  });
-
-  this.cd.markForCheck();
-
-}, 300);
-
-  } catch (e) {
-    console.error(e);
+  closeViewer() {
+    const oldPages = this.viewerPages.filter(p => !this.workspace.previews.includes(p));
+    this.showViewer = false;
     this.viewerLoading = false;
-    this.toast.show('Preview failed', 'error');
+    this.viewerFile = null;
+    this.viewerPages = [];
+
+    this.cd.detectChanges();
+
+    setTimeout(() => {
+      this.safeCleanup(() => {
+        this.previewService.cleanupUrls(oldPages);
+      });
+    }, 0);
   }
-}
-
-private safeCleanup(callback: () => void) {
-
-  if ('requestIdleCallback' in window) {
-    (window as any).requestIdleCallback(callback);
-  } else {
-    setTimeout(callback, 200);
-  }
-
-}
-
-closeViewer() {
-
-  const oldPages =
-    this.viewerPages.filter(
-      p => !this.workspace.previews.includes(p)
-    );
-
-  this.showViewer = false;
-  this.viewerLoading = false;
-  this.viewerFile = null;
-  this.viewerPages = [];
-
-  this.cd.detectChanges();
-
-  setTimeout(() => {
-
-    this.safeCleanup(() => {
-
-      this.previewService.cleanupUrls(oldPages);
-
-    });
-
-  }, 0);
-
-}
 
   zoomIn() { this.zoom += 0.2; }
   zoomOut() { if (this.zoom > 0.4) this.zoom -= 0.2; }
 
   openFullPdf() {
-
-  if (!this.viewerFile) return;
-
-  const url =
-    URL.createObjectURL(
-      this.viewerFile
-    );
-
-  window.open(
-    url,
-    '_blank'
-  );
-
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 60000);
-
-}
+    if (!this.viewerFile) return;
+    const url = URL.createObjectURL(this.viewerFile);
+    window.open(url, '_blank');
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 60000);
+  }
 
   onVisiblePreview(index: number) {
     const item = this.workspace.workspaceFiles[index];
     if (!item) return;
     // already generated
     if (item.preview) {
-     return;
+      return;
     }
     // already loading
     if (item.previewLoading) {
-     return;
+      return;
     }
-    this.queuePreview(item.file,item.id);
+    this.queuePreview(item.file, item.id);
   }
 
   // =====================
@@ -1128,30 +906,11 @@ closeViewer() {
     this.loader.show();
     this.loader.setText('Merging PDFs...');
     try {
-      const result = await this.mergeEngine.merge(
-        this.workspace.files,
-        (p) => this.loader.setProgress?.(p)
-      );
-
+      const result = await this.mergeEngine.merge(this.workspace.files, (p) => this.loader.setProgress?.(p));
       this.downloadFile(result);
-      const mergedId = crypto.randomUUID();
-      this.workspaceOps.replaceAll([
-        {
-          id: mergedId,
-          file: result,
-          preview: '',
-          pageCount: 0,
-          previewLoading: true,
-          previewProgress: 0,
-          previewError: false,
-          previewQueued: false
-        }
-      ]);
-      await this.generatePreview(result,mergedId);
-      console.log('Compressed Result Size:',result.size);
+      await this.workspaceOutput.showResult({ file: result, previewGenerator: this.generatePreview.bind(this) });
+      console.log('Merged Result Size:', result.size);
 
-      this.workspace.hasMerged = true;
-      this.workspace.lastMergedUrl = URL.createObjectURL(result);
       this.loader.setText('Done ✨');
       setTimeout(() => {
         this.loader.hide();
@@ -1166,82 +925,6 @@ closeViewer() {
       this.workspace.loading = false;
       this.cd.markForCheck();
     }
-  }
-
-  async compressPdf() {
-    if (!this.workspace.files.length) {
-      this.toast.show('Please add a PDF first', 'error');
-      return;
-    }
-    setTimeout(() => {
-      this.loader.show();
-      this.loader.setText('Optimizing PDF...');
-    });
-    this.workspace.loading = true;
-    this.compressing = true;
-    this.compressionProgress = 0;
-    const startedAt = performance.now();
-    try {
-      this.compressionStage = 'analysis';
-      const result = await this.compressEngine.compress(this.workspace.files[0],this.compressionLevel,
-       (p) => {
-        this.compressionProgress = p;
-        this.cd.markForCheck();
-       });
-
-      this.compressedFile = result;
-      this.compressOriginalSize = this.workspace.files[0].size;
-      this.compressFinalSize = result.size;
-      this.compressReduction = Math.max(0, Math.round(((this.compressOriginalSize - this.compressFinalSize) / this.compressOriginalSize) * 100));
-      this.compressDuration = ((performance.now() - startedAt)/ 1000).toFixed(1) + 's';
-
-      console.log('Result Size:',result.size);
-
-      const originalSize = this.workspace.files[0].size;
-      const compressedSize = result.size;
-      this.estimatedFinalSize = compressedSize / 1024 / 1024;
-      this.estimatedReduction = Math.max(0,Math.round(((originalSize - compressedSize) / originalSize) * 100));
-      this.downloadFile(result);
-      const mergedId = crypto.randomUUID();
-      // setTimeout(async () => {
-        this.workspaceOps.replaceAll([
-          {
-            id: mergedId,
-            file: result,
-            preview: '',
-            pageCount: 0,
-            previewLoading: true,
-            previewProgress: 0,
-            previewError: false,
-            previewQueued: false
-          }
-        ]);
-
-        await this.generatePreview(result,mergedId);
-        this.cd.detectChanges();
-      // });
-
-      this.workspace.hasMerged = true;
-      this.workspace.lastMergedUrl = URL.createObjectURL(result);
-      this.loader.setText('Done ✨');
-      setTimeout(() => {
-        this.loader.hide();
-        this.toast.show('Optimization completed', 'success');
-        this.showCompressResult = true;
-      }, 400);
-    } catch (e) {
-      console.error(e);
-      this.loader.setText('Optimization failed...');
-      setTimeout(() => this.loader.hide(), 500);
-      this.toast.show('Optimization failed', 'error');
-    } finally {
-        this.compressing = false;
-        this.compressionProgress = 100;
-        setTimeout(() => {
-          this.workspace.loading = false;
-          this.cd.detectChanges();
-        });
-     }
   }
 
   resetAfterMerge() {
@@ -1259,60 +942,27 @@ closeViewer() {
     return this.tool?.slug === 'compress-pdf';
   }
 
- async analyzeCompression() {
-  if (!this.workspace.files.length) {
-    return;
-  }
-  
-  const requestId = ++this.analysisRequestId;
-  const file = this.workspace.files[0];
-  const sizeMB = file.size / 1024 / 1024;
-  const result = await this.compressEngine.analyzeFile(file);
-  if (requestId !== this.analysisRequestId) {
-    return;
-  }
-  this.analyzedPdfType = result.type;
-  this.pdfInsights = result.analysis;
-  const pages = result.pages;
-  let reduction = 0;
-  const imageRatio = result.analysis.imageRatio;
-  const dpi = result.analysis.estimatedDpi;
-  reduction = imageRatio * 50;
-  if (dpi > 250) {
-    reduction += 15;
-  }
-  if (result.analysis.largePages) {
-    reduction += 10;
-  }
-  switch (this.compressionLevel) {
-    case 'light':
-      reduction *= 0.6;
-      break;
-    case 'recommended':
-      reduction *= 1;
-      break;
-    case 'strong':
-      reduction *= 1.4;
-      break;
-  }
+  async analyzeCompression() {
+    if (!this.workspace.files.length) {
+      return;
+    }
 
-  reduction = Math.min(Math.round(reduction),80);
+    const requestId = ++this.analysisRequestId;
+    const file = this.workspace.files[0];
+    await this.compressionFacade.analyze(file);
+    
+    console.log('ToolComponent');
+    console.log(this.compressionState);
 
-  // very huge PDFs
-  if (pages > 1000) {
-    reduction = Math.min(reduction, 10);
-  }
-
-  this.ngZone.run(() => {
-  this.estimatedReduction = reduction;
-    this.estimatedFinalSize = sizeMB * (1 - reduction / 100);
+    if (requestId !== this.analysisRequestId) {
+      return;
+    }
     this.cd.markForCheck();
-  });
 
-}
+  }
 
   getTotalSize(): string {
-    return (this.workspace.files.reduce((a, f) => a + f.size, 0) /(1024 * 1024)).toFixed(2) + ' MB';
+    return (this.workspace.files.reduce((a, f) => a + f.size, 0) / (1024 * 1024)).toFixed(2) + ' MB';
   }
 
   // SMART SUGGESTIONS BASED ON FILES
@@ -1365,6 +1015,43 @@ closeViewer() {
       .slice(0, 3);
   }
 
+  async compressPdf() {
+    if (!this.workspace.files.length) {
+      this.toast.show('Please add a PDF first', 'error');
+      return;
+    }
+
+    this.loader.show();
+    this.loader.setText('Optimizing PDF...');
+
+    this.workspace.loading = true;
+    try {
+      const result = await this.compressionFacade.compress(this.workspace.files[0]);
+      this.downloadFile(result);
+      await this.workspaceOutput.showResult({
+        file: result,
+        previewGenerator: this.generatePreview.bind(this)
+      });
+      this.loader.setText('Done ✨');
+      this.toast.show('Optimization completed', 'success');
+      this.compressionState.showCompressResult = true;
+    }
+    catch (e) {
+      console.error(e);
+      this.loader.setText('Optimization failed');
+      this.toast.show('Optimization failed', 'error');
+    }
+    finally {
+      this.loader.hide();
+      this.workspace.loading = false;
+      this.cd.detectChanges();
+    }
+  }
+
+  resetAfterCompression(): void {
+    this.compressionState.reset();
+  }
+
   // =====================================
   // Mobile Side Bar (reorder + remove)
   // ======================================
@@ -1395,7 +1082,7 @@ closeViewer() {
   //====================================
   // BOTTOM SHEET FILE ACTIONS (mobile)
   // =====================================  
-  
+
   openFileActions(i: number) {
     this.selectedFileIndex = i;
     this.showFileSheet = true;
@@ -1412,12 +1099,7 @@ closeViewer() {
       {
         label: 'Compress',
         icon: AppIcons.Zap,
-        action: () =>
-          this.goToTool(
-            'compress-pdf',
-            'compress',
-            true
-          )
+        action: () => this.goToTool('compress-pdf', 'compress', true)
       },
       {
         label: 'Split',

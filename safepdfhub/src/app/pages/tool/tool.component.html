@@ -124,16 +124,16 @@
   [previews]="workspace.previews"
   [pageCounts]="workspace.pageCounts"
   
-  [compressing]="compressing"
-  [progress]="compressionProgress"
+  [compressing]="compressionState.compressing"
+  [progress]="compressionState.progress"
 
-  [estimatedReduction]="estimatedReduction"
-  [estimatedFinalSize]="estimatedFinalSize"
+  [estimatedReduction]="compressionState.estimatedReduction"
+  [estimatedFinalSize]="compressionState.estimatedFinalSize"
 
-  [compressionLevel]="compressionLevel"
-  [pdfInsights]="pdfInsights"
+  [compressionLevel]="compressionState.compressionLevel"
+  [pdfInsights]="compressionState.pdfInsights"
 
-  (compressionLevelChange)="compressionLevel = $event; analyzeCompression();"
+  (compressionLevelChange)="compressionState.compressionLevel = $event; analyzeCompression();"
   (compress)="compressPdf()"
   (replaceFile)="triggerUpload()"
 />

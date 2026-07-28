@@ -23,6 +23,7 @@
     "@types/file-saver": "^2.0.7",
     "express": "^5.1.0",
     "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
     "lucide-angular": "^1.0.0",
     "pdf-lib": "^1.17.1",
     "rxjs": "~7.8.0",
