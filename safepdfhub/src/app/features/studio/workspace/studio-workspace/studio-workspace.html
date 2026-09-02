@@ -1,0 +1,328 @@
+<main
+  class="studio-workspace"
+  aria-label="Studio workspace">
+
+  <!-- ======================================================
+       LEFT SIDEBAR
+  ======================================================= -->
+
+  <aside
+    class="studio-workspace__left-sidebar"
+    aria-label="Document navigation">
+
+    <div class="sidebar">
+
+      <nav
+        class="sidebar__tabs"
+        aria-label="Document navigation tabs">
+
+        <button
+          type="button"
+          class="sidebar__tab sidebar__tab--active"
+          aria-selected="true">
+
+          Pages
+
+        </button>
+
+        <button
+          type="button"
+          class="sidebar__tab"
+          aria-selected="false">
+
+          Bookmarks
+
+        </button>
+
+        <button
+          type="button"
+          class="sidebar__tab"
+          aria-selected="false">
+
+          Comments
+
+        </button>
+
+      </nav>
+
+
+      <div class="sidebar__body">
+
+        <div class="sidebar__search">
+
+          <label
+            class="sidebar__search-label"
+            for="studio-page-search">
+
+            Search pages
+
+          </label>
+
+          <div class="sidebar__search-box">
+
+            <span
+              class="sidebar__search-icon"
+              aria-hidden="true">
+
+              ⌕
+
+            </span>
+
+            <input
+              id="studio-page-search"
+              type="search"
+              placeholder="Search pages"
+              autocomplete="off" />
+
+          </div>
+
+        </div>
+
+
+        @if (!facade.hasDocument()) {
+
+          <div class="sidebar__empty">
+
+            <div
+              class="sidebar__empty-icon"
+              aria-hidden="true">
+
+              PDF
+
+            </div>
+
+            <p class="sidebar__empty-title">
+              No document loaded
+            </p>
+
+            <p class="sidebar__empty-description">
+              Open a PDF to see its pages here.
+            </p>
+
+          </div>
+
+        }
+
+
+        @if (
+          facade.hasDocument() &&
+          facade.isLoading()
+        ) {
+
+          <div class="sidebar__empty">
+
+            <div
+              class="sidebar__empty-icon sidebar__empty-icon--loading"
+              aria-hidden="true">
+
+              PDF
+
+            </div>
+
+            <p class="sidebar__empty-title">
+              Loading pages
+            </p>
+
+            <p class="sidebar__empty-description">
+              Preparing your PDF for editing.
+            </p>
+
+          </div>
+
+        }
+
+
+        @if (
+  facade.hasDocument() &&
+  !facade.isLoading()
+) {
+
+  <div class="sidebar__document-summary">
+
+    <div class="sidebar__document-meta">
+
+      <div class="sidebar__document-badge">
+        PDF
+      </div>
+
+      <div class="sidebar__document-copy">
+
+        <p
+          class="sidebar__document-name"
+          [title]="facade.fileName()">
+
+          {{ facade.fileName() }}
+
+        </p>
+
+        <span class="sidebar__document-page-count">
+
+          {{ pageCount() }}
+          {{ pageCount() === 1 ? 'page' : 'pages' }}
+
+        </span>
+
+      </div>
+
+    </div>
+
+  </div>
+
+<div
+  #pagesList
+  class="sidebar__pages-list"
+  aria-label="PDF pages">
+
+  @for (page of pages(); track page) {
+
+    <div
+      #pageItem
+      class="sidebar__page-item"
+      [class.sidebar__page-item--active]="
+        page === currentPage()
+      "
+      [attr.aria-current]="
+        page === currentPage()
+          ? 'page'
+          : null
+      "
+      [attr.data-page-number]="page">
+
+      @defer (on viewport) {
+
+        <app-studio-page-thumbnail
+          [pageNumber]="page"
+          [selected]="page === currentPage()"
+          [pdf]="facade.document()?.pdf ?? null"
+          (pageSelected)="selectPage($event)"
+        />
+
+      } @placeholder {
+
+        <div
+          class="sidebar__thumbnail-placeholder"
+          aria-hidden="true">
+
+          <div
+            class="sidebar__thumbnail-placeholder-preview">
+
+            <span>PDF</span>
+
+          </div>
+
+          <div
+            class="sidebar__thumbnail-placeholder-number">
+
+            {{ page }}
+
+          </div>
+
+        </div>
+
+      }
+
+    </div>
+
+  }
+
+</div>
+
+}
+
+      </div>
+
+    </div>
+
+  </aside>
+
+
+  <!-- ======================================================
+       CANVAS
+       
+       IMPORTANT:
+       The PDF canvas owns the complete center area.
+       Do NOT add another 100% height canvas wrapper here.
+  ======================================================= -->
+
+  <section
+    class="studio-workspace__canvas"
+    aria-label="Document canvas">
+
+    <app-studio-canvas />
+
+  </section>
+
+
+  <!-- ======================================================
+       RIGHT SIDEBAR
+  ======================================================= -->
+
+  <aside
+    class="studio-workspace__right-sidebar"
+    aria-label="Document properties">
+
+    <div class="properties">
+
+      <nav
+        class="properties__tabs"
+        aria-label="Properties tabs">
+
+        <button
+          type="button"
+          class="properties__tab properties__tab--active"
+          aria-selected="true">
+
+          Document
+
+        </button>
+
+        <button
+          type="button"
+          class="properties__tab"
+          aria-selected="false">
+
+          Page
+
+        </button>
+
+        <button
+          type="button"
+          class="properties__tab"
+          aria-selected="false">
+
+          Selection
+
+        </button>
+
+      </nav>
+
+
+      <div class="properties__body">
+
+        <div class="properties__empty">
+
+          <div
+            class="properties__empty-icon"
+            aria-hidden="true">
+
+            —
+
+          </div>
+
+          <p class="properties__empty-title">
+            Nothing selected
+          </p>
+
+          <p class="properties__empty-description">
+            Document and selection properties will appear here.
+          </p>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </aside>
+
+</main>

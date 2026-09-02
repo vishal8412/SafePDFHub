@@ -1,0 +1,1054 @@
+<section
+  class="studio-canvas"
+  aria-label="PDF document canvas"
+  (dblclick)="onDoubleClick($event)"
+>
+
+  <div
+    #pdfViewport
+    class="studio-canvas__viewport"
+  >
+
+    <div
+      #pdfStage
+      class="studio-canvas__stage"
+      [class.studio-canvas__stage--hand]="
+        facade.activeTool() === 'hand'
+      "
+      [class.studio-canvas__stage--text]="
+        facade.activeTool() === 'text'
+      "
+      [class.studio-canvas__stage--crosshair]="
+        facade.activeTool() === 'draw' ||
+        facade.activeTool() === 'highlight' ||
+        facade.activeTool() === 'shape'
+      "
+      [class.studio-canvas__stage--copy]="
+        facade.activeTool() === 'image'
+      "
+      (wheel)="onWheel($event)"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointercancel)="onPointerCancel($event)"
+    >
+
+      <div
+        #pdfPage
+        class="studio-canvas__page"
+        [class.studio-canvas__page--hidden]="
+          !facade.hasDocument()
+        "
+      >
+
+        <canvas
+          #pdfCanvas
+          class="studio-canvas__pdf"
+          aria-label="PDF page"
+        ></canvas>
+
+
+        <!-- =====================================================
+             STUDIO OBJECTS
+        ====================================================== -->
+
+        @if (facade.hasDocument()) {
+
+          @for (
+            object of studioObjects;
+            track object.id
+          ) {
+
+            <div
+              class="studio-editor-object"
+              [class.studio-editor-object--text]="
+                object.type === 'text'
+              "
+              [class.studio-editor-object--image]="
+                object.type === 'image'
+              "
+              [class.studio-editor-object--shape]="
+                object.type === 'shape'
+              "
+              [class.studio-editor-object--drawing]="
+                object.type === 'draw' ||
+                object.type === 'highlight'
+              "
+              [class.studio-editor-object--selected]="
+                facade.selectedObjectId() === object.id
+              "
+              [class.studio-editor-object--editing]="
+                editingObjectId === object.id
+              "
+              [style.left.%]="
+                object.bounds.x * 100
+              "
+              [style.top.%]="
+                object.bounds.y * 100
+              "
+              [style.width.%]="
+                object.bounds.width * 100
+              "
+              [style.height.%]="
+                object.bounds.height * 100
+              "
+              [style.font-size.px]="
+                getObjectFontSizePx(object)
+              "
+              [style.font-weight]="
+                object.textStyle?.fontWeight ?? 400
+              "
+              [style.font-style]="
+                object.textStyle?.fontStyle ?? 'normal'
+              "
+              [style.text-align]="
+                object.textStyle?.textAlign ?? 'left'
+              "
+              [attr.data-object-id]="object.id"
+              [attr.aria-selected]="
+                facade.selectedObjectId() === object.id
+              "
+              (pointerdown)="
+                onEditorObjectPointerDown(
+                  $event,
+                  object.id
+                )
+              "
+            >
+
+              @if (
+                object.type === 'image'
+              ) {
+
+                <img
+                  class="studio-editor-object__image"
+                  [src]="object.image?.dataUrl ?? ''"
+                  alt="Inserted image"
+                  draggable="false"
+                  (dragstart)="$event.preventDefault()"
+                />
+
+              } @else if (
+                object.type === 'shape' &&
+                object.shape
+              ) {
+
+                <svg
+                  class="studio-editor-object__svg"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+
+                  @if (
+                    object.shape.kind === 'rectangle'
+                  ) {
+
+                    <rect
+                      x="1"
+                      y="1"
+                      width="98"
+                      height="98"
+                      [attr.stroke]="
+                        object.shape.style.strokeColor
+                      "
+                      [attr.stroke-width]="
+                        shapeStrokeWidthSvg(object)
+                      "
+                      [attr.stroke-opacity]="
+                        object.shape.style.opacity
+                      "
+                      [attr.fill]="
+                        object.shape.style.fillColor ?? 'none'
+                      "
+                      [attr.fill-opacity]="
+                        object.shape.style.fillColor
+                          ? object.shape.style.opacity * 0.28
+                          : 0
+                      "
+                    />
+
+                  } @else if (
+                    object.shape.kind === 'ellipse'
+                  ) {
+
+                    <ellipse
+                      cx="50"
+                      cy="50"
+                      rx="49"
+                      ry="49"
+                      [attr.stroke]="
+                        object.shape.style.strokeColor
+                      "
+                      [attr.stroke-width]="
+                        shapeStrokeWidthSvg(object)
+                      "
+                      [attr.stroke-opacity]="
+                        object.shape.style.opacity
+                      "
+                      [attr.fill]="
+                        object.shape.style.fillColor ?? 'none'
+                      "
+                      [attr.fill-opacity]="
+                        object.shape.style.fillColor
+                          ? object.shape.style.opacity * 0.28
+                          : 0
+                      "
+                    />
+
+                  } @else if (
+                    object.shape.kind === 'line' ||
+                    object.shape.kind === 'arrow'
+                  ) {
+
+                    @let linePoints = getShapeLineSvgPoints(object);
+
+                    <line
+                      [attr.x1]="linePoints.x1"
+                      [attr.y1]="linePoints.y1"
+                      [attr.x2]="linePoints.x2"
+                      [attr.y2]="linePoints.y2"
+                      [attr.stroke]="
+                        object.shape.style.strokeColor
+                      "
+                      [attr.stroke-width]="
+                        shapeStrokeWidthSvg(object)
+                      "
+                      [attr.stroke-opacity]="
+                        object.shape.style.opacity
+                      "
+                      stroke-linecap="round"
+                    />
+
+                    @if (
+                      object.shape.kind === 'arrow'
+                    ) {
+
+                      <polygon
+                        [attr.points]="
+                          getArrowHeadSvgPoints(object)
+                        "
+                        [attr.fill]="
+                          object.shape.style.strokeColor
+                        "
+                        [attr.fill-opacity]="
+                          object.shape.style.opacity
+                        "
+                      />
+
+                    }
+
+                  }
+
+                </svg>
+
+              } @else if (
+                (
+                  object.type === 'draw' ||
+                  object.type === 'highlight'
+                ) &&
+                object.drawing
+              ) {
+
+                <svg
+                  class="studio-editor-object__svg"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+
+                  <polyline
+                    [attr.points]="
+                      getObjectDrawingSvgPoints(object)
+                    "
+                    fill="none"
+                    [attr.stroke]="
+                      object.drawing.style.strokeColor
+                    "
+                    [attr.stroke-width]="
+                      drawingStrokeWidthSvg(object)
+                    "
+                    [attr.stroke-opacity]="
+                      object.drawing.style.opacity
+                    "
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+
+                </svg>
+
+              } @else if (
+                object.type === 'text' &&
+                editingObjectId === object.id
+              ) {
+
+                <textarea
+                  #textEditor
+                  class="studio-text-editor"
+                  [value]="editingText"
+                  aria-label="Edit PDF text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="sentences"
+                  (pointerdown)="$event.stopPropagation()"
+                  (click)="$event.stopPropagation()"
+                  (dblclick)="$event.stopPropagation()"
+                  (input)="
+                    onTextEditorInput($event)
+                  "
+                  (keydown)="
+                    onTextEditorKeyDown($event)
+                  "
+                ></textarea>
+
+              } @else {
+
+                <span
+                  class="studio-editor-object__text"
+                >
+                  {{ object.text || 'Text' }}
+                </span>
+
+              }
+
+            </div>
+          }
+
+        }
+
+
+        <!-- =====================================================
+             F3 DRAWING PREVIEW
+        ====================================================== -->
+
+        @if (
+          drawingInteraction
+        ) {
+
+          @if (
+            drawingPreviewBounds;
+            as previewBounds
+          ) {
+
+            <div
+              class="studio-drawing-preview"
+              [style.left.%]="
+                previewBounds.x
+              "
+              [style.top.%]="
+                previewBounds.y
+              "
+              [style.width.%]="
+                previewBounds.width
+              "
+              [style.height.%]="
+                previewBounds.height
+              "
+              aria-hidden="true"
+            >
+
+              @if (
+                drawingInteraction.tool === 'shape'
+              ) {
+
+                @if (
+                  drawingInteraction.shapeKind === 'rectangle'
+                ) {
+
+                  <svg
+                    class="studio-editor-object__svg"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    <rect
+                      x="1"
+                      y="1"
+                      width="98"
+                      height="98"
+                      [attr.stroke]="
+                        selectedShapeStrokeColor
+                      "
+                      [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
+                      [attr.fill]="
+                        selectedShapeFillEnabled
+                          ? selectedShapeFillColor
+                          : 'none'
+                      "
+                      [attr.fill-opacity]="
+                        selectedShapeFillEnabled
+                          ? 0.28
+                          : 0
+                      "
+                    />
+                  </svg>
+
+                } @else if (
+                  drawingInteraction.shapeKind === 'ellipse'
+                ) {
+
+                  <svg
+                    class="studio-editor-object__svg"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    <ellipse
+                      cx="50"
+                      cy="50"
+                      rx="49"
+                      ry="49"
+                      [attr.stroke]="
+                        selectedShapeStrokeColor
+                      "
+                      [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
+                      [attr.fill]="
+                        selectedShapeFillEnabled
+                          ? selectedShapeFillColor
+                          : 'none'
+                      "
+                      [attr.fill-opacity]="
+                        selectedShapeFillEnabled
+                          ? 0.28
+                          : 0
+                      "
+                    />
+                  </svg>
+
+                } @else {
+
+                  <svg
+                    class="studio-editor-object__svg"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    @let previewLinePoints = getDrawingPreviewLineSvgPoints();
+
+                    <line
+                      [attr.x1]="previewLinePoints.x1"
+                      [attr.y1]="previewLinePoints.y1"
+                      [attr.x2]="previewLinePoints.x2"
+                      [attr.y2]="previewLinePoints.y2"
+                      [attr.stroke]="
+                        selectedShapeStrokeColor
+                      "
+                      [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
+                      stroke-linecap="round"
+                    />
+
+                    @if (
+                      drawingInteraction.shapeKind === 'arrow'
+                    ) {
+                      <polygon
+                        [attr.points]="
+                          getDrawingPreviewArrowHeadSvgPoints()
+                        "
+                        [attr.fill]="
+                          selectedShapeStrokeColor
+                        "
+                      />
+                    }
+                  </svg>
+
+                }
+
+              } @else {
+
+                <svg
+                  class="studio-editor-object__svg"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                >
+                  <polyline
+                    [attr.points]="
+                      getDrawingPreviewRelativePoints()
+                    "
+                    fill="none"
+                    [attr.stroke]="activeDrawingColor"
+                    [attr.stroke-width]="drawingPreviewStrokeWidthSvg()"
+                    [attr.stroke-opacity]="
+                      drawingInteraction.tool === 'highlight'
+                        ? 0.32
+                        : 1
+                    "
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+
+              }
+
+            </div>
+
+          }
+
+        }
+
+
+        <!-- =====================================================
+             F3 TOOL OPTIONS
+        ====================================================== -->
+
+        @if (
+          shapePaletteVisible
+        ) {
+
+          <div
+            class="studio-shape-palette"
+            [class.studio-shape-palette--collapsed]="paletteCollapsed"
+            role="toolbar"
+            aria-label="Shape options"
+            (pointerdown)="$event.stopPropagation()"
+            (click)="$event.stopPropagation()"
+          >
+
+            <button
+              type="button"
+              class="studio-shape-palette__collapse"
+              [attr.aria-label]="paletteCollapsed ? 'Expand shape options' : 'Minimize shape options'"
+              [attr.title]="paletteCollapsed ? 'Expand' : 'Minimize'"
+              (click)="toggleF3Palette()"
+            >
+              {{ paletteCollapsed ? '⌄' : '⌃' }}
+            </button>
+
+            @if (!paletteCollapsed) {
+            <span class="studio-shape-palette__label">
+              Shape
+            </span>
+
+            <button
+              type="button"
+              class="studio-shape-palette__button"
+              [class.is-active]="
+                selectedShapeKind === 'rectangle'
+              "
+              (click)="selectShapeKind('rectangle')"
+            >
+              Rectangle
+            </button>
+
+            <button
+              type="button"
+              class="studio-shape-palette__button"
+              [class.is-active]="
+                selectedShapeKind === 'ellipse'
+              "
+              (click)="selectShapeKind('ellipse')"
+            >
+              Oval
+            </button>
+
+            <button
+              type="button"
+              class="studio-shape-palette__button"
+              [class.is-active]="
+                selectedShapeKind === 'line'
+              "
+              (click)="selectShapeKind('line')"
+            >
+              Line
+            </button>
+
+            <button
+              type="button"
+              class="studio-shape-palette__button"
+              [class.is-active]="
+                selectedShapeKind === 'arrow'
+              "
+              (click)="selectShapeKind('arrow')"
+            >
+              Arrow
+            </button>
+
+            <label class="studio-shape-palette__color">
+              <span>Stroke</span>
+              <input
+                type="color"
+                [value]="selectedShapeStrokeColor"
+                (input)="
+                  setShapeStrokeColor(
+                    $any($event.target).value
+                  )
+                "
+              />
+            </label>
+
+            <label
+              class="studio-shape-palette__fill"
+              [class.is-disabled]="
+                selectedShapeKind === 'line' ||
+                selectedShapeKind === 'arrow'
+              "
+            >
+              <input
+                type="checkbox"
+                [checked]="selectedShapeFillEnabled"
+                [disabled]="
+                  selectedShapeKind === 'line' ||
+                  selectedShapeKind === 'arrow'
+                "
+                (change)="toggleShapeFill()"
+              />
+              Fill
+            </label>
+
+            <label class="studio-shape-palette__width">
+              <span>Width</span>
+              <input
+                type="number"
+                min="1"
+                max="12"
+                step="1"
+                [value]="selectedShapeWidthPx"
+                (change)="
+                  setShapeStrokeWidthPx(
+                    +$any($event.target).value
+                  )
+                "
+              />
+            </label>
+
+            @if (canSelectBehind) {
+              <button
+                type="button"
+                class="studio-shape-palette__secondary-button"
+                title="Select the annotation behind this one"
+                (click)="selectObjectBehind()"
+              >
+                Behind
+              </button>
+            }
+
+            @if (facade.selection()?.type === 'shape') {
+              <button
+                type="button"
+                class="studio-shape-palette__danger-button"
+                (click)="deleteSelectedObject()"
+              >
+                Delete
+              </button>
+            }
+            }
+
+          </div>
+
+        }
+
+
+        @if (
+          drawingPaletteVisible
+        ) {
+
+          <div
+            class="studio-shape-palette studio-drawing-palette"
+            [class.studio-shape-palette--collapsed]="paletteCollapsed"
+            role="toolbar"
+            aria-label="Drawing options"
+            (pointerdown)="$event.stopPropagation()"
+            (click)="$event.stopPropagation()"
+          >
+
+            <button
+              type="button"
+              class="studio-shape-palette__collapse"
+              [attr.aria-label]="paletteCollapsed ? 'Expand drawing options' : 'Minimize drawing options'"
+              [attr.title]="paletteCollapsed ? 'Expand' : 'Minimize'"
+              (click)="toggleF3Palette()"
+            >
+              {{ paletteCollapsed ? '⌄' : '⌃' }}
+            </button>
+
+            @if (!paletteCollapsed) {
+            <span class="studio-shape-palette__label">
+              {{ activeDrawingPaletteLabel }}
+            </span>
+
+            <label class="studio-shape-palette__color">
+              <span>Color</span>
+              <input
+                type="color"
+                [value]="activeDrawingColor"
+                (input)="
+                  setDrawingColor(
+                    $any($event.target).value
+                  )
+                "
+              />
+            </label>
+
+            <label class="studio-shape-palette__width">
+              <span>Width</span>
+              <input
+                type="number"
+                min="1"
+                max="24"
+                step="1"
+                [value]="activeDrawingWidthPx"
+                (change)="
+                  setDrawingWidthPx(
+                    +$any($event.target).value
+                  )
+                "
+              />
+            </label>
+
+            @if (canSelectBehind) {
+              <button
+                type="button"
+                class="studio-shape-palette__secondary-button"
+                title="Select the annotation behind this one"
+                (click)="selectObjectBehind()"
+              >
+                Behind
+              </button>
+            }
+
+            @if (
+              facade.selection()?.type === 'draw' ||
+              facade.selection()?.type === 'highlight'
+            ) {
+              <button
+                type="button"
+                class="studio-shape-palette__danger-button"
+                (click)="deleteSelectedObject()"
+              >
+                Delete
+              </button>
+            }
+            }
+
+          </div>
+
+        }
+
+
+        <!-- =====================================================
+             SELECTION
+        ====================================================== -->
+
+        @if (
+          facade.selection();
+          as selection
+        ) {
+
+            <div
+              class="studio-selection-box"
+              [class.studio-selection-box--editing]="
+                editingObjectId === selection.objectId
+              "
+              [style.left.%]="
+                selection.bounds.x * 100
+              "
+              [style.top.%]="
+                selection.bounds.y * 100
+              "
+              [style.width.%]="
+                selection.bounds.width * 100
+              "
+              [style.height.%]="
+                selection.bounds.height * 100
+              "
+              [attr.data-selection-type]="
+                selection.type
+              "
+              aria-label="Selected object"
+              (pointerdown)="
+                onSelectionPointerDown($event)
+              "
+            >
+
+              <span
+                class="
+                  studio-selection-box__handle
+                  studio-selection-box__handle--nw
+                "
+                aria-hidden="true"
+                (pointerdown)="
+                  onResizeHandlePointerDown(
+                    $event,
+                    'nw'
+                  )
+                "
+              ></span>
+
+              <span
+                class="
+                  studio-selection-box__handle
+                  studio-selection-box__handle--ne
+                "
+                aria-hidden="true"
+                (pointerdown)="
+                  onResizeHandlePointerDown(
+                    $event,
+                    'ne'
+                  )
+                "
+              ></span>
+
+              <span
+                class="
+                  studio-selection-box__handle
+                  studio-selection-box__handle--sw
+                "
+                aria-hidden="true"
+                (pointerdown)="
+                  onResizeHandlePointerDown(
+                    $event,
+                    'sw'
+                  )
+                "
+              ></span>
+
+              <span
+                class="
+                  studio-selection-box__handle
+                  studio-selection-box__handle--se
+                "
+                aria-hidden="true"
+                (pointerdown)="
+                  onResizeHandlePointerDown(
+                    $event,
+                    'se'
+                  )
+                "
+              ></span>
+
+            </div>
+
+        }
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <input
+    #imageInput
+    class="studio-canvas__file-input"
+    type="file"
+    accept="image/png,image/jpeg"
+    aria-label="Choose image"
+    tabindex="-1"
+    (change)="onImageSelected($event)"
+  />
+
+  <!-- ===========================================================
+       INLINE TEXT TOOLBAR
+  ============================================================ -->
+
+  @if (
+    isTextEditing &&
+    editingTextObject
+  ) {
+
+    <div
+      class="studio-text-toolbar"
+      role="toolbar"
+      aria-label="Text formatting"
+      (pointerdown)="$event.stopPropagation()"
+      (click)="$event.stopPropagation()"
+    >
+
+      <label
+        class="studio-text-toolbar__size"
+      >
+        <span>Size</span>
+
+        <input
+          type="number"
+          min="8"
+          max="72"
+          step="1"
+          [value]="editingFontSizeInput"
+          aria-label="Text size"
+          inputmode="numeric"
+          autocomplete="off"
+          (input)="
+            onFontSizeInput($event)
+          "
+          (change)="
+            onFontSizeChange($event)
+          "
+        />
+      </label>
+
+      <span
+        class="studio-text-toolbar__divider"
+        aria-hidden="true"
+      ></span>
+
+      <button
+        type="button"
+        class="studio-text-toolbar__button"
+        [class.is-active]="
+          editingTextObject.textStyle?.fontWeight === 700
+        "
+        aria-label="Bold"
+        [attr.aria-pressed]="
+          editingTextObject.textStyle?.fontWeight === 700
+        "
+        (click)="
+          toggleTextBold()
+        "
+      >
+        <strong>B</strong>
+      </button>
+
+      <button
+        type="button"
+        class="studio-text-toolbar__button"
+        [class.is-active]="
+          editingTextObject.textStyle?.fontStyle === 'italic'
+        "
+        aria-label="Italic"
+        [attr.aria-pressed]="
+          editingTextObject.textStyle?.fontStyle === 'italic'
+        "
+        (click)="
+          toggleTextItalic()
+        "
+      >
+        <em>I</em>
+      </button>
+
+      <span
+        class="studio-text-toolbar__divider"
+        aria-hidden="true"
+      ></span>
+
+      <button
+        type="button"
+        class="studio-text-toolbar__button"
+        [class.is-active]="
+          editingTextObject.textStyle?.textAlign === 'left'
+        "
+        aria-label="Align left"
+        (click)="
+          setTextAlign('left')
+        "
+      >
+        ≡
+      </button>
+
+      <button
+        type="button"
+        class="studio-text-toolbar__button"
+        [class.is-active]="
+          editingTextObject.textStyle?.textAlign === 'center'
+        "
+        aria-label="Align center"
+        (click)="
+          setTextAlign('center')
+        "
+      >
+        ≡
+      </button>
+
+      <button
+        type="button"
+        class="studio-text-toolbar__button"
+        [class.is-active]="
+          editingTextObject.textStyle?.textAlign === 'right'
+        "
+        aria-label="Align right"
+        (click)="
+          setTextAlign('right')
+        "
+      >
+        ≡
+      </button>
+
+      <span
+        class="studio-text-toolbar__divider"
+        aria-hidden="true"
+      ></span>
+
+      <button
+        type="button"
+        class="
+          studio-text-toolbar__button
+          studio-text-toolbar__button--cancel
+        "
+        aria-label="Cancel text edit"
+        (click)="
+          cancelTextEdit()
+        "
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        class="
+          studio-text-toolbar__button
+          studio-text-toolbar__button--done
+        "
+        aria-label="Finish text edit"
+        (click)="
+          commitTextEdit()
+        "
+      >
+        Done
+      </button>
+
+    </div>
+
+  }
+
+
+  <!-- ===========================================================
+       EMPTY STATE
+  ============================================================ -->
+
+  @if (!facade.hasDocument()) {
+
+    <div
+      class="studio-canvas__empty"
+    >
+
+      <div
+        class="studio-canvas__empty-icon"
+        aria-hidden="true"
+      >
+        PDF
+      </div>
+
+      <h2>
+        Open a PDF
+      </h2>
+
+      <p>
+        Start editing your document in
+        SafePDFHub Studio.
+      </p>
+
+      <div
+        class="studio-canvas__empty-privacy"
+      >
+        <span
+          class="studio-canvas__empty-dot"
+          aria-hidden="true"
+        ></span>
+
+        <span>
+          Private browser processing
+        </span>
+
+        <span
+          aria-hidden="true"
+        >
+          •
+        </span>
+
+        <span>
+          Your file stays on your device
+        </span>
+      </div>
+
+    </div>
+
+  }
+
+</section>

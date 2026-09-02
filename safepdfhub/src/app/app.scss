@@ -1,3 +1,9 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
 body {
   margin: 0;
   background: #071a2f;
@@ -5,7 +11,34 @@ body {
 }
 
 .layout {
-  max-width: 1200px;
-  margin: auto;
-  padding: 20px;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ==========================================================
+   STUDIO ROUTE
+   Studio owns its own application viewport and should not
+   inherit the website content padding.
+========================================================== */
+
+.layout:has(app-studio-shell) {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+main.layout {
+  box-sizing: border-box;
+}
+
+main.layout:has(app-studio-shell) {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }

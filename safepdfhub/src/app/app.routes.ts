@@ -7,12 +7,13 @@ export const routes: Routes = [
       import('./features/pages/home/home.component')
         .then(m => m.HomeComponent)
   },
-  // {
-  //   path: 'compress-pdf',
-  //   loadComponent: () =>
-  //     import('./features/tools/compress-pdf/compress-pdf.component')
-  //       .then(m => m.CompressPdfComponent)
-  // },
+  // Studio routes
+  {
+    path: 'studio',
+    loadChildren: () =>
+        import('./features/studio/studio.routes')
+            .then(r => r.STUDIO_ROUTES)
+  },
   // 🔥 SEO ROUTE
   {
     path: ':slug',

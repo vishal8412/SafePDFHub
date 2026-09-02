@@ -1,0 +1,19 @@
+<div class="panel">
+
+    @if(title()){
+
+        <div class="panel__header">
+
+            {{title()}}
+
+        </div>
+
+    }
+
+    <div class="panel__body">
+
+        <ng-content />
+
+    </div>
+
+</div>

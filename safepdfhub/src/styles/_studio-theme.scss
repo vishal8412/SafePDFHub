@@ -1,0 +1,47 @@
+/* ===========================================
+   SafePDFHub Studio Theme
+   =========================================== */
+
+/* ---------- Brand ---------- */
+
+$brand-primary: #00D4B3;
+$brand-accent: #FF9A3D;
+
+/* ---------- Backgrounds ---------- */
+
+$studio-bg: #0A1626;
+$studio-surface: #101B2D;
+$studio-panel: #162235;
+$studio-panel-hover: #1E2D45;
+
+/* ---------- Text ---------- */
+
+$text-primary: #F8FAFC;
+$text-secondary: #CBD5E1;
+$text-muted: #94A3B8;
+
+/* ---------- Borders ---------- */
+
+$border-color: rgba(255,255,255,.08);
+
+/* ---------- Status ---------- */
+
+$success: #22C55E;
+$warning: #FACC15;
+$error: #EF4444;
+
+/* ---------- Radius ---------- */
+
+$radius-sm: 10px;
+$radius-md: 14px;
+$radius-lg: 18px;
+
+/* ---------- Shadow ---------- */
+
+$shadow-lg:
+0 20px 40px rgba(0,0,0,.35);
+
+/* ---------- Transition ---------- */
+
+$transition:
+all .25s ease;

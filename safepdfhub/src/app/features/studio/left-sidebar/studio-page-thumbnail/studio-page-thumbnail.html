@@ -1,0 +1,59 @@
+<button
+  type="button"
+  class="page-thumbnail"
+  [class.page-thumbnail--selected]="selected"
+  [attr.aria-current]="selected ? 'page' : null"
+  [attr.aria-label]="'Page ' + pageNumber"
+  (click)="onSelect()">
+
+  <div class="page-thumbnail__preview">
+
+    <canvas
+      #canvas
+      class="page-thumbnail__canvas"
+      aria-hidden="true">
+    </canvas>
+
+
+    @if (loading) {
+
+      <div
+        class="page-thumbnail__loading"
+        aria-hidden="true">
+
+        <span></span>
+
+      </div>
+
+    }
+
+
+    @if (failed) {
+
+      <div
+        class="page-thumbnail__error">
+
+        <span>
+          Preview unavailable
+        </span>
+
+        <small>
+          Page {{ pageNumber }}
+        </small>
+
+      </div>
+
+    }
+
+  </div>
+
+
+  <div class="page-thumbnail__footer">
+
+    <span class="page-thumbnail__number">
+      {{ pageNumber }}
+    </span>
+
+  </div>
+
+</button>

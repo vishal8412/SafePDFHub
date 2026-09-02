@@ -1,0 +1,256 @@
+:host {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  min-width: 0;
+  min-height: 0;
+}
+
+.studio-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  height: 100%;
+
+  min-width: 0;
+  min-height: 0;
+
+  padding-inline: 12px;
+
+  background: #0b1829;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.studio-toolbar__surface {
+  display: flex;
+  align-items: center;
+
+  max-width: 100%;
+  height: 48px;
+
+  min-width: 0;
+
+  padding: 4px;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+
+  background: rgba(9, 22, 37, 0.92);
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  scrollbar-width: none;
+}
+
+.studio-toolbar__surface::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* ==========================================================
+   TOOL BUTTON
+========================================================== */
+
+.studio-toolbar__tool {
+  position: relative;
+
+  display: inline-flex;
+  flex: 0 0 auto;
+
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  width: 58px;
+  height: 40px;
+
+  gap: 3px;
+
+  padding: 3px 5px;
+
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: rgba(255, 255, 255, 0.62);
+
+  font: inherit;
+
+  cursor: pointer;
+
+  user-select: none;
+
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.studio-toolbar__tool:hover {
+  color: rgba(255, 255, 255, 0.94);
+
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.studio-toolbar__tool:active {
+  transform: translateY(1px);
+}
+
+.studio-toolbar__tool:focus-visible {
+  outline: 2px solid rgba(0, 212, 179, 0.65);
+  outline-offset: 1px;
+}
+
+
+/* ==========================================================
+   ACTIVE TOOL
+========================================================== */
+
+.studio-toolbar__tool--active {
+  border-color: rgba(0, 212, 179, 0.18);
+
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 212, 179, 0.16),
+      rgba(0, 212, 179, 0.09)
+    );
+
+  color: #00d4b3;
+
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 212, 179, 0.035),
+    0 4px 14px rgba(0, 212, 179, 0.07);
+}
+
+.studio-toolbar__tool--active:hover {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 212, 179, 0.2),
+      rgba(0, 212, 179, 0.11)
+    );
+}
+
+
+/* ==========================================================
+   DESTRUCTIVE TOOL
+========================================================== */
+
+.studio-toolbar__tool--destructive {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.studio-toolbar__tool--destructive:hover {
+  color: #ff6b6b;
+
+  background: rgba(239, 68, 68, 0.07);
+}
+
+
+/* ==========================================================
+   ICON
+========================================================== */
+
+.studio-toolbar__icon {
+  display: grid;
+  place-items: center;
+
+  width: 18px;
+  height: 18px;
+
+  flex: 0 0 auto;
+}
+
+.studio-toolbar__icon svg {
+  display: block;
+
+  width: 17px;
+  height: 17px;
+
+  fill: none;
+
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.studio-toolbar__label {
+  display: block;
+
+  max-width: 100%;
+
+  overflow: hidden;
+
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ==========================================================
+   COMPACT TABLET
+========================================================== */
+
+@media (max-width: 1100px) {
+  .studio-toolbar__tool {
+    width: 54px;
+  }
+
+  .studio-toolbar__label {
+    font-size: 8.5px;
+  }
+}
+
+
+/* ==========================================================
+   MOBILE
+========================================================== */
+
+@media (max-width: 768px) {
+  .studio-toolbar {
+    justify-content: flex-start;
+
+    padding-inline: 8px;
+  }
+
+  .studio-toolbar__surface {
+    width: 100%;
+
+    border-radius: 10px;
+  }
+
+  .studio-toolbar__tool {
+    width: 52px;
+  }
+}
+
+
+/* ==========================================================
+   REDUCED MOTION
+========================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-toolbar__tool {
+    transition: none;
+  }
+}

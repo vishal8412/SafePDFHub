@@ -1,0 +1,110 @@
+<div
+  class="studio"
+  [class.studio--toolbar-collapsed]="!toolbarVisible()"
+  [class.studio--header-collapsed]="!studioHeaderVisible()">
+
+  @if (studioHeaderVisible()) {
+    <app-studio-header
+      [projectName]="projectName()"
+      [browserProcessing]="browserProcessing()"
+      [zoom]="zoom()"
+      [pdfLoaded]="pdfLoaded()"
+      (exportPdf)="onExportPdf()"
+      (openPdf)="openPdfPicker()"
+      (zoomChanged)="onZoomChanged($event)"
+    />
+  }
+
+  <!--
+    Header handle is an absolute overlay.
+    It does not participate in the Studio CSS grid.
+  -->
+  <button
+    type="button"
+    class="studio-chrome-handle studio-header-toggle"
+    [attr.aria-expanded]="studioHeaderVisible()"
+    [attr.aria-label]="
+      studioHeaderVisible()
+        ? 'Hide Studio Header'
+        : 'Show Studio Header'
+    "
+    [title]="
+      studioHeaderVisible()
+        ? 'Hide Studio Header'
+        : 'Show Studio Header'
+    "
+    (click)="toggleStudioHeader()">
+
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true">
+      <path
+        d="M7 8h10M7 12h10M7 16h10"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round" />
+    </svg>
+  </button>
+
+  <div class="studio-toolbar-region">
+    @if (toolbarVisible()) {
+     <app-studio-toolbar
+      [activeTool]="activeTool()"
+      (toolSelected)="onToolSelected($event)"
+     />
+    }
+
+    <button
+      type="button"
+      class="studio-chrome-handle studio-toolbar-toggle"
+      [attr.aria-expanded]="toolbarVisible()"
+      [attr.aria-label]="
+        toolbarVisible()
+          ? 'Hide editing toolbar'
+          : 'Show editing toolbar'
+      "
+      [title]="
+        toolbarVisible()
+          ? 'Hide editing toolbar'
+          : 'Show editing toolbar'
+      "
+      (click)="toggleToolbar()">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true">
+        <circle cx="8" cy="8" r="1.25" fill="currentColor" />
+        <circle cx="12" cy="8" r="1.25" fill="currentColor" />
+        <circle cx="16" cy="8" r="1.25" fill="currentColor" />
+        <circle cx="8" cy="12" r="1.25" fill="currentColor" />
+        <circle cx="12" cy="12" r="1.25" fill="currentColor" />
+        <circle cx="16" cy="12" r="1.25" fill="currentColor" />
+      </svg>
+    </button>
+  </div>
+
+  <app-studio-workspace />
+
+  <app-studio-status-bar
+    [currentPage]="currentPage()"
+    [totalPages]="totalPages()"
+    [zoom]="zoom()"
+    [viewMode]="viewMode()"
+    [canPreviousPage]="canPreviousPage()"
+    [canNextPage]="canNextPage()"
+    (previousPage)="onPreviousPage()"
+    (nextPage)="onNextPage()"
+    (pageRequested)="onPageRequested($event)"
+    (zoomChanged)="onZoomChanged($event)"
+    (viewModeChanged)="onViewModeChanged($event)"
+  />
+
+  <input
+    #pdfInput
+    type="file"
+    accept="application/pdf,.pdf"
+    hidden
+    (change)="onPdfSelected($event)" />
+</div>

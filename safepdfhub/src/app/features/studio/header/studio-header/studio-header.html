@@ -1,0 +1,318 @@
+  <header
+  class="studio-header"
+  [class.studio-header--empty]="!pdfLoaded">
+
+  <!-- =====================================================
+       LEFT — DOCUMENT
+  ====================================================== -->
+
+  <div class="header-left">
+
+    <div
+      class="document-info"
+      [class.document-info--empty]="!pdfLoaded">
+
+      <div class="document-icon" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true">
+
+          <path
+            d="M6 3.75h8.25L19 8.5v11.75H6V3.75Z"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round" />
+
+          <path
+            d="M14 3.75V8.5h4.75"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round" />
+
+          <path
+            d="M9 12h6M9 15.5h6"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round" />
+
+        </svg>
+      </div>
+
+      <div class="document-copy">
+
+        <div
+          class="project-name"
+          [title]="pdfLoaded ? documentName : ''">
+          {{ documentName }}
+        </div>
+
+        <div class="project-status">
+          <span
+            class="status-dot"
+            [class.status-dot--ready]="statusReady"
+            [class.status-dot--idle]="!pdfLoaded"
+            aria-hidden="true">
+          </span>
+
+          <span>
+            {{ documentStatus }}
+          </span>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- =====================================================
+       CENTER — DOCUMENT CONTROLS
+  ====================================================== -->
+
+  <div class="header-center">
+
+    <button
+      type="button"
+      class="icon-btn"
+      [disabled]="!canUndo"
+      aria-label="Undo"
+      title="Undo"
+      (click)="undo.emit()">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true">
+
+        <path
+          d="M9 8 4 12l5 4"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+        <path
+          d="M5 12h8.5a5.5 5.5 0 0 1 5.5 5.5"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round" />
+
+      </svg>
+    </button>
+
+
+    <button
+      type="button"
+      class="icon-btn"
+      [disabled]="!canRedo"
+      aria-label="Redo"
+      title="Redo"
+      (click)="redo.emit()">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true">
+
+        <path
+          d="m15 8 5 4-5 4"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+        <path
+          d="M19 12h-8.5A5.5 5.5 0 0 0 5 17.5"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round" />
+
+      </svg>
+    </button>
+
+    <div
+      class="header-divider"
+      aria-hidden="true">
+    </div>
+
+    <label class="zoom-control">
+      <span class="sr-only">
+        Zoom level
+      </span>
+
+      <select
+        class="zoom-select"
+        [value]="zoom"
+        aria-label="Zoom level"
+        (change)="onZoomSelect($event)">
+
+        <option value="50">50%</option>
+        <option value="75">75%</option>
+        <option value="100">100%</option>
+        <option value="125">125%</option>
+        <option value="150">150%</option>
+        <option value="200">200%</option>
+
+      </select>
+
+      <svg
+        class="zoom-chevron"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true">
+
+        <path
+          d="m7 9 5 5 5-5"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+      </svg>
+    </label>
+
+
+    <button
+      type="button"
+      class="icon-btn"
+      aria-label="Search document"
+      title="Search document"
+      [disabled]="!pdfLoaded"
+      (click)="search.emit()">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true">
+
+        <circle
+          cx="10.8"
+          cy="10.8"
+          r="5.8"
+          stroke="currentColor"
+          stroke-width="1.8" />
+
+        <path
+          d="m15.2 15.2 4.2 4.2"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round" />
+
+      </svg>
+    </button>
+
+  </div>
+
+
+  <!-- =====================================================
+       RIGHT — ACTIONS
+  ====================================================== -->
+
+  <div class="header-right">
+
+    <button
+      type="button"
+      class="secondary-btn tools-btn"
+      [disabled]="!pdfLoaded"
+      (click)="tools.emit()">
+
+      <span>Tools</span>
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true">
+
+        <path
+          d="m7 9 5 5 5-5"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+
+      </svg>
+    </button>
+
+
+    <button
+      type="button"
+      class="secondary-btn open-btn"
+      [disabled]="false"
+      (click)="openPdf.emit()"
+      [attr.aria-label]="openButtonLabel">
+
+      <svg
+        class="open-btn__icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true">
+
+        @if (pdfLoaded) {
+          <path
+            d="M7 6.5v11A2.5 2.5 0 0 0 9.5 20h7A2.5 2.5 0 0 0 19 17.5V9l-4-4H9.5A2.5 2.5 0 0 0 7 7.5Z"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round" />
+
+          <path
+            d="M14.5 5v4H18"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round" />
+
+          <path
+            d="M12 17V12.5M9.5 15h5"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round" />
+        } @else {
+          <path
+            d="M7 6.5v11A2.5 2.5 0 0 0 9.5 20h7A2.5 2.5 0 0 0 19 17.5V9l-4-4H9.5A2.5 2.5 0 0 0 7 7.5Z"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round" />
+
+          <path
+            d="M14.5 5v4H18"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round" />
+
+          <path
+            d="M12 17V12.5M9.5 15h5"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round" />
+        }
+      </svg>
+
+      <span class="open-btn__label">
+        {{ openButtonLabel }}
+      </span>
+    </button>
+
+
+    <button
+      type="button"
+      class="primary-btn"
+      [disabled]="!pdfLoaded"
+      (click)="exportPdf.emit()"
+      aria-label="Export PDF">
+
+      <span>Export</span>
+    </button>
+
+
+    <button
+      type="button"
+      class="avatar"
+      aria-label="Account"
+      title="Account">
+      VS
+    </button>
+
+  </div>
+
+</header>
