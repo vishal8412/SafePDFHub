@@ -30,6 +30,22 @@ type SelectionResizeHandle =
   | 'sw'
   | 'se';
 
+type F3PaletteId = 'shape' | 'draw' | 'highlight';
+
+interface PalettePosition {
+  left: number;
+  top: number;
+}
+
+interface PaletteDragState {
+  readonly palette: F3PaletteId;
+  readonly pointerId: number;
+  readonly startClientX: number;
+  readonly startClientY: number;
+  readonly startLeft: number;
+  readonly startTop: number;
+}
+
 interface ObjectInteraction {
   readonly mode: 'move' | 'resize';
   readonly objectId: string;
@@ -177,7 +193,32 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     y: 0,
     pageNumber: 0
   };
-  paletteCollapsed = false;
+  /**
+   * F3 palettes keep independent collapse state. Collapsing Draw must not
+   * collapse Highlight or Shape, and the PDF viewport/layout never changes.
+   */
+  readonly paletteCollapsed = {
+    shape: false,
+    draw: false,
+    highlight: false
+  };
+
+  /**
+   * User-adjusted positions are stored in CSS pixels relative to the PDF page.
+   * A null value means the palette uses its responsive centered/default CSS
+   * position. Positions are independent for Shape, Draw and Highlight.
+   */
+  readonly palettePositions: Record<
+    F3PaletteId,
+    PalettePosition | null
+  > = {
+    shape: null,
+    draw: null,
+    highlight: null
+  };
+
+  private paletteDrag: PaletteDragState | null = null;
+
   private readonly selectionCycleWindowMs = 900;
 
   /**
@@ -227,6 +268,8 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     readonly start: StudioPoint;
     readonly points: readonly StudioPoint[];
     readonly shapeKind: StudioShapeKind;
+    readonly shapeStyle: StudioShapeStyle;
+    readonly drawingStyle: StudioDrawingStyle;
   } | null = null;
 
   /**
@@ -526,6 +569,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       }
 
       this.restoreZoomAnchor();
+      this.clampPalettePositions();
 
     } catch (error: unknown) {
 
@@ -780,29 +824,89 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     return this.drawingInteraction?.points ?? [];
   }
 
+  private get selectedF3ObjectType(): 'shape' | 'draw' | 'highlight' | null {
+    const selection = this.facade.selection();
+    if (
+      selection?.type === 'shape' ||
+      selection?.type === 'draw' ||
+      selection?.type === 'highlight'
+    ) {
+      return selection.type;
+    }
+
+    return null;
+  }
+
+  /**
+   * Palette ownership rule:
+   *
+   * - An active creation tool always owns the visible F3 palette.
+   * - A selected existing F3 object owns a palette only while Select is active.
+   *
+   * This prevents a stale Shape selection from keeping the Shape toolbar open
+   * after the user switches to Draw or Highlight.
+   */
   get shapePaletteVisible(): boolean {
-    return this.facade.activeTool() === 'shape';
+    const tool = this.facade.activeTool();
+
+    if (tool === 'shape') {
+      return true;
+    }
+
+    if (tool === 'draw' || tool === 'highlight') {
+      return false;
+    }
+
+    return tool === 'select' &&
+      this.selectedF3ObjectType === 'shape';
   }
 
   get drawingPaletteVisible(): boolean {
     const tool = this.facade.activeTool();
-    return tool === 'draw' || tool === 'highlight';
+
+    if (tool === 'draw' || tool === 'highlight') {
+      return true;
+    }
+
+    if (tool === 'shape') {
+      return false;
+    }
+
+    return tool === 'select' &&
+      (
+        this.selectedF3ObjectType === 'draw' ||
+        this.selectedF3ObjectType === 'highlight'
+      );
+  }
+
+  get activeDrawingPaletteId(): 'draw' | 'highlight' {
+    const tool = this.facade.activeTool();
+
+    if (tool === 'draw' || tool === 'highlight') {
+      return tool;
+    }
+
+    const selected = this.selectedF3ObjectType;
+
+    return selected === 'highlight'
+      ? 'highlight'
+      : 'draw';
   }
 
   get activeDrawingPaletteLabel(): 'Draw' | 'Highlight' {
-    return this.facade.activeTool() === 'highlight'
+    return this.activeDrawingPaletteId === 'highlight'
       ? 'Highlight'
       : 'Draw';
   }
 
   get activeDrawingColor(): string {
-    return this.facade.activeTool() === 'highlight'
+    return this.activeDrawingPaletteId === 'highlight'
       ? this.selectedHighlightColor
       : this.selectedDrawingColor;
   }
 
   get activeDrawingWidthPx(): number {
-    return this.facade.activeTool() === 'highlight'
+    return this.activeDrawingPaletteId === 'highlight'
       ? this.selectedHighlightWidthPx
       : this.selectedDrawingWidthPx;
   }
@@ -812,8 +916,190 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       !!this.facade.selection();
   }
 
-  toggleF3Palette(): void {
-    this.paletteCollapsed = !this.paletteCollapsed;
+  isF3PaletteCollapsed(
+    palette: 'shape' | 'draw' | 'highlight'
+  ): boolean {
+    return this.paletteCollapsed[palette];
+  }
+
+  toggleF3Palette(
+    palette: 'shape' | 'draw' | 'highlight'
+  ): void {
+    this.paletteCollapsed[palette] =
+      !this.paletteCollapsed[palette];
+  }
+
+  getPalettePosition(
+    palette: F3PaletteId
+  ): PalettePosition | null {
+    return this.palettePositions[palette];
+  }
+
+  isPalettePositioned(
+    palette: F3PaletteId
+  ): boolean {
+    return this.palettePositions[palette] !== null;
+  }
+
+  startPaletteDrag(
+    event: PointerEvent,
+    palette: F3PaletteId
+  ): void {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const page = this.pageRef?.nativeElement;
+    const handle = event.currentTarget as HTMLElement | null;
+    const paletteElement =
+      handle?.closest('.studio-shape-palette') as HTMLElement | null;
+
+    if (!page || !paletteElement) {
+      return;
+    }
+
+    const pageRect = page.getBoundingClientRect();
+    const paletteRect = paletteElement.getBoundingClientRect();
+
+    if (pageRect.width <= 0 || pageRect.height <= 0) {
+      return;
+    }
+
+    const currentLeft =
+      this.palettePositions[palette]?.left ??
+      paletteRect.left - pageRect.left;
+    const currentTop =
+      this.palettePositions[palette]?.top ??
+      paletteRect.top - pageRect.top;
+
+    this.palettePositions[palette] = {
+      left: currentLeft,
+      top: currentTop
+    };
+
+    this.paletteDrag = {
+      palette,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startLeft: currentLeft,
+      startTop: currentTop
+    };
+
+    try {
+      handle?.setPointerCapture(event.pointerId);
+    } catch {
+      /* Window listeners continue the drag if capture is unavailable. */
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  private updatePaletteDrag(event: PointerEvent): void {
+    const drag = this.paletteDrag;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const page = this.pageRef?.nativeElement;
+    const paletteElement = this.getPaletteElement(drag.palette);
+    if (!page || !paletteElement) {
+      return;
+    }
+
+    const pageRect = page.getBoundingClientRect();
+    const paletteRect = paletteElement.getBoundingClientRect();
+
+    const maxLeft = Math.max(8, pageRect.width - paletteRect.width - 8);
+    const maxTop = Math.max(8, pageRect.height - paletteRect.height - 8);
+
+    const left = this.clamp(
+      drag.startLeft + (event.clientX - drag.startClientX),
+      8,
+      maxLeft
+    );
+    const top = this.clamp(
+      drag.startTop + (event.clientY - drag.startClientY),
+      8,
+      maxTop
+    );
+
+    this.palettePositions[drag.palette] = { left, top };
+  }
+
+  private finishPaletteDrag(event: PointerEvent): void {
+    if (!this.paletteDrag || this.paletteDrag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    this.paletteDrag = null;
+  }
+
+  private clampPalettePositions(): void {
+    const page = this.pageRef?.nativeElement;
+    if (!page) {
+      return;
+    }
+
+    const pageRect = page.getBoundingClientRect();
+
+    for (const palette of ['shape', 'draw', 'highlight'] as const) {
+      const position = this.palettePositions[palette];
+      if (!position) {
+        continue;
+      }
+
+      const element = this.getPaletteElement(palette);
+      if (!element) {
+        continue;
+      }
+
+      const rect = element.getBoundingClientRect();
+      this.palettePositions[palette] = {
+        left: this.clamp(
+          position.left,
+          8,
+          Math.max(8, pageRect.width - rect.width - 8)
+        ),
+        top: this.clamp(
+          position.top,
+          8,
+          Math.max(8, pageRect.height - rect.height - 8)
+        )
+      };
+    }
+  }
+
+  private getPaletteElement(
+    palette: F3PaletteId
+  ): HTMLElement | null {
+    const page = this.pageRef?.nativeElement;
+    if (!page) {
+      return null;
+    }
+
+    const selector =
+      palette === 'shape'
+        ? '.studio-shape-palette:not(.studio-drawing-palette)'
+        : '.studio-drawing-palette';
+
+    return page.querySelector(selector) as HTMLElement | null;
+  }
+
+  @HostListener('window:pointermove', ['$event'])
+  onWindowPointerMove(event: PointerEvent): void {
+    this.updatePaletteDrag(event);
+  }
+
+  @HostListener('window:pointerup', ['$event'])
+  onWindowPointerUp(event: PointerEvent): void {
+    this.finishPaletteDrag(event);
+  }
+
+  @HostListener('window:pointercancel', ['$event'])
+  onWindowPointerCancel(event: PointerEvent): void {
+    this.finishPaletteDrag(event);
   }
 
   selectObjectBehind(): void {
@@ -929,8 +1215,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
         selection.objectId,
         {
           strokeWidth:
-            (this.selectedShapeWidthPx *
-              this.currentPageRenderScale) /
+            this.selectedShapeWidthPx /
             pageHeight
         }
       );
@@ -945,11 +1230,14 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const normalized = color.toLowerCase();
 
     const selection = this.facade.selection();
+    const selectedType = this.selectedF3ObjectType;
     const activeTool = this.facade.activeTool();
     const target: 'highlight' | 'draw' =
-      activeTool === 'highlight'
-        ? 'highlight'
-        : 'draw';
+      activeTool === 'draw' || activeTool === 'highlight'
+        ? activeTool
+        : selectedType === 'highlight'
+          ? 'highlight'
+          : 'draw';
 
     if (target === 'highlight') {
       this.selectedHighlightColor = normalized;
@@ -978,11 +1266,14 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
 
     const widthPx = Math.max(1, Math.min(24, Math.round(value)));
     const selection = this.facade.selection();
+    const selectedType = this.selectedF3ObjectType;
     const activeTool = this.facade.activeTool();
     const target: 'highlight' | 'draw' =
-      activeTool === 'highlight'
-        ? 'highlight'
-        : 'draw';
+      activeTool === 'draw' || activeTool === 'highlight'
+        ? activeTool
+        : selectedType === 'highlight'
+          ? 'highlight'
+          : 'draw';
 
     if (target === 'highlight') {
       this.selectedHighlightWidthPx = widthPx;
@@ -996,7 +1287,6 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
 
     if (
       pageHeight > 0 &&
-      this.currentPageRenderScale > 0 &&
       selection &&
       ((target === 'draw' && selection.type === 'draw') ||
        (target === 'highlight' && selection.type === 'highlight'))
@@ -1005,7 +1295,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
         selection.objectId,
         {
           strokeWidth:
-            (widthPx * this.currentPageRenderScale) / pageHeight
+            widthPx / pageHeight
         }
       );
     }
@@ -1027,8 +1317,8 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const height =
       page?.getBoundingClientRect().height ?? 0;
 
-    return height > 0 && this.currentPageRenderScale > 0
-      ? (pixels * this.currentPageRenderScale) / height
+    return height > 0
+      ? pixels / height
       : 0.002;
   }
 
@@ -1077,7 +1367,15 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       start,
       points: [start],
       shapeKind:
-        this.selectedShapeKind
+        this.selectedShapeKind,
+      shapeStyle:
+        this.getShapeStyle(),
+      drawingStyle:
+        this.getDrawingStyle(
+          tool === 'highlight'
+            ? 'highlight'
+            : 'draw'
+        )
     };
 
     event.preventDefault();
@@ -1187,13 +1485,13 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const rect =
       page?.getBoundingClientRect();
 
-    if (!rect) {
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
       return;
     }
 
     /**
-     * Always sample the pointer-up location. This fixes the common case
-     * where a very fast gesture has no pointermove event between down/up.
+     * Always sample pointer-up. This makes fast gestures reliable even when
+     * the browser delivers no intermediate pointermove event.
      */
     const releasePoint =
       this.clientToPagePoint(
@@ -1201,6 +1499,45 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
         event.clientY,
         rect
       );
+
+    const first = interaction.start;
+    const gestureDistancePx = Math.hypot(
+      (releasePoint.x - first.x) * rect.width,
+      (releasePoint.y - first.y) * rect.height
+    );
+
+    /**
+     * A short click is selection/editing when it lands on an existing Studio
+     * object. A real drag remains a creation gesture, including when it starts
+     * over text, an image, or another annotation.
+     */
+    if (gestureDistancePx < 5) {
+      const existing = this.selectObjectAtPoint(
+        first.x,
+        first.y
+      );
+
+      if (existing) {
+        if (
+          existing.type === 'shape' ||
+          existing.type === 'draw' ||
+          existing.type === 'highlight'
+        ) {
+          this.facade.setActiveTool(existing.type);
+        } else {
+          this.facade.setActiveTool('select');
+        }
+
+        return;
+      }
+
+      if (
+        interaction.tool === 'draw' ||
+        interaction.tool === 'highlight'
+      ) {
+        return;
+      }
+    }
 
     const lastRecorded =
       interaction.points[interaction.points.length - 1];
@@ -1216,7 +1553,6 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const first = points[0];
     const last =
       points[points.length - 1];
 
@@ -1226,10 +1562,14 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
         (last.y - first.y) * rect.height
       );
 
+    /**
+     * A click on an empty page creates the established default-size shape.
+     * Draw/Highlight clicks on empty space intentionally do nothing because a
+     * freehand annotation needs an actual stroke.
+     */
     if (
       pixelDistance < 4 &&
-      interaction.tool !== 'draw' &&
-      interaction.tool !== 'highlight'
+      interaction.tool === 'shape'
     ) {
       const halfWidth =
         interaction.shapeKind === 'line' ||
@@ -1237,32 +1577,16 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
           ? 0.08
           : 0.07;
 
-      const halfHeight =
-        0.045;
+      const halfHeight = 0.045;
 
       const startX =
-        Math.max(
-          0,
-          first.x - halfWidth
-        );
-
+        Math.max(0, first.x - halfWidth);
       const startY =
-        Math.max(
-          0,
-          first.y - halfHeight
-        );
-
+        Math.max(0, first.y - halfHeight);
       const endX =
-        Math.min(
-          1,
-          first.x + halfWidth
-        );
-
+        Math.min(1, first.x + halfWidth);
       const endY =
-        Math.min(
-          1,
-          first.y + halfHeight
-        );
+        Math.min(1, first.y + halfHeight);
 
       const selection =
         this.facade.createShapeObject(
@@ -1271,7 +1595,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
           endX,
           endY,
           interaction.shapeKind,
-          this.getShapeStyle()
+          interaction.shapeStyle
         );
 
       if (selection) {
@@ -1281,10 +1605,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (
-      interaction.tool === 'shape'
-    ) {
-
+    if (interaction.tool === 'shape') {
       const selection =
         this.facade.createShapeObject(
           first.x,
@@ -1292,7 +1613,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
           last.x,
           last.y,
           interaction.shapeKind,
-          this.getShapeStyle()
+          interaction.shapeStyle
         );
 
       if (selection) {
@@ -1305,9 +1626,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const selection =
       this.facade.createDrawingObject(
         points,
-        this.getDrawingStyle(
-          interaction.tool
-        ),
+        interaction.drawingStyle,
         interaction.tool === 'highlight'
           ? 'highlight'
           : 'draw'
@@ -1333,9 +1652,8 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
           ? this.selectedShapeFillColor
           : null,
       strokeWidth:
-        height > 0 && this.currentPageRenderScale > 0
-          ? (this.selectedShapeWidthPx * this.currentPageRenderScale) /
-            height
+        height > 0
+          ? this.selectedShapeWidthPx / height
           : 0.002,
       opacity: 1
     };
@@ -1361,8 +1679,8 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
           ? this.selectedHighlightColor
           : this.selectedDrawingColor,
       strokeWidth:
-        height > 0 && this.currentPageRenderScale > 0
-          ? (widthPx * this.currentPageRenderScale) / height
+        height > 0
+          ? widthPx / height
           : 0.003,
       opacity:
         tool === 'highlight'
@@ -1505,10 +1823,12 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const lineLength = Math.hypot(dx, dy);
 
     const length =
-      Math.max(6,
-        Math.min(20,
-          Math.max(7, strokeWidth * 2.6),
-          lineLength * 0.28
+      Math.min(20,
+        Math.max(2,
+          Math.min(
+            strokeWidth * 2.6,
+            lineLength * 0.28
+          )
         )
       );
 
@@ -1604,10 +1924,12 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const lineLength = Math.hypot(dx, dy);
 
     const length =
-      Math.max(6,
-        Math.min(20,
-          7,
-          lineLength * 0.28
+      Math.min(20,
+        Math.max(2,
+          Math.min(
+            this.drawingPreviewStrokeWidthSvg() * 2.6,
+            lineLength * 0.28
+          )
         )
       );
 
@@ -1701,13 +2023,24 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const bounds = this.drawingPreviewBounds;
     const page = this.pageRef?.nativeElement;
     const pageHeight = page?.getBoundingClientRect().height ?? 0;
+    const widthPx = this.drawingInteraction?.shapeStyle
+      ? this.drawingInteraction.shapeStyle.strokeWidth * pageHeight
+      : this.selectedShapeWidthPx;
 
     if (!bounds || pageHeight <= 0) {
       return 2;
     }
 
-    const objectHeightPx = Math.max(1, (bounds.height / 100) * pageHeight);
-    return Math.max(0.25, Math.min(80, (this.selectedShapeWidthPx * 100) / objectHeightPx));
+    const objectHeightPx =
+      Math.max(1, (bounds.height / 100) * pageHeight);
+
+    return Math.max(
+      0.25,
+      Math.min(
+        80,
+        (widthPx * 100) / objectHeightPx
+      )
+    );
   }
 
   drawingPreviewStrokeWidthSvg(): number {
@@ -1715,17 +2048,25 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     const page = this.pageRef?.nativeElement;
     const pageHeight = page?.getBoundingClientRect().height ?? 0;
 
+    const widthPx =
+      this.drawingInteraction?.drawingStyle
+        ? this.drawingInteraction.drawingStyle.strokeWidth * pageHeight
+        : this.activeDrawingWidthPx;
+
     if (!bounds || pageHeight <= 0) {
       return 2;
     }
 
-    const objectHeightPx = Math.max(1, (bounds.height / 100) * pageHeight);
-    const widthPx =
-      this.drawingInteraction?.tool === 'highlight'
-        ? this.selectedHighlightWidthPx
-        : this.selectedDrawingWidthPx;
+    const objectHeightPx =
+      Math.max(1, (bounds.height / 100) * pageHeight);
 
-    return Math.max(0.25, Math.min(80, (widthPx * 100) / objectHeightPx));
+    return Math.max(
+      0.25,
+      Math.min(
+        80,
+        (widthPx * 100) / objectHeightPx
+      )
+    );
   }
 
   shapeStrokeWidthSvg(
@@ -1748,10 +2089,15 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     }
 
     const strokeCssPx =
-      (object.shape.style.strokeWidth * pageHeight) /
-      Math.max(0.0001, this.currentPageRenderScale);
+      object.shape.style.strokeWidth * pageHeight;
 
-    return Math.max(0.25, Math.min(80, (strokeCssPx * 100) / objectHeightPx));
+    return Math.max(
+      0.25,
+      Math.min(
+        80,
+        (strokeCssPx * 100) / objectHeightPx
+      )
+    );
   }
 
   drawingStrokeWidthSvg(
@@ -1771,10 +2117,15 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     }
 
     const strokeCssPx =
-      (object.drawing.style.strokeWidth * pageHeight) /
-      Math.max(0.0001, this.currentPageRenderScale);
+      object.drawing.style.strokeWidth * pageHeight;
 
-    return Math.max(0.25, Math.min(80, (strokeCssPx * 100) / objectHeightPx));
+    return Math.max(
+      0.25,
+      Math.min(
+        80,
+        (strokeCssPx * 100) / objectHeightPx
+      )
+    );
   }
 
   getDrawingPreviewBounds(): {
@@ -1802,11 +2153,11 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       x: minX * 100,
       y: minY * 100,
       width: Math.max(
-        0.5,
+        0.01,
         (maxX - minX) * 100
       ),
       height: Math.max(
-        0.5,
+        0.01,
         (maxY - minY) * 100
       )
     };
@@ -3788,9 +4139,8 @@ setTextAlign(
           Math.max(
             1,
             Math.round(
-              (object.shape.style.strokeWidth *
-                pageHeight) /
-              Math.max(0.0001, this.currentPageRenderScale)
+              object.shape.style.strokeWidth *
+                pageHeight
             )
           );
       }
@@ -3826,8 +4176,7 @@ setTextAlign(
         const widthPx = Math.max(
           1,
           Math.round(
-            (object.drawing.style.strokeWidth * pageHeight) /
-            Math.max(0.0001, this.currentPageRenderScale)
+            object.drawing.style.strokeWidth * pageHeight
           )
         );
 
@@ -3884,6 +4233,11 @@ private clientToPagePoint(clientX: number,clientY: number,pageRect: DOMRect): {
    * Cancel all active pointer interaction state without committing it.
    */
   onPointerCancel(event: PointerEvent): void {
+    if (this.paletteDrag && this.paletteDrag.pointerId === event.pointerId) {
+      this.paletteDrag = null;
+      return;
+    }
+
     if (
       this.drawingInteraction &&
       this.drawingInteraction.pointerId === event.pointerId
@@ -4580,6 +4934,7 @@ onWindowKeyDown(
 
     this.objectInteraction = null;
     this.drawingInteraction = null;
+    this.paletteDrag = null;
 
     this.pendingImagePlacement = null;
     this.pendingImageReplacementId = null;

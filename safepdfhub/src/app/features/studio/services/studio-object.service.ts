@@ -240,9 +240,15 @@ export class StudioObjectService {
       return null;
     }
 
+    /**
+     * Keep freehand/highlight bounds geometrically tight to the actual pointer
+     * path. The SVG itself is allowed to render its round stroke caps outside
+     * the tight geometry, so a fixed 0.004 page padding is unnecessary and
+     * caused visible extra space at both ends of straight strokes.
+     */
     const bounds = this.boundsFromPoints(
       normalizedPoints,
-      0.004
+      0.0001
     );
 
     const object: StudioObject = {
@@ -314,6 +320,10 @@ export class StudioObjectService {
 
     const updated: StudioObject = {
       ...object,
+      bounds: this.boundsFromPoints(
+        object.drawing.points,
+        0.0001
+      ),
       drawing: {
         ...object.drawing,
         style: this.normalizeDrawingStyle(

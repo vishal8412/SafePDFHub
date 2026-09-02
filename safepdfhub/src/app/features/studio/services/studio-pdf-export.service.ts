@@ -386,8 +386,9 @@ export class StudioPdfExportService {
 
     const strokeWidth =
       Math.max(
-        0.5,
-        Math.min(64,
+        0.05,
+        Math.min(
+          64,
           style.strokeWidth * displayHeight
         )
       );
@@ -509,12 +510,14 @@ export class StudioPdfExportService {
           );
 
         const headLength =
-          Math.max(
-            7,
-            Math.min(
-              24,
-              strokeWidth * 2.8,
-              lineLength * 0.28
+          Math.min(
+            24,
+            Math.max(
+              2,
+              Math.min(
+                strokeWidth * 2.8,
+                lineLength * 0.28
+              )
             )
           );
 
@@ -617,8 +620,9 @@ export class StudioPdfExportService {
 
     const strokeWidth =
       Math.max(
-        0.5,
-        Math.min(64,
+        0.05,
+        Math.min(
+          64,
           drawing.style.strokeWidth * displayHeight
         )
       );

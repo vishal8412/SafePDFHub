@@ -1032,7 +1032,20 @@
    F3 SHAPES / DRAWINGS
 ============================================================ */
 
-.studio-editor-object--shape,
+.studio-editor-object--shape {
+  overflow: visible;
+}
+
+/*
+ * Draw/Highlight paths are stored in tight normalized bounds.
+ * Their SVG must therefore clip to those bounds. Allowing the SVG itself to
+ * overflow can expose polyline coordinates outside the current object after a
+ * move/resize/normalization round-trip, which appears as unwanted line segments
+ * before and after the real pointer stroke.
+ *
+ * Keep the object container itself usable for selection/resize UI; only the
+ * drawing pixels are clipped.
+ */
 .studio-editor-object--drawing {
   overflow: visible;
 }
@@ -1051,6 +1064,10 @@
   pointer-events: none;
 }
 
+.studio-editor-object--drawing .studio-editor-object__svg {
+  overflow: hidden;
+}
+
 .studio-drawing-preview {
   position: absolute;
 
@@ -1059,6 +1076,13 @@
   pointer-events: none;
 
   box-sizing: border-box;
+
+  /* Preview uses the same tight point bounds as committed drawings. */
+  overflow: hidden;
+}
+
+.studio-drawing-preview .studio-editor-object__svg {
+  overflow: hidden;
 }
 
 
@@ -1077,72 +1101,217 @@
   transform: translateX(-50%);
 
   display: flex;
-
   align-items: center;
+  gap: 6px;
 
-  gap: 7px;
+  max-width: calc(100% - 28px);
+  box-sizing: border-box;
 
-  padding: 7px 9px;
+  padding: 6px 7px;
 
-  border:
-    1px solid
-    rgba(255,255,255,0.10);
-
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 12px;
 
-  background:
-    rgba(10, 22, 38, 0.97);
+  background: rgba(10, 22, 38, 0.96);
 
   box-shadow:
-    0 12px 30px
-    rgba(0,0,0,0.30),
-    0 0 0 1px
-    rgba(0,212,179,0.04);
+    0 14px 34px rgba(0,0,0,0.34),
+    0 0 0 1px rgba(0,212,179,0.045);
 
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 
   white-space: nowrap;
+  user-select: none;
 }
 
+.studio-shape-palette--positioned {
+  transform: none;
+}
 
+.studio-shape-palette--collapsed {
+  min-width: 78px;
+  justify-content: center;
+  padding: 5px 6px;
+  gap: 5px;
+}
+
+.studio-shape-palette__drag,
 .studio-shape-palette__collapse {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
   flex: 0 0 auto;
+
   display: inline-grid;
   place-items: center;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 7px;
-  background: rgba(255,255,255,0.05);
-  color: rgba(255,255,255,0.78);
+
+  padding: 0;
+
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 8px;
+
+  background: rgba(255,255,255,0.045);
+  color: rgba(255,255,255,0.68);
+
   font-size: 13px;
   font-weight: 800;
   line-height: 1;
+
   cursor: pointer;
 }
 
+.studio-shape-palette__drag {
+  cursor: grab;
+  touch-action: none;
+  overscroll-behavior: contain;
+  letter-spacing: -2px;
+}
+
+.studio-shape-palette__drag:active {
+  cursor: grabbing;
+}
+
+.studio-shape-palette__drag:hover,
 .studio-shape-palette__collapse:hover {
-  border-color: rgba(0,212,179,0.40);
+  border-color: rgba(0,212,179,0.38);
+  background: rgba(0,212,179,0.09);
+  color: #00d4b3;
+}
+
+.studio-shape-palette__collapsed-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+
+  border-radius: 6px;
+  background: rgba(0,212,179,0.09);
+  color: #00d4b3;
+
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.studio-shape-palette__collapsed-label {
+  color: rgba(255,255,255,0.78);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+
+.studio-shape-palette__label {
+  color: rgba(255,255,255,0.58);
+  font-size: 11px;
+  font-weight: 750;
+  margin: 0 2px 0 1px;
+}
+
+.studio-shape-palette__button {
+  min-height: 29px;
+  padding: 0 9px;
+
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 7px;
+
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.72);
+
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+.studio-shape-palette__button:hover,
+.studio-shape-palette__button.is-active {
+  border-color: rgba(0,212,179,0.45);
   background: rgba(0,212,179,0.10);
   color: #00d4b3;
 }
 
-.studio-shape-palette--collapsed {
+.studio-shape-palette__color,
+.studio-shape-palette__width {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  color: rgba(255,255,255,0.52);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.studio-shape-palette__color input[type='color'] {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 7px;
+  background: transparent;
+
+  overflow: hidden;
+  cursor: pointer;
+
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,0.16);
+}
+
+.studio-shape-palette__width input {
   width: 42px;
-  min-width: 42px;
-  justify-content: center;
-  padding: 7px;
+  height: 27px;
+  box-sizing: border-box;
+
+  padding: 0 5px;
+
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 7px;
+
+  background: rgba(255,255,255,0.045);
+  color: rgba(255,255,255,0.90);
+
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.studio-shape-palette__width input:focus,
+.studio-shape-palette__color input[type='color']:focus {
+  outline: 1px solid rgba(0,212,179,0.60);
+  outline-offset: 1px;
+}
+
+.studio-shape-palette__fill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  color: rgba(255,255,255,0.62);
+  font-size: 10px;
+  font-weight: 650;
+
+  cursor: pointer;
+}
+
+.studio-shape-palette__fill.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .studio-shape-palette__secondary-button {
-  min-height: 28px;
+  min-height: 29px;
   padding: 0 9px;
+
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 7px;
+
   background: rgba(255,255,255,0.04);
   color: rgba(255,255,255,0.72);
+
   font-size: 11px;
   font-weight: 700;
+
   cursor: pointer;
 }
 
@@ -1152,180 +1321,65 @@
   color: #00d4b3;
 }
 
-.studio-shape-palette__label {
-  color:
-    rgba(255,255,255,0.50);
-
-  font-size: 11px;
-
-  font-weight: 700;
-}
-
-.studio-shape-palette__button {
-  min-height: 28px;
-
-  padding: 0 9px;
-
-  border:
-    1px solid
-    rgba(255,255,255,0.08);
-
-  border-radius: 7px;
-
-  background:
-    rgba(255,255,255,0.04);
-
-  color:
-    rgba(255,255,255,0.72);
-
-  font-size: 11px;
-
-  font-weight: 600;
-
-  cursor: pointer;
-}
-
-.studio-shape-palette__button:hover,
-.studio-shape-palette__button.is-active {
-  border-color:
-    rgba(0,212,179,0.45);
-
-  background:
-    rgba(0,212,179,0.10);
-
-  color:
-    #00d4b3;
-}
-
-.studio-shape-palette__color,
-.studio-shape-palette__width {
-  display: flex;
-
-  align-items: center;
-
-  gap: 5px;
-
-  color:
-    rgba(255,255,255,0.52);
-
-  font-size: 10px;
-
-  font-weight: 600;
-}
-
-.studio-shape-palette__color input[type='color'] {
-  width: 25px;
-  height: 25px;
-
-  padding: 0;
-
-  border: 1px solid
-    rgba(255,255,255,0.14);
-
-  border-radius: 7px;
-
-  background: transparent;
-
-  overflow: hidden;
-
-  cursor: pointer;
-
-  box-shadow:
-    inset 0 0 0 2px
-    rgba(0,0,0,0.16);
-}
-
-.studio-shape-palette__width input {
-  width: 40px;
-  height: 26px;
-
-  box-sizing: border-box;
-
-  padding: 0 5px;
-
-  border:
-    1px solid
-    rgba(255,255,255,0.10);
-
-  border-radius: 6px;
-
-  background:
-    rgba(255,255,255,0.04);
-
-  color:
-    rgba(255,255,255,0.88);
-
-  font-size: 11px;
-}
-
-.studio-shape-palette__fill {
-  display: flex;
-
-  align-items: center;
-
-  gap: 5px;
-
-  color:
-    rgba(255,255,255,0.62);
-
-  font-size: 10px;
-
-  font-weight: 600;
-
-  cursor: pointer;
-}
-
-.studio-shape-palette__fill.is-disabled {
-  opacity: 0.35;
-
-  cursor: not-allowed;
-}
-
 .studio-shape-palette__danger-button {
-  min-height: 28px;
+  min-height: 29px;
   padding: 0 9px;
-  border: 1px solid rgba(255, 92, 92, 0.28);
+
+  border: 1px solid rgba(255,92,92,0.28);
   border-radius: 7px;
-  background: rgba(255, 92, 92, 0.07);
-  color: rgba(255, 170, 170, 0.95);
+
+  background: rgba(255,92,92,0.07);
+  color: rgba(255,180,180,0.95);
+
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 750;
+
   cursor: pointer;
 }
 
 .studio-shape-palette__danger-button:hover {
-  border-color: rgba(255, 92, 92, 0.50);
-  background: rgba(255, 92, 92, 0.12);
+  border-color: rgba(255,92,92,0.50);
+  background: rgba(255,92,92,0.12);
   color: #ffb3b3;
 }
 
-/* Draw/Highlight must use the same top placement as Shape. Keep the
-   selector unique so an older global rule cannot push the palette to the
-   bottom of the page. */
+/* Draw/Highlight use the same default top placement as Shape.
+   When a user drags the toolbar, the inline top/left values must win. */
 .studio-drawing-palette {
-  top: 14px !important;
-  bottom: auto !important;
+  bottom: auto;
+}
+
+.studio-drawing-palette.studio-shape-palette--positioned {
+  transform: none;
 }
 
 @media (max-width: 900px) {
-
   .studio-shape-palette {
     max-width: calc(100% - 24px);
-
     overflow-x: auto;
+    scrollbar-width: none;
   }
 
+  .studio-shape-palette::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @media (max-width: 600px) {
-
-  .studio-shape-palette {
+  .studio-shape-palette:not(.studio-shape-palette--positioned) {
     left: 12px;
     right: 12px;
-
     transform: none;
-
     max-width: none;
   }
 
+  .studio-shape-palette {
+    gap: 5px;
+    padding: 5px 6px;
+  }
+
+  .studio-shape-palette__button {
+    padding: 0 8px;
+  }
 }
+

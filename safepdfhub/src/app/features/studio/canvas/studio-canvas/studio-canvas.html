@@ -367,17 +367,16 @@
                       width="98"
                       height="98"
                       [attr.stroke]="
-                        selectedShapeStrokeColor
+                        drawingInteraction.shapeStyle.strokeColor
                       "
                       [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
                       [attr.fill]="
-                        selectedShapeFillEnabled
-                          ? selectedShapeFillColor
-                          : 'none'
+                        drawingInteraction.shapeStyle.fillColor
+                          ?? 'none'
                       "
                       [attr.fill-opacity]="
-                        selectedShapeFillEnabled
-                          ? 0.28
+                        drawingInteraction.shapeStyle.fillColor
+                          ? drawingInteraction.shapeStyle.opacity * 0.28
                           : 0
                       "
                     />
@@ -398,17 +397,16 @@
                       rx="49"
                       ry="49"
                       [attr.stroke]="
-                        selectedShapeStrokeColor
+                        drawingInteraction.shapeStyle.strokeColor
                       "
                       [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
                       [attr.fill]="
-                        selectedShapeFillEnabled
-                          ? selectedShapeFillColor
-                          : 'none'
+                        drawingInteraction.shapeStyle.fillColor
+                          ?? 'none'
                       "
                       [attr.fill-opacity]="
-                        selectedShapeFillEnabled
-                          ? 0.28
+                        drawingInteraction.shapeStyle.fillColor
+                          ? drawingInteraction.shapeStyle.opacity * 0.28
                           : 0
                       "
                     />
@@ -429,7 +427,7 @@
                       [attr.x2]="previewLinePoints.x2"
                       [attr.y2]="previewLinePoints.y2"
                       [attr.stroke]="
-                        selectedShapeStrokeColor
+                        drawingInteraction.shapeStyle.strokeColor
                       "
                       [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
                       stroke-linecap="round"
@@ -443,7 +441,7 @@
                           getDrawingPreviewArrowHeadSvgPoints()
                         "
                         [attr.fill]="
-                          selectedShapeStrokeColor
+                          drawingInteraction.shapeStyle.strokeColor
                         "
                       />
                     }
@@ -463,12 +461,10 @@
                       getDrawingPreviewRelativePoints()
                     "
                     fill="none"
-                    [attr.stroke]="activeDrawingColor"
+                    [attr.stroke]="drawingInteraction.drawingStyle.strokeColor"
                     [attr.stroke-width]="drawingPreviewStrokeWidthSvg()"
                     [attr.stroke-opacity]="
-                      drawingInteraction.tool === 'highlight'
-                        ? 0.32
-                        : 1
+                      drawingInteraction.drawingStyle.opacity
                     "
                     stroke-linecap="round"
                     stroke-linejoin="round"
@@ -494,7 +490,10 @@
 
           <div
             class="studio-shape-palette"
-            [class.studio-shape-palette--collapsed]="paletteCollapsed"
+            [class.studio-shape-palette--collapsed]="isF3PaletteCollapsed('shape')"
+            [class.studio-shape-palette--positioned]="isPalettePositioned('shape')"
+            [style.left.px]="getPalettePosition('shape')?.left ?? null"
+            [style.top.px]="getPalettePosition('shape')?.top ?? null"
             role="toolbar"
             aria-label="Shape options"
             (pointerdown)="$event.stopPropagation()"
@@ -503,15 +502,20 @@
 
             <button
               type="button"
-              class="studio-shape-palette__collapse"
-              [attr.aria-label]="paletteCollapsed ? 'Expand shape options' : 'Minimize shape options'"
-              [attr.title]="paletteCollapsed ? 'Expand' : 'Minimize'"
-              (click)="toggleF3Palette()"
+              class="studio-shape-palette__drag"
+              aria-label="Move shape toolbar"
+              title="Drag to move"
+              (pointerdown)="startPaletteDrag($event, 'shape')"
             >
-              {{ paletteCollapsed ? '⌄' : '⌃' }}
+              ⠿
             </button>
 
-            @if (!paletteCollapsed) {
+            @if (isF3PaletteCollapsed('shape')) {
+              <span class="studio-shape-palette__collapsed-icon" aria-hidden="true">◇</span>
+              <span class="studio-shape-palette__collapsed-label">Shape</span>
+            }
+
+            @if (!isF3PaletteCollapsed('shape')) {
             <span class="studio-shape-palette__label">
               Shape
             </span>
@@ -630,6 +634,16 @@
             }
             }
 
+            <button
+              type="button"
+              class="studio-shape-palette__collapse"
+              [attr.aria-label]="isF3PaletteCollapsed('shape') ? 'Expand shape options' : 'Minimize shape options'"
+              [attr.title]="isF3PaletteCollapsed('shape') ? 'Expand' : 'Minimize'"
+              (click)="toggleF3Palette('shape')"
+            >
+              {{ isF3PaletteCollapsed('shape') ? '+' : '−' }}
+            </button>
+
           </div>
 
         }
@@ -641,24 +655,32 @@
 
           <div
             class="studio-shape-palette studio-drawing-palette"
-            [class.studio-shape-palette--collapsed]="paletteCollapsed"
+            [class.studio-shape-palette--collapsed]="isF3PaletteCollapsed(activeDrawingPaletteId)"
+            [class.studio-shape-palette--positioned]="isPalettePositioned(activeDrawingPaletteId)"
+            [style.left.px]="getPalettePosition(activeDrawingPaletteId)?.left ?? null"
+            [style.top.px]="getPalettePosition(activeDrawingPaletteId)?.top ?? null"
             role="toolbar"
-            aria-label="Drawing options"
+            [attr.aria-label]="activeDrawingPaletteLabel + ' options'"
             (pointerdown)="$event.stopPropagation()"
             (click)="$event.stopPropagation()"
           >
 
             <button
               type="button"
-              class="studio-shape-palette__collapse"
-              [attr.aria-label]="paletteCollapsed ? 'Expand drawing options' : 'Minimize drawing options'"
-              [attr.title]="paletteCollapsed ? 'Expand' : 'Minimize'"
-              (click)="toggleF3Palette()"
+              class="studio-shape-palette__drag"
+              aria-label="Move drawing toolbar"
+              title="Drag to move"
+              (pointerdown)="startPaletteDrag($event, activeDrawingPaletteId)"
             >
-              {{ paletteCollapsed ? '⌄' : '⌃' }}
+              ⠿
             </button>
 
-            @if (!paletteCollapsed) {
+            @if (isF3PaletteCollapsed(activeDrawingPaletteId)) {
+              <span class="studio-shape-palette__collapsed-icon" aria-hidden="true">{{ activeDrawingPaletteId === 'highlight' ? '▰' : '✎' }}</span>
+              <span class="studio-shape-palette__collapsed-label">{{ activeDrawingPaletteLabel }}</span>
+            }
+
+            @if (!isF3PaletteCollapsed(activeDrawingPaletteId)) {
             <span class="studio-shape-palette__label">
               {{ activeDrawingPaletteLabel }}
             </span>
@@ -716,6 +738,16 @@
               </button>
             }
             }
+
+            <button
+              type="button"
+              class="studio-shape-palette__collapse"
+              [attr.aria-label]="isF3PaletteCollapsed(activeDrawingPaletteId) ? 'Expand drawing options' : 'Minimize drawing options'"
+              [attr.title]="isF3PaletteCollapsed(activeDrawingPaletteId) ? 'Expand' : 'Minimize'"
+              (click)="toggleF3Palette(activeDrawingPaletteId)"
+            >
+              {{ isF3PaletteCollapsed(activeDrawingPaletteId) ? '+' : '−' }}
+            </button>
 
           </div>
 
