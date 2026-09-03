@@ -4,6 +4,62 @@
 
   <div class="studio-toolbar__surface">
 
+    <!-- F5 — Visible document history controls. -->
+    <button
+      type="button"
+      class="studio-toolbar__history"
+      [disabled]="!canUndo"
+      aria-label="Undo"
+      title="Undo (Ctrl/Cmd+Z)"
+      (click)="undo.emit()">
+
+      <span
+        class="studio-toolbar__icon"
+        aria-hidden="true">
+
+        <svg viewBox="0 0 24 24">
+          <path d="M9 7 4 12l5 5" />
+          <path d="M5 12h9a6 6 0 1 1-4.2 10.2" />
+        </svg>
+
+      </span>
+
+      <span class="studio-toolbar__label">
+        Undo
+      </span>
+
+    </button>
+
+    <button
+      type="button"
+      class="studio-toolbar__history"
+      [disabled]="!canRedo"
+      aria-label="Redo"
+      title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+      (click)="redo.emit()">
+
+      <span
+        class="studio-toolbar__icon"
+        aria-hidden="true">
+
+        <svg viewBox="0 0 24 24">
+          <path d="m15 7 5 5-5 5" />
+          <path d="M19 12h-9a6 6 0 1 0 4.2 10.2" />
+        </svg>
+
+      </span>
+
+      <span class="studio-toolbar__label">
+        Redo
+      </span>
+
+    </button>
+
+    <span
+      class="studio-toolbar__divider"
+      aria-hidden="true">
+    </span>
+
     @for (tool of tools; track tool.id) {
 
       <button

@@ -54,6 +54,47 @@ export class StudioObjectService {
     );
   }
 
+  /**
+   * F5 — Return a deep, immutable snapshot of every Studio object.
+   *
+   * This is used by page-management history because insert/delete/reorder can
+   * remap object page numbers. Restoring pages without restoring objects would
+   * corrupt the document state.
+   */
+  snapshot(): readonly StudioObject[] {
+
+    return Array.from(
+      this.objects.values()
+    ).map(
+      object =>
+        this.cloneObject(object)
+    );
+  }
+
+  /**
+   * F5 — Replace the complete object collection from a history snapshot.
+   */
+  restore(
+    objects: readonly StudioObject[]
+  ): void {
+
+    this.objects.clear();
+
+    for (
+      const object of objects
+    ) {
+      const clone =
+        this.cloneObject(object);
+
+      this.objects.set(
+        clone.id,
+        clone
+      );
+    }
+
+    this.touch();
+  }
+
   get(
     objectId: string
   ): StudioObject | null {
@@ -650,6 +691,49 @@ export class StudioObjectService {
     }
   }
 
+  remapPageNumbers(mapping: ReadonlyMap<number, number>): void {
+    let changed = false;
+    for (const [id, object] of this.objects) {
+      const pageNumber = mapping.get(object.pageNumber);
+      if (pageNumber !== undefined && pageNumber !== object.pageNumber) {
+        this.objects.set(id, { ...object, pageNumber });
+        changed = true;
+      }
+    }
+    if (changed) this.touch();
+  }
+
+  duplicatePage(sourcePageNumber: number,targetPageNumber: number): void {
+
+  const sourceObjects = this.listForPage(sourcePageNumber);
+  for (const source of sourceObjects) {
+
+    const clone: StudioObject = {
+      ...structuredClone(source),
+      id: this.createObjectId(),
+      pageNumber: targetPageNumber
+    };
+
+    this.objects.set(clone.id,clone);
+  }
+
+  if (sourceObjects.length) {
+    this.touch();
+  }
+}
+
+  shiftPageNumbers(startPageNumber: number, delta: number): void {
+    if (!delta) return;
+    let changed = false;
+    for (const [id, object] of this.objects) {
+      if (object.pageNumber >= startPageNumber) {
+        this.objects.set(id, { ...object, pageNumber: object.pageNumber + delta });
+        changed = true;
+      }
+    }
+    if (changed) this.touch();
+  }
+
   clearAll(): void {
     if (this.objects.size === 0) {
       return;
@@ -857,6 +941,15 @@ export class StudioObjectService {
           1
         )
     };
+  }
+
+  private cloneObject(
+    object: StudioObject
+  ): StudioObject {
+
+    return JSON.parse(
+      JSON.stringify(object)
+    ) as StudioObject;
   }
 
   private normalizeColor(

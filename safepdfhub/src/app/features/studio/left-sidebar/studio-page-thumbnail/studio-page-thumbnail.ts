@@ -43,10 +43,34 @@ export class StudioPageThumbnail
     inject(ThumbnailService);
 
 
+  /**
+   * Logical Studio page position shown to the user.
+   *
+   * This is intentionally separate from sourcePageNumber because
+   * duplicate / move / blank-page operations can change logical
+   * positions without changing the original PDF source page.
+   */
   @Input({
     required: true
   })
-  pageNumber!: number;
+  displayPageNumber!: number;
+
+
+  /**
+   * Original PDF page used for thumbnail rendering.
+   *
+   * Null means this is a Studio-created blank page.
+   */
+  @Input()
+  sourcePageNumber: number | null = null;
+
+
+  @Input()
+  rotation: 0 | 90 | 180 | 270 = 0;
+
+
+  @Input()
+  blank = false;
 
 
   @Input()
@@ -62,9 +86,7 @@ export class StudioPageThumbnail
     new EventEmitter<number>();
 
 
-  @ViewChild('canvas', {
-    static: true
-  })
+  @ViewChild('canvas')
   private readonly canvasRef?:
     ElementRef<HTMLCanvasElement>;
 
@@ -95,7 +117,10 @@ export class StudioPageThumbnail
 
     if (
       changes['pdf'] ||
-      changes['pageNumber']
+      changes['sourcePageNumber'] ||
+      changes['displayPageNumber'] ||
+      changes['blank'] ||
+      changes['rotation']
     ) {
 
       this.renderToken++;
@@ -114,40 +139,65 @@ export class StudioPageThumbnail
 
   ngOnDestroy(): void {
 
+    this.renderToken++;
+
     const canvas =
       this.canvasRef?.nativeElement;
 
-    if (!canvas) {
-      return;
-    }
-
-    this.renderToken++;
-
-    this.thumbnailService.clear(
+    if (
       canvas
-    );
+    ) {
+      this.thumbnailService.clear(
+        canvas
+      );
+    }
   }
 
 
   onSelect(): void {
 
     this.pageSelected.emit(
-      this.pageNumber
+      this.displayPageNumber
     );
   }
 
 
   private renderIfPossible(): void {
 
-    const pdf = this.pdf;
+    /**
+     * Blank Studio pages do not have a PDF source page to render.
+     * Do not attempt to render source page 0.
+     */
+    if (
+      this.blank
+    ) {
+      this.loading = false;
+      this.loaded = true;
+      this.failed = false;
+      return;
+    }
+
+
+    const pdf =
+      this.pdf;
 
     const canvas =
       this.canvasRef?.nativeElement;
 
+    const sourcePageNumber =
+      this.sourcePageNumber;
+
+
     if (
       !pdf ||
-      !canvas
+      !canvas ||
+      !sourcePageNumber ||
+      sourcePageNumber < 1 ||
+      sourcePageNumber > pdf.numPages
     ) {
+      this.loading = false;
+      this.loaded = false;
+      this.failed = true;
       return;
     }
 
@@ -157,11 +207,13 @@ export class StudioPageThumbnail
 
 
     this.loading = true;
+    this.loaded = false;
     this.failed = false;
 
 
     void this.render(
       pdf,
+      sourcePageNumber,
       canvas,
       token
     );
@@ -170,6 +222,7 @@ export class StudioPageThumbnail
 
   private async render(
     pdf: PDFDocumentProxy,
+    sourcePageNumber: number,
     canvas: HTMLCanvasElement,
     token: number
   ): Promise<void> {
@@ -179,8 +232,10 @@ export class StudioPageThumbnail
       await this.thumbnailService
         .renderThumbnail(
           pdf,
-          this.pageNumber,
-          canvas
+          sourcePageNumber,
+          canvas,
+          168,
+          this.rotation
         );
 
 

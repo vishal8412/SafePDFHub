@@ -151,7 +151,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
     pdf: PDFDocumentProxy,
     pageNumber: number,
     canvas: HTMLCanvasElement,
-    targetWidth = 168
+    targetWidth = 168,
+    rotation: 0 | 90 | 180 | 270 = 0
   ): Promise<void> {
 
     /**
@@ -195,7 +196,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
       this.createCacheKey(
         pdf,
         pageNumber,
-        safeTargetWidth
+        safeTargetWidth,
+        rotation
       );
 
     const pdfGeneration =
@@ -251,7 +253,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
 
       const baseViewport =
         page.getViewport({
-          scale: 1
+          scale: 1,
+          rotation
         });
 
 
@@ -262,7 +265,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
 
       const viewport =
         page.getViewport({
-          scale
+          scale,
+          rotation
         });
 
 
@@ -644,7 +648,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
   private createCacheKey(
     pdf: PDFDocumentProxy,
     pageNumber: number,
-    targetWidth: number
+    targetWidth: number,
+    rotation: 0 | 90 | 180 | 270
   ): string {
 
     const pdfId =
@@ -654,7 +659,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
     return [
       pdfId,
       pageNumber,
-      targetWidth
+      targetWidth,
+      rotation
     ].join(':');
   }
 

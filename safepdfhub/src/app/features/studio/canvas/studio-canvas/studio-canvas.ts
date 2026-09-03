@@ -323,11 +323,27 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
         this.facade.activeTool();
 
       /**
+       * F4/F5 — Register the logical page collection as a render dependency.
+       *
+       * Page-management operations can change the source page, blank/source
+       * kind or rotation while the numeric currentPage remains unchanged.
+       * Undo/Redo therefore must trigger a fresh PDF render even when the user
+       * stays on the same page number.
+       */
+      const logicalPages =
+        this.facade.pages();
+
+      const logicalPage =
+        logicalPages[page - 1] ??
+        null;
+
+      /**
        * Explicitly register signal dependencies.
        */
       void zoom;
       void page;
       void viewMode;
+      void logicalPage;
 
       /**
        * A drawing gesture belongs only to the tool that started it.
@@ -2874,8 +2890,14 @@ commitTextEdit(): void {
   if (
     text.trim().length === 0
   ) {
-    this.objectService.remove(objectId);
-    this.facade.clearSelection();
+    /**
+     * F5 — Route the removal through the Facade so deleting an empty text
+     * object participates in the same Undo/Redo history as every other
+     * document mutation.
+     */
+    this.facade.discardTextObject(
+      objectId
+    );
 
     this.editingObjectId = null;
     this.editingText = '';

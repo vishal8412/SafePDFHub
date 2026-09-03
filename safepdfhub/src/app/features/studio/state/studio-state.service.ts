@@ -185,6 +185,41 @@ export class StudioStateService {
   );
 }
 
+
+  /**
+   * F4/F5 — Synchronize the viewer's logical page count.
+   *
+   * Page management owns the actual logical collection. The viewer state
+   * mirrors only the count/current position used by navigation and rendering.
+   */
+  setPageCount(pageCount: number): void {
+    const normalized =
+      Math.max(
+        0,
+        Math.floor(pageCount)
+      );
+
+    this._state.update(state => {
+      const currentPage =
+        normalized === 0
+          ? 1
+          : Math.min(
+              Math.max(
+                1,
+                state.currentPage
+              ),
+              normalized
+            );
+
+      return {
+        ...state,
+        pageCount:
+          normalized,
+        currentPage
+      };
+    });
+  }
+
   /**
    * Change current page.
    *

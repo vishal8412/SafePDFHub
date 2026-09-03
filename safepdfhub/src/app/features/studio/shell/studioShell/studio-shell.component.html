@@ -8,9 +8,12 @@
       [projectName]="projectName()"
       [browserProcessing]="browserProcessing()"
       [zoom]="zoom()"
+      [canUndo]="canUndo()"
+      [canRedo]="canRedo()"
       [pdfLoaded]="pdfLoaded()"
-      (exportPdf)="onExportPdf()"
       (openPdf)="openPdfPicker()"
+      (undo)="onUndo()"
+      (redo)="onRedo()"
       (zoomChanged)="onZoomChanged($event)"
     />
   }
@@ -51,7 +54,11 @@
     @if (toolbarVisible()) {
      <app-studio-toolbar
       [activeTool]="activeTool()"
+      [canUndo]="canUndo()"
+      [canRedo]="canRedo()"
       (toolSelected)="onToolSelected($event)"
+      (undo)="onUndo()"
+      (redo)="onRedo()"
      />
     }
 

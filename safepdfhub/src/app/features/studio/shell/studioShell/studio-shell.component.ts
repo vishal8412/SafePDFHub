@@ -64,6 +64,11 @@ export class StudioShellComponent {
 
   readonly activeTool = this.facade.activeTool;
 
+  /** F5 — Reactive history availability for the Studio header. */
+  readonly canUndo = this.facade.canUndo;
+
+  readonly canRedo = this.facade.canRedo;
+
   /**
    * Independent Studio chrome state.
    *
@@ -136,13 +141,6 @@ export class StudioShellComponent {
     this.facade.setZoom(zoom);
   }
 
-  /**
-   * F1.5 — Export the current Studio PDF with committed text changes.
-   */
-  async onExportPdf(): Promise<void> {
-    await this.facade.exportPdf();
-  }
-
 @HostListener('window:keydown', ['$event'])
 onKeyDown(event: KeyboardEvent): void {
   if (!this.facade.hasDocument()) {
@@ -156,6 +154,41 @@ onKeyDown(event: KeyboardEvent): void {
     target?.tagName === 'TEXTAREA' ||
     target?.isContentEditable
   ) {
+    return;
+  }
+
+  /**
+   * F5 — Standard history shortcuts.
+   *
+   * Ctrl/Cmd+Z          Undo
+   * Ctrl/Cmd+Shift+Z    Redo
+   * Ctrl/Cmd+Y          Redo
+   */
+  const isHistoryModifier =
+    event.ctrlKey ||
+    event.metaKey;
+
+  if (
+    isHistoryModifier &&
+    event.key.toLowerCase() === 'z'
+  ) {
+    event.preventDefault();
+
+    if (event.shiftKey) {
+      this.facade.redo();
+    } else {
+      this.facade.undo();
+    }
+
+    return;
+  }
+
+  if (
+    isHistoryModifier &&
+    event.key.toLowerCase() === 'y'
+  ) {
+    event.preventDefault();
+    this.facade.redo();
     return;
   }
 
@@ -182,6 +215,14 @@ onKeyDown(event: KeyboardEvent): void {
       this.facade.goToLastPage();
       break;
   }
+}
+
+onUndo(): void {
+  this.facade.undo();
+}
+
+onRedo(): void {
+  this.facade.redo();
 }
 
 onPreviousPage(): void {

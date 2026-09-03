@@ -14,6 +14,7 @@ import {
 } from 'pdf-lib';
 import { saveAs } from 'file-saver';
 
+import type { StudioPage } from '../models/studio-page.model';
 import type {
   StudioObject,
   StudioTextAlign,
@@ -45,6 +46,7 @@ export class StudioPdfExportService {
   async exportTextObjects(
     sourceFile: File,
     objects: readonly StudioObject[],
+    logicalPages?: readonly StudioPage[],
   ): Promise<Blob> {
     if (!isPlatformBrowser(this.platformId)) {
       throw new Error(
@@ -56,10 +58,22 @@ export class StudioPdfExportService {
       await sourceFile.arrayBuffer(),
     );
 
-    const pdfDocument = await PDFDocument.load(
-      sourceBytes,
-    );
-
+    const sourcePdf = await PDFDocument.load(sourceBytes);
+    const sourcePages = sourcePdf.getPages();
+    const pdfDocument = await PDFDocument.create();
+    const manifest = logicalPages && logicalPages.length ? logicalPages : sourcePages.map((_, index) => ({ id: `source-${index + 1}`, kind: 'source' as const, sourcePageNumber: index + 1, rotation: 0 as const }));
+    for (const logicalPage of manifest) {
+      if (logicalPage.kind === 'blank') {
+        const page = pdfDocument.addPage([logicalPage.blankWidth ?? 595.28, logicalPage.blankHeight ?? 841.89]);
+        page.setRotation(degrees(logicalPage.rotation));
+      } else {
+        const sourceIndex = (logicalPage.sourcePageNumber ?? 1) - 1;
+        if (sourceIndex < 0 || sourceIndex >= sourcePages.length) throw new RangeError('Invalid logical source page.');
+        const [copied] = await pdfDocument.copyPages(sourcePdf, [sourceIndex]);
+        copied.setRotation(degrees((copied.getRotation().angle + logicalPage.rotation) % 360));
+        pdfDocument.addPage(copied);
+      }
+    }
     const pages = pdfDocument.getPages();
     const fontCache = new Map<
       string,
@@ -98,7 +112,7 @@ export class StudioPdfExportService {
      * a potentially very large PDF. Returning the original bytes avoids an
      * unnecessary full-document PDF-lib load/save cycle.
      */
-    if (editableObjects.length === 0) {
+    if (editableObjects.length === 0 && !logicalPages) {
       return new Blob(
         [sourceBytes.buffer.slice(
           sourceBytes.byteOffset,
@@ -280,11 +294,13 @@ export class StudioPdfExportService {
   async exportAndDownload(
     sourceFile: File,
     objects: readonly StudioObject[],
+    logicalPages?: readonly StudioPage[],
   ): Promise<void> {
     const blob =
       await this.exportTextObjects(
         sourceFile,
         objects,
+        logicalPages,
       );
 
     saveAs(

@@ -40,9 +40,27 @@ export class StudioToolbar {
   @Input()
   activeTool: StudioToolId = 'select';
 
+  /**
+   * F5 — History state is owned by StudioFacade and rendered here so Undo/Redo
+   * remain immediately available beside the editing tools.
+   */
+  @Input()
+  canUndo = false;
+
+  @Input()
+  canRedo = false;
+
   @Output()
   readonly toolSelected =
     new EventEmitter<StudioToolId>();
+
+  @Output()
+  readonly undo =
+    new EventEmitter<void>();
+
+  @Output()
+  readonly redo =
+    new EventEmitter<void>();
 
   /**
    * Persistent interaction tools and one-shot actions.

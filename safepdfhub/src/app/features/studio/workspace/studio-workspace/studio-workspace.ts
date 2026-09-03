@@ -6,7 +6,6 @@ import {
   QueryList,
   ViewChild,
   ViewChildren,
-  computed,
   effect,
   inject
 } from '@angular/core';
@@ -68,32 +67,9 @@ private readonly pagesList!:
    * Facade pageCount is retained as a defensive
    * fallback.
    */
-  readonly pageCount =
-    computed(() => {
+  readonly pageCount = this.facade.pageCount;
 
-      const document =
-        this.facade.document();
-
-      return (
-        document?.pageCount ??
-        this.facade.pageCount() ??
-        0
-      );
-    });
-
-  /**
-   * Generate the 1-based page list.
-   */
-  readonly pages =
-    computed(() =>
-      Array.from(
-        {
-          length: this.pageCount()
-        },
-        (_, index) =>
-          index + 1
-      )
-    );
+  readonly pages = this.facade.pages;
 
   /**
    * Single source of truth for the active page.
@@ -119,11 +95,21 @@ private readonly pagesList!:
       const page =
         this.currentPage();
 
+      /**
+       * Page-management operations can mutate the logical page
+       * collection while the numeric currentPage remains unchanged
+       * (for example rotate or deleting the current position).
+       * Track the collection as a render/synchronization dependency.
+       */
+      const logicalPages =
+        this.pages();
+
       if (!this.viewReady) {
         return;
       }
 
       void page;
+      void logicalPages;
 
       this.scheduleActivePageScroll();
     });
@@ -140,6 +126,10 @@ private readonly pagesList!:
     /**
      * Initial synchronization.
      */
+    this.pageItems.changes.subscribe(() => {
+      this.scheduleActivePageScroll();
+    });
+
     this.scheduleActivePageScroll();
   }
 
@@ -172,6 +162,30 @@ private readonly pagesList!:
       pageNumber
     );
   }
+
+  draggedPage: number | null = null;
+
+  onPageDragStart(pageNumber: number, event: DragEvent): void {
+    this.draggedPage = pageNumber;
+    event.dataTransfer?.setData('text/plain', String(pageNumber));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  onPageDrop(targetPage: number, event: DragEvent): void {
+    event.preventDefault();
+    const source = this.draggedPage ?? Number(event.dataTransfer?.getData('text/plain'));
+    this.draggedPage = null;
+    if (Number.isInteger(source) && source > 0) this.facade.movePage(source, targetPage);
+  }
+
+  onPageDragEnd(): void { this.draggedPage = null; }
+
+  duplicatePage(): void { this.facade.duplicateCurrentPage(); }
+  deletePage(): void { this.facade.deleteCurrentPage(); }
+  insertBlankBefore(): void { this.facade.insertBlankPage(false); }
+  insertBlankAfter(): void { this.facade.insertBlankPage(true); }
+  rotatePageLeft(): void { this.facade.rotateCurrentPage('left'); }
+  rotatePageRight(): void { this.facade.rotateCurrentPage('right'); }
 
   // ==========================================================
   // ACTIVE PAGE SYNCHRONIZATION

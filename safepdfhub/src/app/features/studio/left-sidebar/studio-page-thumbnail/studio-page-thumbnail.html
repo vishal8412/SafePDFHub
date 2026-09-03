@@ -2,20 +2,39 @@
   type="button"
   class="page-thumbnail"
   [class.page-thumbnail--selected]="selected"
+  [class.page-thumbnail--blank]="blank"
   [attr.aria-current]="selected ? 'page' : null"
-  [attr.aria-label]="'Page ' + pageNumber"
+  [attr.aria-label]="'Page ' + displayPageNumber"
   (click)="onSelect()">
 
   <div class="page-thumbnail__preview">
 
-    <canvas
-      #canvas
-      class="page-thumbnail__canvas"
-      aria-hidden="true">
-    </canvas>
+    @if (blank) {
+
+      <div
+        class="page-thumbnail__blank"
+        aria-hidden="true">
+
+        <span class="page-thumbnail__blank-sheet"></span>
+
+        <span class="page-thumbnail__blank-label">
+          Blank page
+        </span>
+
+      </div>
+
+    } @else {
+
+      <canvas
+        #canvas
+        class="page-thumbnail__canvas"
+        aria-hidden="true">
+      </canvas>
+
+    }
 
 
-    @if (loading) {
+    @if (loading && !blank) {
 
       <div
         class="page-thumbnail__loading"
@@ -28,7 +47,7 @@
     }
 
 
-    @if (failed) {
+    @if (failed && !blank) {
 
       <div
         class="page-thumbnail__error">
@@ -38,7 +57,7 @@
         </span>
 
         <small>
-          Page {{ pageNumber }}
+          Page {{ displayPageNumber }}
         </small>
 
       </div>
@@ -51,7 +70,7 @@
   <div class="page-thumbnail__footer">
 
     <span class="page-thumbnail__number">
-      {{ pageNumber }}
+      {{ displayPageNumber }}
     </span>
 
   </div>

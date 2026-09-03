@@ -60,6 +60,80 @@
 }
 
 
+
+/* ==========================================================
+   HISTORY CONTROLS — F5
+========================================================== */
+
+.studio-toolbar__history {
+  position: relative;
+
+  display: inline-flex;
+  flex: 0 0 auto;
+
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  width: 52px;
+  height: 40px;
+
+  gap: 3px;
+
+  padding: 3px 5px;
+
+  border: 1px solid transparent;
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: rgba(255, 255, 255, 0.72);
+
+  font: inherit;
+
+  cursor: pointer;
+
+  user-select: none;
+
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.studio-toolbar__history:hover:not(:disabled) {
+  color: #ffffff;
+
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.studio-toolbar__history:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.studio-toolbar__history:focus-visible {
+  outline: 2px solid rgba(0, 212, 179, 0.65);
+  outline-offset: 1px;
+}
+
+.studio-toolbar__history:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.studio-toolbar__divider {
+  width: 1px;
+  height: 28px;
+
+  flex: 0 0 1px;
+
+  margin-inline: 3px;
+
+  background: rgba(255, 255, 255, 0.10);
+}
+
 /* ==========================================================
    TOOL BUTTON
 ========================================================== */

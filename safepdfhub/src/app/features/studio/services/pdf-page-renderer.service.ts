@@ -24,6 +24,7 @@ export interface RenderPageOptions {
   viewportHeight?: number;
   padding?: number;
   zoomPercent?: number;
+  rotation?: number;
 }
 
 interface ActiveRenderTask {
@@ -130,11 +131,8 @@ export class PdfPageRendererService {
           options
         );
 
-      const viewport =
-        page.getViewport({
-          scale,
-          rotation: page.rotate
-        });
+      const rotation = typeof options === 'number' ? page.rotate : (options.rotation ?? page.rotate);
+      const viewport = page.getViewport({ scale, rotation });
 
       const outputScale =
         this.getDevicePixelRatio();
@@ -387,11 +385,8 @@ export class PdfPageRendererService {
     return 1;
   }
 
-  const baseViewport =
-    page.getViewport({
-      scale: 1,
-      rotation: page.rotate
-    });
+  const rotation = typeof options === 'number' ? page.rotate : (options.rotation ?? page.rotate);
+  const baseViewport = page.getViewport({ scale: 1, rotation });
 
   const availableWidth =
     Math.max(

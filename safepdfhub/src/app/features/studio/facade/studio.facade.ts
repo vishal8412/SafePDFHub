@@ -27,6 +27,12 @@ import type {
   StudioPoint
 } from '../models/studio-selection.model';
 import { StudioPdfExportService } from '../services/studio-pdf-export.service';
+import { StudioPageService } from '../services/studio-page.service';
+import {
+  StudioHistoryService,
+  StudioHistorySnapshot
+} from '../services/studio-history.service';
+import type { StudioPage } from '../models/studio-page.model';
 
 @Injectable({
   providedIn: 'root'
@@ -57,6 +63,12 @@ export class StudioFacade {
   private readonly pdfExportService =
     inject(StudioPdfExportService);
 
+  private readonly pageService =
+    inject(StudioPageService);
+
+  private readonly history =
+    inject(StudioHistoryService);
+
   /**
    * Public readonly state exposed to UI.
    */
@@ -74,7 +86,9 @@ export class StudioFacade {
 
   readonly fileName = this.state.fileName;
 
-  readonly pageCount = this.state.pageCount;
+  readonly pages = this.pageService.pages;
+
+  readonly pageCount = this.pageService.pageCount;
 
   readonly currentPage = this.state.currentPage;
 
@@ -89,6 +103,15 @@ export class StudioFacade {
   readonly selection = this.state.selection;
 
   readonly error = this.state.error;
+
+  /**
+   * F5 — Header and keyboard bindings consume these reactive signals.
+   */
+  readonly canUndo =
+    this.history.canUndo;
+
+  readonly canRedo =
+    this.history.canRedo;
 
   /**
    * Load a PDF into Studio.
@@ -136,9 +159,8 @@ export class StudioFacade {
       /**
        * Commit the new document to application state.
        */
-      this.state.setDocument(
-        newDocument
-      );
+      this.state.setDocument(newDocument);
+      this.pageService.initialize(newDocument.pageCount);
 
       /**
        * A successfully opened document starts a new Studio
@@ -146,6 +168,11 @@ export class StudioFacade {
        * document must never leak into the new document.
        */
       this.objectService.clearAll();
+
+      /**
+       * A new PDF is a new history session.
+       */
+      this.history.reset();
 
       /**
        * Only destroy the old document after
@@ -216,8 +243,24 @@ async renderCurrentPage(
     return null;
   }
 
-  const pageNumber =
-    this.currentPage();
+  const pageNumber = this.currentPage();
+  const logicalPage = this.pageService.pageAt(pageNumber);
+  if (!logicalPage) return null;
+  if (logicalPage.kind === 'blank') {
+    const width = logicalPage.blankWidth ?? 595.28;
+    const height = logicalPage.blankHeight ?? 841.89;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    canvas.width = Math.max(1, Math.round(width));
+    canvas.height = Math.max(1, Math.round(height));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    return { width, height, scale: 1 };
+  }
+  const sourcePageNumber = logicalPage.sourcePageNumber ?? pageNumber;
+  const rotation = logicalPage.rotation;
 
   const viewMode =
     this.viewMode();
@@ -228,10 +271,11 @@ async renderCurrentPage(
 
       return this.pageRenderer.renderPage(
         document.pdf,
-        pageNumber,
+        sourcePageNumber,
         canvas,
         {
           mode: 'fit-width',
+          rotation,
           viewportWidth,
           padding: 32
         }
@@ -241,10 +285,11 @@ async renderCurrentPage(
 
       return this.pageRenderer.renderPage(
         document.pdf,
-        pageNumber,
+        sourcePageNumber,
         canvas,
         {
           mode: 'zoom',
+          rotation,
           zoomPercent: this.zoom()
         }
       );
@@ -254,10 +299,11 @@ async renderCurrentPage(
 
       return this.pageRenderer.renderPage(
         document.pdf,
-        pageNumber,
+        sourcePageNumber,
         canvas,
         {
           mode: 'fit-page',
+          rotation,
           viewportWidth,
           viewportHeight,
           padding: 32
@@ -406,11 +452,7 @@ runToolAction(
 
     case 'rotate':
 
-      this.toast.show(
-        'Rotate will be available in the next editing stage.',
-        'info'
-      );
-
+      this.rotateCurrentPage('right');
       return;
 
     case 'delete':
@@ -467,6 +509,10 @@ runToolAction(
  */
   deleteSelectedObject(): boolean {
 
+    if (!this.hasDocument()) {
+      return false;
+    }
+
     const selectedObjectId =
       this.selectedObjectId();
 
@@ -486,14 +532,11 @@ runToolAction(
 
     if (!object) {
       this.state.clearSelection();
-
-      this.toast.show(
-        'The selected object is no longer available.',
-        'info'
-      );
-
       return false;
     }
+
+    const before =
+      this.captureHistorySnapshot();
 
     const removed =
       this.objectService.remove(
@@ -502,14 +545,21 @@ runToolAction(
 
     this.state.clearSelection();
 
-    if (removed) {
-      this.toast.show(
-        'Object deleted.',
-        'success'
-      );
+    if (!removed) {
+      return false;
     }
 
-    return removed;
+    this.commitHistoryMutation(
+      'Delete object',
+      before
+    );
+
+    this.toast.show(
+      'Object deleted.',
+      'success'
+    );
+
+    return true;
   }
 
 discardTextObject(
@@ -530,14 +580,24 @@ discardTextObject(
     return false;
   }
 
+  const before =
+    this.captureHistorySnapshot();
+
   const removed =
     this.objectService.remove(objectId);
 
-  if (removed) {
-    this.state.clearSelection();
+  if (!removed) {
+    return false;
   }
 
-  return removed;
+  this.state.clearSelection();
+
+  this.commitHistoryMutation(
+    'Delete text',
+    before
+  );
+
+  return true;
 }
 
 fitPage(): void {
@@ -582,6 +642,7 @@ fitWidth(): void {
       );
     } finally {
       this.objectService.clearAll();
+      this.history.reset();
       this.state.clear();
     }
   }
@@ -723,6 +784,446 @@ goToLastPage(): void {
 }
 
 
+  /**
+   * F5 — Undo the most recent page-management mutation.
+   */
+  undo(): boolean {
+
+    if (!this.hasDocument()) {
+      return false;
+    }
+
+    const snapshot =
+      this.history.undo();
+
+    if (!snapshot) {
+      return false;
+    }
+
+    this.restoreHistorySnapshot(
+      snapshot
+    );
+
+    return true;
+  }
+
+  /**
+   * F5 — Reapply the next history entry.
+   */
+  redo(): boolean {
+
+    if (!this.hasDocument()) {
+      return false;
+    }
+
+    const snapshot =
+      this.history.redo();
+
+    if (!snapshot) {
+      return false;
+    }
+
+    this.restoreHistorySnapshot(
+      snapshot
+    );
+
+    return true;
+  }
+
+  /**
+   * Move a logical page and preserve every object mapping in one history entry.
+   */
+  movePage(
+    fromPage: number,
+    toPage: number
+  ): void {
+
+    const count =
+      this.pageCount();
+
+    if (
+      fromPage === toPage ||
+      fromPage < 1 ||
+      toPage < 1 ||
+      fromPage > count ||
+      toPage > count
+    ) {
+      return;
+    }
+
+    this.recordPageMutation(
+      'Move page',
+      () => {
+
+        const mapping =
+          new Map<number, number>();
+
+        for (
+          let old = 1;
+          old <= count;
+          old++
+        ) {
+
+          let next =
+            old;
+
+          if (
+            old === fromPage
+          ) {
+            next =
+              toPage;
+
+          } else if (
+            fromPage < toPage &&
+            old > fromPage &&
+            old <= toPage
+          ) {
+            next =
+              old - 1;
+
+          } else if (
+            fromPage > toPage &&
+            old >= toPage &&
+            old < fromPage
+          ) {
+            next =
+              old + 1;
+          }
+
+          mapping.set(
+            old,
+            next
+          );
+        }
+
+        if (
+          !this.pageService.move(
+            fromPage,
+            toPage
+          )
+        ) {
+          return false;
+        }
+
+        this.objectService.remapPageNumbers(
+          mapping
+        );
+
+        this.state.clearSelection();
+
+        this.state.setCurrentPage(
+          mapping.get(
+            this.currentPage()
+          ) ??
+          this.currentPage()
+        );
+
+        return true;
+      }
+    );
+  }
+
+  duplicateCurrentPage(): void {
+
+    this.recordPageMutation(
+      'Duplicate page',
+      () => {
+
+        const source =
+          this.currentPage();
+
+        const target =
+          this.pageService.duplicate(
+            source
+          );
+
+        if (!target) {
+          return false;
+        }
+
+        this.objectService.shiftPageNumbers(
+          target,
+          1
+        );
+
+        this.objectService.duplicatePage(
+          source,
+          target
+        );
+
+        this.state.setPageCount(
+          this.pageCount()
+        );
+
+        this.state.clearSelection();
+
+        this.state.setCurrentPage(
+          target
+        );
+
+        return true;
+      }
+    );
+  }
+
+  insertBlankPage(
+    afterCurrent = true
+  ): void {
+
+    this.recordPageMutation(
+      afterCurrent
+        ? 'Insert page after'
+        : 'Insert page before',
+      () => {
+
+        const current =
+          this.currentPage();
+
+        const position =
+          afterCurrent
+            ? current + 1
+            : current;
+
+        const target =
+          this.pageService.insertBlank(
+            position
+          );
+
+        this.objectService.shiftPageNumbers(
+          target,
+          1
+        );
+
+        this.state.setPageCount(
+          this.pageCount()
+        );
+
+        this.state.clearSelection();
+
+        this.state.setCurrentPage(
+          target
+        );
+
+        return true;
+      }
+    );
+  }
+
+  deleteCurrentPage(): void {
+
+    if (
+      this.pageCount() <= 1
+    ) {
+      this.toast.show(
+        'A PDF must contain at least one page.',
+        'info'
+      );
+
+      return;
+    }
+
+    this.recordPageMutation(
+      'Delete page',
+      () => {
+
+        const current =
+          this.currentPage();
+
+        const countBefore =
+          this.pageCount();
+
+        if (
+          !this.pageService.delete(
+            current
+          )
+        ) {
+          return false;
+        }
+
+        this.objectService.clearPage(
+          current
+        );
+
+        const mapping =
+          new Map<number, number>();
+
+        for (
+          let old = current + 1;
+          old <= countBefore;
+          old++
+        ) {
+          mapping.set(
+            old,
+            old - 1
+          );
+        }
+
+        this.objectService.remapPageNumbers(
+          mapping
+        );
+
+        this.state.setPageCount(
+          this.pageCount()
+        );
+
+        this.state.clearSelection();
+
+        this.state.setCurrentPage(
+          Math.min(
+            current,
+            this.pageCount()
+          )
+        );
+
+        return true;
+      }
+    );
+  }
+
+  rotateCurrentPage(
+    direction:
+      | 'left'
+      | 'right' = 'right'
+  ): void {
+
+    this.recordPageMutation(
+      direction === 'left'
+        ? 'Rotate page left'
+        : 'Rotate page right',
+      () => {
+
+        const changed =
+          this.pageService.rotate(
+            this.currentPage(),
+            direction === 'left'
+              ? -90
+              : 90
+          );
+
+        if (changed) {
+          this.state.clearSelection();
+        }
+
+        return changed;
+      }
+    );
+  }
+
+  /**
+   * Capture, execute and record one atomic logical page mutation.
+   *
+   * The current page is part of the snapshot because Undo/Redo must restore
+   * not only the document structure but also the page the user was editing.
+   */
+  private recordPageMutation(
+    label: string,
+    mutation: () => boolean
+  ): boolean {
+
+    if (!this.hasDocument()) {
+      return false;
+    }
+
+    const before =
+      this.captureHistorySnapshot();
+
+    const changed =
+      mutation();
+
+    if (!changed) {
+      return false;
+    }
+
+    const after =
+      this.captureHistorySnapshot();
+
+    this.history.record(
+      label,
+      before,
+      after
+    );
+
+    return true;
+  }
+
+  /**
+   * F5 — Record a successful non-page mutation.
+   *
+   * Page management and object editing share the same immutable history
+   * timeline. Keeping the snapshot boundary in the Facade guarantees that
+   * every UI mutation can be undone through the same Undo/Redo controls.
+   */
+  private commitHistoryMutation(
+    label: string,
+    before: StudioHistorySnapshot
+  ): void {
+
+    this.history.record(
+      label,
+      before,
+      this.captureHistorySnapshot()
+    );
+  }
+
+  private captureHistorySnapshot():
+    StudioHistorySnapshot {
+
+    return {
+      pages:
+        this.pageService.snapshot(),
+
+      objects:
+        this.objectService.snapshot(),
+
+      currentPage:
+        this.currentPage()
+    };
+  }
+
+  /**
+   * Restore page and object state as one transaction.
+   *
+   * Page count must be synchronized before currentPage because
+   * StudioStateService validates page navigation against pageCount.
+   */
+  private restoreHistorySnapshot(
+    snapshot:
+      StudioHistorySnapshot
+  ): void {
+
+    this.pageService.restore(
+      snapshot.pages
+    );
+
+    this.objectService.restore(
+      snapshot.objects
+    );
+
+    this.state.setPageCount(
+      this.pageCount()
+    );
+
+    this.state.clearSelection();
+
+    const total =
+      this.pageCount();
+
+    const target =
+      total <= 0
+        ? 1
+        : Math.min(
+            Math.max(
+              1,
+              snapshot.currentPage
+            ),
+            total
+          );
+
+    this.state.setCurrentPage(
+      target
+    );
+  }
+
 readonly canPreviousPage = computed(() => {
   return (
     this.hasDocument() &&
@@ -815,7 +1316,8 @@ async exportPdf(): Promise<void> {
 
     await this.pdfExportService.exportAndDownload(
       document.file,
-      objects
+      objects,
+      this.pages()
     );
 
     this.loader.setText(
@@ -866,6 +1368,9 @@ createTextObject(
     return null;
   }
 
+  const before =
+    this.captureHistorySnapshot();
+
   const object =
     this.objectService.createTextObject(
       this.currentPage(),
@@ -882,6 +1387,11 @@ createTextObject(
 
   this.state.setSelection(selection);
 
+  this.commitHistoryMutation(
+    'Add text',
+    before
+  );
+
   return selection;
 }
 
@@ -894,6 +1404,9 @@ createImageObject(
   if (!this.hasDocument()) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.createImageObject(
@@ -910,13 +1423,15 @@ createImageObject(
     type: object.type
   };
 
-  this.state.setSelection(
-    selection
+  this.state.setSelection(selection);
+
+  this.commitHistoryMutation(
+    'Add image',
+    before
   );
 
   return selection;
 }
-
 
 createShapeObject(
   startX: number,
@@ -930,6 +1445,9 @@ createShapeObject(
   if (!this.hasDocument()) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.createShapeObject(
@@ -951,6 +1469,11 @@ createShapeObject(
 
   this.state.setSelection(selection);
 
+  this.commitHistoryMutation(
+    'Add shape',
+    before
+  );
+
   return selection;
 }
 
@@ -963,6 +1486,9 @@ createDrawingObject(
   if (!this.hasDocument()) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.createDrawingObject(
@@ -985,6 +1511,13 @@ createDrawingObject(
 
   this.state.setSelection(selection);
 
+  this.commitHistoryMutation(
+    type === 'draw'
+      ? 'Draw stroke'
+      : 'Add highlight',
+    before
+  );
+
   return selection;
 }
 
@@ -1001,6 +1534,9 @@ updateObjectBounds(
   if (!this.hasDocument()) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.updateBounds(
@@ -1023,6 +1559,11 @@ updateObjectBounds(
     this.state.setSelection(selection);
   }
 
+  this.commitHistoryMutation(
+    'Transform object',
+    before
+  );
+
   return selection;
 }
 
@@ -1030,6 +1571,13 @@ updateShapeStyle(
   objectId: string,
   style: Partial<StudioShapeStyle>
 ): StudioSelection | null {
+
+  if (!this.hasDocument()) {
+    return null;
+  }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.updateShapeStyle(
@@ -1050,6 +1598,11 @@ updateShapeStyle(
 
   this.state.setSelection(selection);
 
+  this.commitHistoryMutation(
+    'Change shape style',
+    before
+  );
+
   return selection;
 }
 
@@ -1057,6 +1610,13 @@ updateDrawingStyle(
   objectId: string,
   style: Partial<StudioDrawingStyle>
 ): StudioSelection | null {
+
+  if (!this.hasDocument()) {
+    return null;
+  }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.updateDrawingStyle(
@@ -1077,6 +1637,11 @@ updateDrawingStyle(
 
   this.state.setSelection(selection);
 
+  this.commitHistoryMutation(
+    'Change drawing style',
+    before
+  );
+
   return selection;
 }
 
@@ -1088,6 +1653,9 @@ replaceImageData(
   if (!this.hasDocument()) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.updateImageData(
@@ -1110,6 +1678,11 @@ replaceImageData(
     selection
   );
 
+  this.commitHistoryMutation(
+    'Replace image',
+    before
+  );
+
   return selection;
 }
 
@@ -1125,6 +1698,9 @@ duplicateSelectedObject(): StudioSelection | null {
   if (!selectedObjectId) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.duplicateObject(
@@ -1146,6 +1722,11 @@ duplicateSelectedObject(): StudioSelection | null {
     selection
   );
 
+  this.commitHistoryMutation(
+    'Duplicate object',
+    before
+  );
+
   return selection;
 }
 
@@ -1157,6 +1738,9 @@ updateTextObject(
   if (!this.hasDocument()) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.updateText(
@@ -1184,6 +1768,11 @@ updateTextObject(
     );
   }
 
+  this.commitHistoryMutation(
+    'Edit text',
+    before
+  );
+
   return selection;
 }
 
@@ -1195,6 +1784,9 @@ updateTextStyle(
   if (!this.hasDocument()) {
     return null;
   }
+
+  const before =
+    this.captureHistorySnapshot();
 
   const object =
     this.objectService.updateTextStyle(
@@ -1221,6 +1813,11 @@ updateTextStyle(
       selection
     );
   }
+
+  this.commitHistoryMutation(
+    'Change text style',
+    before
+  );
 
   return selection;
 }
