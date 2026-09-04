@@ -35,6 +35,7 @@ interface ActiveRenderTask {
 interface CanvasRenderState {
   queue: Promise<void>;
   task?: ActiveRenderTask;
+  requestVersion: number;
 }
 
 @Injectable({
@@ -74,6 +75,9 @@ export class PdfPageRendererService {
     const state =
       this.getCanvasState(canvas);
 
+    const requestVersion =
+      ++state.requestVersion;
+
     /*
      * Latest request wins.
      *
@@ -101,6 +105,8 @@ export class PdfPageRendererService {
 
     await previousQueue;
 
+    this.throwIfRequestIsStale(state, requestVersion);
+
     let page: PDFPageProxy | undefined;
     let renderTask: ActiveRenderTask | undefined;
 
@@ -125,6 +131,8 @@ export class PdfPageRendererService {
       page =
         await pdf.getPage(pageNumber);
 
+      this.throwIfRequestIsStale(state, requestVersion);
+
       const scale =
         this.resolveScale(
           page,
@@ -147,6 +155,8 @@ export class PdfPageRendererService {
           'Unable to create PDF canvas context.'
         );
       }
+
+      this.throwIfRequestIsStale(state, requestVersion);
 
       canvas.width =
         Math.max(
@@ -200,6 +210,8 @@ export class PdfPageRendererService {
             ]
           : undefined;
 
+      this.throwIfRequestIsStale(state, requestVersion);
+
       renderTask =
         page.render({
           canvasContext: context,
@@ -226,6 +238,8 @@ export class PdfPageRendererService {
         }
       }
 
+      this.throwIfRequestIsStale(state, requestVersion);
+
       return {
         width: viewport.width,
         height: viewport.height,
@@ -245,7 +259,14 @@ export class PdfPageRendererService {
     }
   }
 
-  clearCanvas(
+  /**
+   * Cancel any in-flight render associated with a canvas.
+   *
+   * The caller can use this during document lifecycle transitions before a
+   * canvas is cleared or replaced. The queued renderer still guarantees that a
+   * later request waits for PDF.js to finish unwinding the cancelled task.
+   */
+  cancelRender(
     canvas: HTMLCanvasElement
   ): void {
 
@@ -253,6 +274,165 @@ export class PdfPageRendererService {
       this.canvasStates.get(canvas);
 
     state?.task?.cancel();
+  }
+
+  /**
+   * Render a Studio-created blank page through the same per-canvas lifecycle
+   * coordinator used for PDF.js pages.
+   *
+   * This prevents a stale PDF render from writing into the canvas after page
+   * management switches the logical page to a blank page.
+   */
+  async renderBlankPage(
+    canvas: HTMLCanvasElement,
+    width: number,
+    height: number,
+    scale: number
+  ): Promise<RenderedPageSize> {
+
+    const state =
+      this.getCanvasState(canvas);
+
+    const requestVersion =
+      ++state.requestVersion;
+
+    state.task?.cancel();
+
+    const previousQueue =
+      state.queue;
+
+    let release!: () => void;
+
+    const currentGate =
+      new Promise<void>(resolve => {
+        release = resolve;
+      });
+
+    state.queue =
+      previousQueue.then(
+        () => currentGate
+      );
+
+    await previousQueue;
+
+    this.throwIfRequestIsStale(state, requestVersion);
+
+    try {
+
+      if (state.task) {
+        try {
+          await state.task.promise;
+        } catch (error: unknown) {
+          if (!this.isRenderCancellation(error)) {
+            throw error;
+          }
+        } finally {
+          state.task = undefined;
+        }
+      }
+
+      this.throwIfRequestIsStale(state, requestVersion);
+
+      const safeScale =
+        Number.isFinite(scale) && scale > 0
+          ? scale
+          : 1;
+
+      const cssWidth =
+        Math.max(1, width * safeScale);
+
+      const cssHeight =
+        Math.max(1, height * safeScale);
+
+      const context =
+        canvas.getContext(
+          '2d',
+          { alpha: false }
+        );
+
+      if (!context) {
+        throw new Error(
+          'Unable to create blank page canvas context.'
+        );
+      }
+
+      const outputScale =
+        this.getDevicePixelRatio();
+
+      this.throwIfRequestIsStale(state, requestVersion);
+
+      canvas.width =
+        Math.max(
+          1,
+          Math.floor(cssWidth * outputScale)
+        );
+
+      canvas.height =
+        Math.max(
+          1,
+          Math.floor(cssHeight * outputScale)
+        );
+
+      canvas.style.width =
+        `${Math.ceil(cssWidth)}px`;
+
+      canvas.style.height =
+        `${Math.ceil(cssHeight)}px`;
+
+      context.setTransform(
+        outputScale,
+        0,
+        0,
+        outputScale,
+        0,
+        0
+      );
+
+      context.clearRect(
+        0,
+        0,
+        cssWidth,
+        cssHeight
+      );
+
+      context.fillStyle = '#ffffff';
+      context.fillRect(
+        0,
+        0,
+        cssWidth,
+        cssHeight
+      );
+
+      this.throwIfRequestIsStale(state, requestVersion);
+
+      return {
+        width: cssWidth,
+        height: cssHeight,
+        scale: safeScale
+      };
+
+    } finally {
+
+      release();
+
+      if (state.queue === currentGate) {
+        state.queue =
+          Promise.resolve();
+      }
+    }
+  }
+
+  clearCanvas(
+    canvas: HTMLCanvasElement
+  ): void {
+
+    const state =
+      this.canvasStates.get(canvas);
+
+    if (state) {
+      state.requestVersion++;
+      state.task?.cancel();
+    }
 
     const context =
       canvas.getContext('2d');
@@ -299,7 +479,8 @@ export class PdfPageRendererService {
     }
 
     const state: CanvasRenderState = {
-      queue: Promise.resolve()
+      queue: Promise.resolve(),
+      requestVersion: 0
     };
 
     this.canvasStates.set(
@@ -308,6 +489,16 @@ export class PdfPageRendererService {
     );
 
     return state;
+  }
+
+  private throwIfRequestIsStale(
+    state: CanvasRenderState,
+    requestVersion: number
+  ): void {
+    if (state.requestVersion === requestVersion) return;
+    const error = new Error('A newer render request owns this canvas.');
+    error.name = 'RenderingCancelledException';
+    throw error;
   }
 
   private isRenderCancellation(

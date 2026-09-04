@@ -48,10 +48,15 @@ export class StudioObjectService {
 
     return Array.from(
       this.objects.values()
-    ).filter(
-      object =>
-        object.pageNumber === pageNumber
-    );
+    )
+      .filter(
+        object =>
+          object.pageNumber === pageNumber
+      )
+      .map(
+        object =>
+          this.cloneObject(object)
+      );
   }
 
   /**
@@ -99,9 +104,12 @@ export class StudioObjectService {
     objectId: string
   ): StudioObject | null {
 
-    return (
-      this.objects.get(objectId) ?? null
-    );
+    const object =
+      this.objects.get(objectId);
+
+    return object
+      ? this.cloneObject(object)
+      : null;
   }
 
   add(
@@ -110,7 +118,7 @@ export class StudioObjectService {
 
     this.objects.set(
       object.id,
-      object
+      this.cloneObject(object)
     );
     this.touch();
   }
@@ -156,7 +164,7 @@ export class StudioObjectService {
     );
     this.touch();
 
-    return object;
+    return this.cloneObject(object);
   }
 
   createImageObject(
@@ -213,7 +221,7 @@ export class StudioObjectService {
 
     this.touch();
 
-    return object;
+    return this.cloneObject(object);
   }
 
   createShapeObject(
@@ -265,7 +273,7 @@ export class StudioObjectService {
     this.objects.set(object.id, object);
     this.touch();
 
-    return object;
+    return this.cloneObject(object);
   }
 
   createDrawingObject(
@@ -306,7 +314,7 @@ export class StudioObjectService {
     this.objects.set(object.id, object);
     this.touch();
 
-    return object;
+    return this.cloneObject(object);
   }
 
   updateShapeStyle(
@@ -338,7 +346,7 @@ export class StudioObjectService {
     this.objects.set(objectId, updated);
     this.touch();
 
-    return updated;
+    return this.cloneObject(updated);
   }
 
   updateDrawingStyle(
@@ -380,7 +388,7 @@ export class StudioObjectService {
     this.objects.set(objectId, updated);
     this.touch();
 
-    return updated;
+    return this.cloneObject(updated);
   }
 
   duplicateObject(
@@ -451,7 +459,7 @@ export class StudioObjectService {
 
     this.touch();
 
-    return duplicated;
+    return this.cloneObject(duplicated);
   }
 
   updateImageData(
@@ -481,7 +489,7 @@ export class StudioObjectService {
 
     this.touch();
 
-    return updated;
+    return this.cloneObject(updated);
   }
 
   updateBounds(
@@ -549,7 +557,7 @@ export class StudioObjectService {
     );
     this.touch();
 
-    return updated;
+    return this.cloneObject(updated);
   }
 
   updateText(
@@ -578,7 +586,7 @@ export class StudioObjectService {
     );
     this.touch();
 
-    return updated;
+    return this.cloneObject(updated);
   }
 
   updateTextStyle(
@@ -647,7 +655,7 @@ export class StudioObjectService {
     );
     this.touch();
 
-    return updated;
+    return this.cloneObject(updated);
   }
 
   remove(

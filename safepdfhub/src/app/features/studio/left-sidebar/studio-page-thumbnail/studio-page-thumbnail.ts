@@ -25,11 +25,15 @@ import {
 @Component({
   selector:
     'app-studio-page-thumbnail',
+
   standalone: true,
+
   templateUrl:
     './studio-page-thumbnail.html',
+
   styleUrl:
     './studio-page-thumbnail.scss',
+
   changeDetection:
     ChangeDetectionStrategy.OnPush
 })
@@ -86,14 +90,53 @@ export class StudioPageThumbnail
     new EventEmitter<number>();
 
 
-  @ViewChild('canvas')
-  private readonly canvasRef?:
+  /**
+   * The thumbnail canvas is conditionally created by the template.
+   *
+   * A setter is used instead of relying only on ngAfterViewInit because
+   * a page can transition from blank -> PDF-backed after the component
+   * has already been initialized.
+   */
+  private canvasRef?:
     ElementRef<HTMLCanvasElement>;
+
+
+  @ViewChild('canvas')
+  set thumbnailCanvas(
+    value:
+      | ElementRef<HTMLCanvasElement>
+      | undefined
+  ) {
+
+    this.canvasRef =
+      value;
+
+
+    /**
+     * The canvas can be created after a blank -> normal page transition.
+     *
+     * In that case ngOnChanges may have run before the new canvas existed,
+     * so rendering must be retried when Angular provides the canvas.
+     */
+    if (
+      value &&
+      this.viewReady &&
+      !this.blank
+    ) {
+
+      this.renderIfPossible();
+    }
+  }
 
 
   private viewReady = false;
 
+
+  /**
+   * Invalidates stale asynchronous thumbnail renders.
+   */
   private renderToken = 0;
+
 
   loading = false;
 
@@ -104,10 +147,11 @@ export class StudioPageThumbnail
 
   ngAfterViewInit(): void {
 
-    this.viewReady = true;
+    this.viewReady =
+      true;
+
 
     this.renderIfPossible();
-
   }
 
 
@@ -123,14 +167,37 @@ export class StudioPageThumbnail
       changes['rotation']
     ) {
 
+      /**
+       * Invalidate all older asynchronous renders before changing
+       * thumbnail state.
+       */
       this.renderToken++;
 
-      this.loaded = false;
-      this.failed = false;
+
+      /**
+       * A thumbnail canvas belongs to this component.
+       *
+       * When the logical page changes, explicitly release the old
+       * renderer task before starting a new render or transitioning
+       * into a blank/invalid state.
+       */
+      this.releaseThumbnailCanvas();
+
+
+      this.loading =
+        false;
+
+      this.loaded =
+        false;
+
+      this.failed =
+        false;
+
 
       if (
         this.viewReady
       ) {
+
         this.renderIfPossible();
       }
     }
@@ -139,18 +206,16 @@ export class StudioPageThumbnail
 
   ngOnDestroy(): void {
 
+    /**
+     * Prevent late async render completion from updating this component.
+     */
     this.renderToken++;
 
-    const canvas =
-      this.canvasRef?.nativeElement;
 
-    if (
-      canvas
-    ) {
-      this.thumbnailService.clear(
-        canvas
-      );
-    }
+    /**
+     * Explicitly cancel renderer ownership for this canvas.
+     */
+    this.releaseThumbnailCanvas();
   }
 
 
@@ -162,18 +227,51 @@ export class StudioPageThumbnail
   }
 
 
+  /**
+   * Releases the currently owned thumbnail canvas.
+   *
+   * This is intentionally local component lifecycle cleanup.
+   */
+  private releaseThumbnailCanvas(): void {
+
+    const canvas =
+      this.canvasRef?.nativeElement;
+
+
+    if (
+      !canvas
+    ) {
+      return;
+    }
+
+
+    this.thumbnailService.clear(
+      canvas
+    );
+  }
+
+
   private renderIfPossible(): void {
 
     /**
      * Blank Studio pages do not have a PDF source page to render.
-     * Do not attempt to render source page 0.
+     *
+     * The existing canvas render was already cancelled during the
+     * input transition, so no renderer work remains for this page.
      */
     if (
       this.blank
     ) {
-      this.loading = false;
-      this.loaded = true;
-      this.failed = false;
+
+      this.loading =
+        false;
+
+      this.loaded =
+        true;
+
+      this.failed =
+        false;
+
       return;
     }
 
@@ -181,34 +279,84 @@ export class StudioPageThumbnail
     const pdf =
       this.pdf;
 
+
     const canvas =
       this.canvasRef?.nativeElement;
+
 
     const sourcePageNumber =
       this.sourcePageNumber;
 
 
+    /**
+     * A canvas can temporarily be unavailable during a blank -> normal
+     * transition because Angular creates it conditionally.
+     *
+     * The ViewChild setter will call renderIfPossible() again once the
+     * canvas becomes available.
+     */
     if (
-      !pdf ||
-      !canvas ||
-      !sourcePageNumber ||
-      sourcePageNumber < 1 ||
-      sourcePageNumber > pdf.numPages
+      !canvas
     ) {
-      this.loading = false;
-      this.loaded = false;
-      this.failed = true;
+
+      this.loading =
+        false;
+
+      this.loaded =
+        false;
+
+      this.failed =
+        false;
+
       return;
     }
 
 
+    if (
+      !pdf ||
+      !sourcePageNumber ||
+      sourcePageNumber < 1 ||
+      sourcePageNumber > pdf.numPages
+    ) {
+
+      /**
+       * Explicitly release any existing render ownership before entering
+       * the invalid thumbnail state.
+       */
+      this.releaseThumbnailCanvas();
+
+
+      this.loading =
+        false;
+
+      this.loaded =
+        false;
+
+      this.failed =
+        true;
+
+      return;
+    }
+
+
+    /**
+     * Every render receives a unique token.
+     *
+     * A late completion from an older render cannot overwrite the
+     * current component state.
+     */
     const token =
       ++this.renderToken;
 
 
-    this.loading = true;
-    this.loaded = false;
-    this.failed = false;
+    this.loading =
+      true;
+
+    this.loaded =
+      false;
+
+    this.failed =
+      false;
 
 
     void this.render(
@@ -239,6 +387,9 @@ export class StudioPageThumbnail
         );
 
 
+      /**
+       * Ignore stale asynchronous completions.
+       */
       if (
         token !== this.renderToken
       ) {
@@ -246,12 +397,20 @@ export class StudioPageThumbnail
       }
 
 
-      this.loading = false;
-      this.loaded = true;
-      this.failed = false;
+      this.loading =
+        false;
+
+      this.loaded =
+        true;
+
+      this.failed =
+        false;
 
     } catch {
 
+      /**
+       * Ignore failures from stale/cancelled renders.
+       */
       if (
         token !== this.renderToken
       ) {
@@ -259,9 +418,14 @@ export class StudioPageThumbnail
       }
 
 
-      this.loading = false;
-      this.loaded = false;
-      this.failed = true;
+      this.loading =
+        false;
+
+      this.loaded =
+        false;
+
+      this.failed =
+        true;
     }
   }
 }

@@ -70,6 +70,30 @@ export class StudioFacade {
     inject(StudioHistoryService);
 
   /**
+   * F6.3 — One live pointer transform is treated as one history mutation.
+   * Pointer-move frames update the object immediately for smooth UI feedback,
+   * while pointer-up records a single immutable before/after entry.
+   */
+  private pendingObjectTransform: {
+    readonly objectId: string;
+    readonly before: StudioHistorySnapshot;
+  } | null = null;
+
+  /**
+   * F6.4.5 — Document/render lifecycle generation.
+   *
+   * A render may still be awaiting PDF.js when the current document is
+   * replaced or closed. The generation makes that older request obsolete,
+   * while the active canvas reference lets the Facade actively cancel and
+   * release the main canvas at the document lifecycle boundary.
+   */
+  private renderSession = 0;
+
+  private activeRenderCanvas:
+    | HTMLCanvasElement
+    | null = null;
+
+  /**
    * Public readonly state exposed to UI.
    */
   readonly studioState = this.state.state;
@@ -155,6 +179,14 @@ export class StudioFacade {
 
       const previousDocument =
         this.document();
+
+      /**
+       * F6.4.5 — The new document becomes a new render session before
+       * application state is committed. This actively cancels any main-canvas
+       * work still owned by the previous document and prevents a late render
+       * from painting after replacement.
+       */
+      this.invalidateMainCanvasRenderSession();
 
       /**
        * Commit the new document to application state.
@@ -243,114 +275,288 @@ async renderCurrentPage(
     return null;
   }
 
-  const pageNumber = this.currentPage();
-  const logicalPage = this.pageService.pageAt(pageNumber);
-  if (!logicalPage) return null;
-  if (logicalPage.kind === 'blank') {
-    const width = logicalPage.blankWidth ?? 595.28;
-    const height = logicalPage.blankHeight ?? 841.89;
-    const context = canvas.getContext('2d');
-    if (!context) return null;
-    canvas.width = Math.max(1, Math.round(width));
-    canvas.height = Math.max(1, Math.round(height));
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    return { width, height, scale: 1 };
-  }
-  const sourcePageNumber = logicalPage.sourcePageNumber ?? pageNumber;
-  const rotation = logicalPage.rotation;
+  /**
+   * F6.4.5 — The Facade owns the document-level main canvas lifecycle.
+   *
+   * The renderer owns per-canvas PDF.js serialization, while the Facade owns
+   * the higher-level question of whether this render still belongs to the
+   * currently active Studio document.
+   */
+  this.activeRenderCanvas =
+    canvas;
 
-  const viewMode =
-    this.viewMode();
+  const renderSession =
+    this.renderSession;
 
-  switch (viewMode) {
+  const pageNumber =
+    this.currentPage();
 
-    case 'fit-width':
+  const logicalPage =
+    this.pageService.pageAt(
+      pageNumber
+    );
 
-      return this.pageRenderer.renderPage(
-        document.pdf,
-        sourcePageNumber,
-        canvas,
-        {
-          mode: 'fit-width',
-          rotation,
-          viewportWidth,
-          padding: 32
-        }
-      );
-
-    case 'zoom':
-
-      return this.pageRenderer.renderPage(
-        document.pdf,
-        sourcePageNumber,
-        canvas,
-        {
-          mode: 'zoom',
-          rotation,
-          zoomPercent: this.zoom()
-        }
-      );
-
-    case 'fit-page':
-    default:
-
-      return this.pageRenderer.renderPage(
-        document.pdf,
-        sourcePageNumber,
-        canvas,
-        {
-          mode: 'fit-page',
-          rotation,
-          viewportWidth,
-          viewportHeight,
-          padding: 32
-        }
-      );
-  }
-}
-
-/**
- * Render a specific page.
- */
-async renderPage(
-  canvas: HTMLCanvasElement,
-  pageNumber: number,
-  viewportWidth: number,
-  viewportHeight: number
-): Promise<RenderedPageSize | null> {
-
-  const document =
-    this.document();
-
-  if (!document) {
+  if (!logicalPage) {
     return null;
   }
 
-  this.state.setCurrentPage(
-    pageNumber
-  );
+  let rendered: RenderedPageSize;
 
-  return this.renderCurrentPage(
-    canvas,
-    viewportWidth,
-    viewportHeight
-  );
+  if (logicalPage.kind === 'blank') {
+
+    rendered =
+      await this.renderBlankPage(
+        canvas,
+        logicalPage,
+        viewportWidth,
+        viewportHeight
+      );
+
+  } else {
+
+    const sourcePageNumber =
+      logicalPage.sourcePageNumber ??
+      pageNumber;
+
+    const rotation =
+      logicalPage.rotation;
+
+    const viewMode =
+      this.viewMode();
+
+    switch (viewMode) {
+
+      case 'fit-width':
+
+        rendered =
+          await this.pageRenderer.renderPage(
+            document.pdf,
+            sourcePageNumber,
+            canvas,
+            {
+              mode: 'fit-width',
+              rotation,
+              viewportWidth,
+              padding: 32
+            }
+          );
+
+        break;
+
+      case 'zoom':
+
+        rendered =
+          await this.pageRenderer.renderPage(
+            document.pdf,
+            sourcePageNumber,
+            canvas,
+            {
+              mode: 'zoom',
+              rotation,
+              zoomPercent: this.zoom()
+            }
+          );
+
+        break;
+
+      case 'fit-page':
+      default:
+
+        rendered =
+          await this.pageRenderer.renderPage(
+            document.pdf,
+            sourcePageNumber,
+            canvas,
+            {
+              mode: 'fit-page',
+              rotation,
+              viewportWidth,
+              viewportHeight,
+              padding: 32
+            }
+          );
+
+        break;
+    }
+  }
+
+  /**
+   * Do not report a stale render as the current page. The lifecycle transition
+   * itself already cancels/clears the renderer, but this final guard keeps a
+   * completed async call from updating component state after replacement or
+   * close.
+   */
+  if (
+    renderSession !==
+      this.renderSession ||
+    this.activeRenderCanvas !==
+      canvas ||
+    this.document() !==
+      document
+  ) {
+    return null;
+  }
+
+  return rendered;
 }
 
-/**
- * Clear the current Studio canvas.
- */
-clearCanvas(
-  canvas: HTMLCanvasElement
-): void {
+  /**
+   * Render a Studio-created blank page through the shared canvas renderer.
+   *
+   * F6.2: blank pages now participate in the same per-canvas cancellation and
+   * serialization lifecycle as PDF.js pages. This prevents a late PDF render
+   * from painting over a newly selected blank logical page.
+   */
+  private async renderBlankPage(
+    canvas: HTMLCanvasElement,
+    page: StudioPage,
+    viewportWidth: number,
+    viewportHeight: number
+  ): Promise<RenderedPageSize> {
 
-  this.pageRenderer.clearCanvas(
-    canvas
-  );
-}
+    const baseWidth =
+      page.blankWidth ?? 595.28;
+
+    const baseHeight =
+      page.blankHeight ?? 841.89;
+
+    const rotated =
+      page.rotation === 90 ||
+      page.rotation === 270;
+
+    const logicalWidth =
+      rotated
+        ? baseHeight
+        : baseWidth;
+
+    const logicalHeight =
+      rotated
+        ? baseWidth
+        : baseHeight;
+
+    const padding = 32;
+
+    let scale = 1;
+
+    switch (this.viewMode()) {
+
+      case 'zoom':
+        scale = this.normalizeRenderZoom(
+          this.zoom()
+        );
+        break;
+
+      case 'fit-width':
+        scale = this.fitRenderScale(
+          logicalWidth,
+          logicalHeight,
+          viewportWidth,
+          viewportHeight,
+          padding,
+          'fit-width'
+        );
+        break;
+
+      case 'fit-page':
+      default:
+        scale = this.fitRenderScale(
+          logicalWidth,
+          logicalHeight,
+          viewportWidth,
+          viewportHeight,
+          padding,
+          'fit-page'
+        );
+        break;
+    }
+
+    return this.pageRenderer.renderBlankPage(
+      canvas,
+      logicalWidth,
+      logicalHeight,
+      scale
+    );
+  }
+
+  private fitRenderScale(
+    width: number,
+    height: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    padding: number,
+    mode: 'fit-page' | 'fit-width'
+  ): number {
+
+    const availableWidth =
+      Math.max(
+        1,
+        viewportWidth - padding * 2
+      );
+
+    const widthScale =
+      availableWidth /
+      Math.max(1, width);
+
+    if (mode === 'fit-width') {
+      return this.clampRenderScale(
+        widthScale
+      );
+    }
+
+    const availableHeight =
+      Math.max(
+        1,
+        viewportHeight - padding * 2
+      );
+
+    const heightScale =
+      availableHeight /
+      Math.max(1, height);
+
+    return this.clampRenderScale(
+      Math.min(
+        widthScale,
+        heightScale
+      )
+    );
+  }
+
+  private normalizeRenderZoom(
+    zoomPercent: number
+  ): number {
+
+    if (!Number.isFinite(zoomPercent)) {
+      return 1;
+    }
+
+    return this.clampRenderScale(
+      zoomPercent / 100,
+      0.5,
+      2
+    );
+  }
+
+  private clampRenderScale(
+    scale: number,
+    minimum = 0.25,
+    maximum = 4
+  ): number {
+
+    if (
+      !Number.isFinite(scale) ||
+      scale <= 0
+    ) {
+      return 1;
+    }
+
+    return Math.min(
+      Math.max(
+        scale,
+        minimum
+      ),
+      maximum
+    );
+  }
 
   /**
    * Update zoom state.
@@ -538,6 +744,12 @@ runToolAction(
     const before =
       this.captureHistorySnapshot();
 
+    if (
+      this.pendingObjectTransform?.objectId === selectedObjectId
+    ) {
+      this.pendingObjectTransform = null;
+    }
+
     const removed =
       this.objectService.remove(
         selectedObjectId
@@ -625,6 +837,13 @@ fitWidth(): void {
    * Close the current PDF.
    */
   async closePdf(): Promise<void> {
+    /**
+     * F6.4.5 — Close is a hard document lifecycle boundary. Cancel the main
+     * canvas before destroying the PDF so no in-flight render can outlive the
+     * document that created it.
+     */
+    this.invalidateMainCanvasRenderSession();
+
     const document =
       this.document();
 
@@ -641,10 +860,87 @@ fitWidth(): void {
         document
       );
     } finally {
+      /**
+       * Clear every document-scoped store together.
+       *
+       * The logical page collection is intentionally cleared here as well.
+       * Keeping old logical pages after the PDF document has been destroyed can
+       * leave stale page metadata observable by a component during teardown or
+       * while a replacement document is opening.
+       */
       this.objectService.clearAll();
+      this.pageService.clear();
       this.history.reset();
       this.state.clear();
     }
+  }
+
+  /**
+   * F6.4.5 — Invalidate the document-level main canvas render session.
+   *
+   * PdfPageRendererService owns the low-level PDF.js task and per-canvas
+   * serialization. The Facade calls this only at document lifecycle
+   * boundaries, so page navigation itself remains lightweight.
+   */
+  /**
+   * Release a specific main canvas from the document-level render lifecycle.
+   *
+   * F6.4.6 — StudioCanvas owns the DOM element, while the Facade owns the
+   * document-level association and the shared renderer owns the underlying
+   * PDF.js task. A component must therefore release its canvas explicitly
+   * during teardown instead of only clearing visible pixels locally.
+   */
+  releaseMainCanvas(
+    canvas: HTMLCanvasElement
+  ): void {
+
+    const ownsActiveCanvas =
+      this.activeRenderCanvas ===
+      canvas;
+
+    if (ownsActiveCanvas) {
+      this.renderSession++;
+
+      this.pendingObjectTransform =
+        null;
+
+      this.activeRenderCanvas =
+        null;
+    }
+
+    /**
+     * Always invalidate the renderer's per-canvas request, even when this
+     * canvas is no longer the active Facade canvas. This prevents a stale
+     * queued PDF.js operation from painting into a DOM element that is being
+     * hidden or destroyed.
+     */
+    this.pageRenderer.clearCanvas(
+      canvas
+    );
+  }
+
+  /**
+   * F6.4.5/F6.4.6 — Invalidate the document-level main canvas render session.
+   */
+  private invalidateMainCanvasRenderSession(): void {
+    this.renderSession++;
+
+    this.pendingObjectTransform =
+      null;
+
+    const canvas =
+      this.activeRenderCanvas;
+
+    this.activeRenderCanvas =
+      null;
+
+    if (!canvas) {
+      return;
+    }
+
+    this.pageRenderer.clearCanvas(
+      canvas
+    );
   }
 
   /**
@@ -789,6 +1085,8 @@ goToLastPage(): void {
    */
   undo(): boolean {
 
+    this.pendingObjectTransform = null;
+
     if (!this.hasDocument()) {
       return false;
     }
@@ -811,6 +1109,8 @@ goToLastPage(): void {
    * F5 — Reapply the next history entry.
    */
   redo(): boolean {
+
+    this.pendingObjectTransform = null;
 
     if (!this.hasDocument()) {
       return false;
@@ -1191,6 +1491,8 @@ goToLastPage(): void {
       StudioHistorySnapshot
   ): void {
 
+    this.pendingObjectTransform = null;
+
     this.pageService.restore(
       snapshot.pages
     );
@@ -1519,6 +1821,120 @@ createDrawingObject(
   );
 
   return selection;
+}
+
+/**
+ * Begin a pointer-driven object transform.
+ *
+ * This captures history once instead of once per pointer-move frame.
+ */
+beginObjectTransform(
+  objectId: string
+): boolean {
+
+  if (!this.hasDocument()) {
+    return false;
+  }
+
+  const object =
+    this.objectService.get(objectId);
+
+  if (
+    !object ||
+    object.pageNumber !== this.currentPage()
+  ) {
+    return false;
+  }
+
+  this.pendingObjectTransform = {
+    objectId,
+    before: this.captureHistorySnapshot()
+  };
+
+  return true;
+}
+
+/**
+ * Apply one live pointer-move frame without creating a history entry.
+ */
+previewObjectBounds(
+  objectId: string,
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+): StudioSelection | null {
+
+  if (!this.hasDocument()) {
+    return null;
+  }
+
+  const object =
+    this.objectService.updateBounds(
+      objectId,
+      bounds
+    );
+
+  if (!object) {
+    return null;
+  }
+
+  const selection: StudioSelection = {
+    objectId: object.id,
+    pageNumber: object.pageNumber,
+    bounds: object.bounds,
+    type: object.type
+  };
+
+  if (object.pageNumber === this.currentPage()) {
+    this.state.setSelection(selection);
+  }
+
+  return selection;
+}
+
+/**
+ * Commit one completed pointer transform as one undoable operation.
+ */
+commitObjectTransform(
+  objectId: string
+): boolean {
+
+  const pending =
+    this.pendingObjectTransform;
+
+  if (
+    !pending ||
+    pending.objectId !== objectId
+  ) {
+    return false;
+  }
+
+  this.pendingObjectTransform = null;
+
+  this.commitHistoryMutation(
+    'Transform object',
+    pending.before
+  );
+
+  return true;
+}
+
+/**
+ * Cancel a live pointer transform after the caller restores its original
+ * bounds. No history entry is produced.
+ */
+cancelObjectTransform(
+  objectId: string
+): void {
+
+  if (
+    this.pendingObjectTransform?.objectId === objectId
+  ) {
+    this.pendingObjectTransform = null;
+  }
 }
 
 updateObjectBounds(

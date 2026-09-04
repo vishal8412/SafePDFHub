@@ -117,6 +117,25 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
   private renderVersion = 0;
 
   /**
+ * True once the component has entered destruction.
+ *
+ * Prevents late asynchronous render completions from updating
+ * component state after Angular has destroyed the canvas view.
+ */
+private destroyed = false;
+
+/**
+ * The render version currently considered the owner of the
+ * main canvas lifecycle.
+ *
+ * This is component-level ownership only. The shared page renderer
+ * remains responsible for cancelling/serializing the underlying
+ * PDF.js work for the canvas.
+ */
+private activeRenderVersion: number | null = null;
+
+
+  /**
    * Actual PDF.js page scale used for the current render.
    *
    * F3 stroke widths are stored in document-normalized page space, so
@@ -140,6 +159,16 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
    * animation-frame render.
    */
   private resizeFrame: number | null = null;
+
+  /**
+   * Last viewport dimensions observed by ResizeObserver.
+   *
+   * This prevents duplicate observer notifications with unchanged geometry
+   * from continuously invalidating the active render during long sessions.
+   */
+  private observedViewportWidth = -1;
+
+  private observedViewportHeight = -1;
 
   /**
    * ----------------------------------------------------------
@@ -373,15 +402,33 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       }
 
       if (
-        !hasDocument
-      ) {
-        this.editingObjectId = null;
-        this.editingText = '';
-        this.editingOriginalText = '';
-        this.editingOriginalStyle = null;
-    this.editingFontSizeInput = '14';
-        return;
-      }
+  !hasDocument
+) {
+  /**
+   * Invalidate ownership of every current or pending render.
+   */
+  this.renderVersion++;
+
+  this.cancelScheduledRender();
+
+  this.activeRenderVersion = null;
+
+  if (this.canvasRef) {
+    this.clearCanvas();
+  }
+
+  this.currentPageRenderScale = 1;
+
+  this.zoomAnchor = null;
+
+  this.editingObjectId = null;
+  this.editingText = '';
+  this.editingOriginalText = '';
+  this.editingOriginalStyle = null;
+  this.editingFontSizeInput = '14';
+
+  return;
+}
 
       if (
         this.editingObjectId
@@ -414,14 +461,16 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
    * VIEW INITIALIZATION
    * ----------------------------------------------------------
    */
-  ngAfterViewInit(): void {
+ngAfterViewInit(): void {
 
-    this.viewReady = true;
+  this.destroyed = false;
 
-    this.observeViewport();
+  this.viewReady = true;
 
-    this.scheduleRender();
-  }
+  this.observeViewport();
+
+  this.scheduleRender();
+}
 
   get activeToolCursorClass(): string {
     switch (this.facade.activeTool()) {
@@ -459,10 +508,22 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
 
   /**
    * Observe the actual Studio viewport.
+   *
+   * F6.4.2 — keep exactly one observer alive and schedule a render only when
+   * the usable viewport geometry actually changes. This prevents duplicate
+   * ResizeObserver callbacks from causing unnecessary render churn in long
+   * Studio sessions.
    */
   private observeViewport(): void {
 
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
+
+    this.observedViewportWidth = -1;
+    this.observedViewportHeight = -1;
+
     if (
+      this.destroyed ||
       !this.viewportRef ||
       typeof ResizeObserver ===
         'undefined'
@@ -470,131 +531,275 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
       return;
     }
 
+    const viewport =
+      this.viewportRef.nativeElement;
+
     this.resizeObserver =
-      new ResizeObserver(() => {
+      new ResizeObserver((entries) => {
 
         if (
-          !this.facade.hasDocument()
-        ) {
-          return;
-        }
-
-        this.scheduleRender();
-      });
-
-    this.resizeObserver.observe(
-      this.viewportRef.nativeElement
-    );
-  }
-
-  /**
-   * ----------------------------------------------------------
-   * RENDER SCHEDULING
-   * ----------------------------------------------------------
-   */
-  private scheduleRender(): void {
-
-    if (
-      typeof window ===
-        'undefined' ||
-      typeof window.requestAnimationFrame !==
-        'function'
-    ) {
-      return;
-    }
-
-    this.cancelScheduledRender();
-
-    this.resizeFrame =
-      window.requestAnimationFrame(() => {
-
-        this.resizeFrame = null;
-
-        if (
+          this.destroyed ||
           !this.viewReady ||
           !this.facade.hasDocument()
         ) {
           return;
         }
 
-        void this.render();
+        const entry =
+          entries.find(
+            (candidate) =>
+              candidate.target === viewport
+          );
+
+        if (!entry) {
+          return;
+        }
+
+        const width =
+          Math.max(
+            0,
+            Math.round(
+              entry.contentRect.width
+            )
+          );
+
+        const height =
+          Math.max(
+            0,
+            Math.round(
+              entry.contentRect.height
+            )
+          );
+
+        if (
+          width === this.observedViewportWidth &&
+          height === this.observedViewportHeight
+        ) {
+          return;
+        }
+
+        this.observedViewportWidth = width;
+        this.observedViewportHeight = height;
+
+        this.scheduleRender();
       });
+
+    this.resizeObserver.observe(
+      viewport
+    );
   }
 
   /**
-   * ----------------------------------------------------------
-   * PDF RENDER
-   * ----------------------------------------------------------
+ * ----------------------------------------------------------
+ * RENDER SCHEDULING
+ * ----------------------------------------------------------
+ */
+private scheduleRender(): void {
+
+  /**
+   * Every new render request invalidates ownership of any older
+   * asynchronous completion immediately.
    */
-  private async render(): Promise<void> {
+  this.renderVersion++;
 
-    if (
-      !this.viewReady ||
-      !this.facade.hasDocument() ||
-      !this.canvasRef ||
-      !this.viewportRef
-    ) {
-      this.currentPageRenderScale = 1;
-      return;
-    }
+  if (
+    this.destroyed ||
+    !this.viewReady ||
+    !this.facade.hasDocument()
+  ) {
+    return;
+  }
 
-    const version =
-      ++this.renderVersion;
+  if (
+    typeof window === 'undefined' ||
+    typeof window.requestAnimationFrame !== 'function'
+  ) {
+    return;
+  }
 
-    try {
+  /**
+   * Only one scheduled browser-frame render may remain pending.
+   */
+  this.cancelScheduledRender();
 
-      const viewport =
-        this.viewportRef.nativeElement;
+  const scheduledVersion =
+    this.renderVersion;
 
-      const viewportWidth =
-        viewport.clientWidth;
+  this.resizeFrame =
+    window.requestAnimationFrame(() => {
 
-      const viewportHeight =
-        viewport.clientHeight;
+      this.resizeFrame = null;
 
+      /**
+       * A newer render request may have arrived while waiting for
+       * the browser animation frame.
+       */
       if (
-        viewportWidth <= 0 ||
-        viewportHeight <= 0
+        this.destroyed ||
+        !this.viewReady ||
+        !this.facade.hasDocument() ||
+        scheduledVersion !== this.renderVersion
       ) {
         return;
       }
 
-      const rendered =
-        await this.facade.renderCurrentPage(
-          this.canvasRef.nativeElement,
-          viewportWidth,
-          viewportHeight
-        );
+      void this.render(
+        scheduledVersion
+      );
+    });
+}
 
-      if (rendered?.scale && Number.isFinite(rendered.scale)) {
-        this.currentPageRenderScale = Math.max(0.0001, rendered.scale);
-      } else {
+/**
+ * ----------------------------------------------------------
+ * PDF RENDER
+ * ----------------------------------------------------------
+ */
+private async render(
+  version: number = this.renderVersion
+): Promise<void> {
+
+  if (
+    this.destroyed ||
+    !this.viewReady ||
+    !this.facade.hasDocument() ||
+    !this.canvasRef ||
+    !this.viewportRef ||
+    version !== this.renderVersion
+  ) {
+    return;
+  }
+
+  /**
+   * Capture the exact canvas that belongs to this render.
+   *
+   * Late asynchronous completions must never update state for a
+   * different canvas instance.
+   */
+  const canvas =
+    this.canvasRef.nativeElement;
+
+  const viewport =
+    this.viewportRef.nativeElement;
+
+  this.activeRenderVersion =
+    version;
+
+  try {
+
+    const viewportWidth =
+      viewport.clientWidth;
+
+    const viewportHeight =
+      viewport.clientHeight;
+
+    if (
+      viewportWidth <= 0 ||
+      viewportHeight <= 0
+    ) {
+      /**
+       * A hidden/collapsed viewport must not keep stale pixels alive.
+       * Clear only the canvas still owned by this render.
+       */
+      if (
+        version === this.renderVersion &&
+        this.canvasRef?.nativeElement === canvas
+      ) {
+        /**
+         * F6.4.6 — Do not only clear pixels locally. Release the canvas from
+         * the Facade/renderer ownership chain so an in-flight PDF.js render
+         * cannot repaint it after the viewport has been hidden.
+         */
+        this.facade.releaseMainCanvas(
+          canvas
+        );
         this.currentPageRenderScale = 1;
       }
 
-      /**
-       * IMPORTANT:
-       *
-       * Never allow an obsolete render to modify the
-       * current viewport position.
-       */
-      if (
-        version !== this.renderVersion
-      ) {
-        return;
-      }
+      return;
+    }
 
-      this.restoreZoomAnchor();
-      this.clampPalettePositions();
-
-    } catch (error: unknown) {
-
-      console.error(
-        '[SafePDFHub Studio] PDF render failed:',
-        error
+    const rendered =
+      await this.facade.renderCurrentPage(
+        canvas,
+        viewportWidth,
+        viewportHeight
       );
+
+    /**
+     * --------------------------------------------------------
+     * RENDER OWNERSHIP CHECK
+     * --------------------------------------------------------
+     *
+     * This MUST happen before updating any component state.
+     *
+     * An older render can complete after a newer navigation,
+     * zoom, rotation, page-management operation, or resize.
+     */
+    if (
+      this.destroyed ||
+      !this.viewReady ||
+      version !== this.renderVersion ||
+      this.canvasRef?.nativeElement !== canvas
+    ) {
+      return;
+    }
+
+    /**
+     * Only the current owner may update render-dependent state.
+     */
+    if (
+      rendered?.scale &&
+      Number.isFinite(rendered.scale)
+    ) {
+      this.currentPageRenderScale =
+        Math.max(
+          0.0001,
+          rendered.scale
+        );
+    } else {
+      this.currentPageRenderScale = 1;
+    }
+
+    /**
+     * Only the render that still owns the canvas may restore
+     * viewport state or reposition floating palettes.
+     */
+    this.restoreZoomAnchor();
+    this.clampPalettePositions();
+
+  } catch (error: unknown) {
+
+    /**
+     * Obsolete or destroyed renders are intentionally ignored.
+     *
+     * The shared renderer may also reject when its underlying PDF
+     * render is cancelled because a newer render took ownership.
+     */
+    if (
+      this.destroyed ||
+      version !== this.renderVersion
+    ) {
+      return;
+    }
+
+    console.error(
+      '[SafePDFHub Studio] PDF render failed:',
+      error
+    );
+
+  } finally {
+
+    /**
+     * Never allow an older render to clear ownership belonging
+     * to a newer render.
+     */
+    if (
+      this.activeRenderVersion === version
+    ) {
+      this.activeRenderVersion = null;
     }
   }
+}
 
   /**
    * ----------------------------------------------------------
@@ -3371,6 +3576,14 @@ setTextAlign(
     event.preventDefault();
     event.stopPropagation();
 
+    if (
+      !this.facade.beginObjectTransform(
+        object.id
+      )
+    ) {
+      return;
+    }
+
     this.objectInteraction = {
       mode,
       objectId: object.id,
@@ -3446,7 +3659,7 @@ setTextAlign(
           );
 
     const updated =
-      this.objectService.updateBounds(
+      this.facade.previewObjectBounds(
         interaction.objectId,
         bounds
       );
@@ -3461,12 +3674,19 @@ setTextAlign(
      * every drag frame.
      */
     this.facade.selectObject(
-      this.selectionEngine.toSelection(
-        updated
-      )
-    );
+  updated
+);
 
-    this.syncSelectionStyleControls(updated);
+const updatedObject =
+  this.objectService.get(
+    updated.objectId
+  );
+
+if (updatedObject) {
+  this.syncSelectionStyleControls(
+    updatedObject
+  );
+}
   }
 
   private calculateMoveBounds(
@@ -3943,10 +4163,15 @@ setTextAlign(
       }
     }
 
-    // Restore the original bounds after an interrupted drag/resize.
-    this.facade.updateObjectBounds(
+    // Restore the original bounds after an interrupted drag/resize without
+    // creating a new history entry.
+    this.facade.previewObjectBounds(
       interaction.objectId,
       interaction.startBounds
+    );
+
+    this.facade.cancelObjectTransform(
+      interaction.objectId
     );
   }
 
@@ -3984,6 +4209,10 @@ setTextAlign(
          */
       }
     }
+
+    this.facade.commitObjectTransform(
+      interaction.objectId
+    );
 
     /**
      * A resize can legitimately move focus away from the textarea.
@@ -4311,6 +4540,26 @@ private clientToPagePoint(clientX: number,clientY: number,pageRect: DOMRect): {
       /* Pointer capture may already be released. */
     }
   }
+
+  private clearCanvas(): void {
+  const canvas = this.canvasRef?.nativeElement;
+
+  if (!canvas) {
+    return;
+  }
+
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    return;
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Release the backing store so the canvas does not retain unnecessary memory.
+  canvas.width = 0;
+  canvas.height = 0;
+}
 
   /**
    * Stop panning.
@@ -4935,52 +5184,92 @@ onWindowKeyDown(
     this.resizeFrame = null;
   }
 
+/**
+ * ----------------------------------------------------------
+ * DESTROY
+ * ----------------------------------------------------------
+ */
+ngOnDestroy(): void {
+
   /**
-   * ----------------------------------------------------------
-   * DESTROY
-   * ----------------------------------------------------------
+   * Mark destruction first so any asynchronous render completion
+   * immediately becomes non-authoritative.
    */
-  ngOnDestroy(): void {
+  this.destroyed = true;
 
-    this.renderVersion++;
+  /**
+   * Invalidate every pending and active component-level render.
+   */
+  this.renderVersion++;
 
-    this.cancelScheduledRender();
+  this.activeRenderVersion = null;
 
-    this.resizeObserver?.disconnect();
+  this.viewReady = false;
 
-    this.isPanning = false;
+  /**
+   * Cancel a pending requestAnimationFrame render.
+   */
+  this.cancelScheduledRender();
 
-    this.panPointerId = null;
+  /**
+   * Stop future resize notifications.
+   */
+  this.resizeObserver?.disconnect();
+  this.resizeObserver = undefined;
 
-    this.spacePressed = false;
+  this.observedViewportWidth = -1;
+  this.observedViewportHeight = -1;
 
-    this.objectInteraction = null;
-    this.drawingInteraction = null;
-    this.paletteDrag = null;
+  /**
+   * Clear interaction state.
+   */
+  this.isPanning = false;
+  this.panPointerId = null;
 
-    this.pendingImagePlacement = null;
-    this.pendingImageReplacementId = null;
+  this.spacePressed = false;
 
-    this.editingObjectId = null;
-    this.editingText = '';
-    this.editingOriginalText = '';
-    this.editingOriginalStyle = null;
-    this.editingFontSizeInput = '14';
+  this.objectInteraction = null;
+  this.drawingInteraction = null;
+  this.paletteDrag = null;
 
-    this.zoomAnchor = null;
+  this.pendingImagePlacement = null;
+  this.pendingImageReplacementId = null;
 
-    this.stageRef?.nativeElement.classList.remove(
-      'studio-canvas__stage--panning'
-    );
+  this.editingObjectId = null;
+  this.editingText = '';
+  this.editingOriginalText = '';
+  this.editingOriginalStyle = null;
+  this.editingFontSizeInput = '14';
 
+  this.zoomAnchor = null;
+
+  this.stageRef?.nativeElement.classList.remove(
+    'studio-canvas__stage--panning'
+  );
+
+  /**
+   * F6.4.6 — Release the canvas through the same ownership boundary used for
+   * document replacement and close. Local pixel clearing alone is insufficient
+   * because the shared renderer may still own an asynchronous PDF.js task.
+   */
   try {
-    if (this.canvasRef) {
-      this.facade.clearCanvas(this.canvasRef.nativeElement);
+
+    const canvas =
+      this.canvasRef?.nativeElement;
+
+    if (canvas) {
+      this.facade.releaseMainCanvas(
+        canvas
+      );
     }
+
   } catch (error: unknown) {
-    console.warn('[SafePDFHub Studio] Canvas cleanup skipped:',error);
+
+    console.warn(
+      '[SafePDFHub Studio] Canvas release skipped:',
+      error
+    );
   }
-  
 }
 
 }

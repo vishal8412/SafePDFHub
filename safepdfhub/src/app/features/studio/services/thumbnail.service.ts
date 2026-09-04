@@ -10,12 +10,14 @@ import type {
 interface ActiveThumbnailRender {
   cancel: () => void;
   pdfId: number;
+  requestVersion: number;
 }
 
 
 interface CachedThumbnail {
   width: number;
   height: number;
+  bytes: number;
   bitmap: ImageBitmap;
   lastUsed: number;
 }
@@ -48,6 +50,19 @@ export class ThumbnailService {
     new WeakMap<
       HTMLCanvasElement,
       ActiveThumbnailRender
+    >();
+
+  /**
+   * Per-canvas request ownership.
+   *
+   * A render can still be awaiting pdf.getPage() before a PDF.js render task
+   * exists. This token prevents that older request from starting later on the
+   * same canvas after a newer request has already taken ownership.
+   */
+  private readonly canvasRequestVersions =
+    new WeakMap<
+      HTMLCanvasElement,
+      number
     >();
 
   /**
@@ -135,6 +150,17 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
    */
   private readonly MAX_CACHE_ENTRIES = 60;
 
+  /**
+   * Approximate memory ceiling for cached ImageBitmaps.
+   *
+   * Entry-count limits alone are not sufficient because one large rotated
+   * thumbnail can consume far more memory than another entry.
+   */
+  private readonly MAX_CACHE_BYTES =
+    96 * 1024 * 1024;
+
+  private cacheBytes = 0;
+
 
   /**
    * Maximum DPR for thumbnail rendering.
@@ -156,14 +182,20 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
   ): Promise<void> {
 
     /**
-     * Always cancel a render currently using this canvas.
+     * Every call immediately takes ownership of the canvas.
+     *
+     * This must happen before awaiting pdf.getPage(). Otherwise an older call
+     * that is still waiting for getPage() could start rendering after a newer
+     * call already owns the same canvas.
+     */
+    const requestVersion =
+      this.beginCanvasRequest(canvas);
+
+    /**
+     * Cancel any active PDF.js render that already owns this canvas.
      */
     this.cancel(canvas);
 
-
-    /**
-     * Validate page number before doing any work.
-     */
     if (
       pageNumber < 1 ||
       pageNumber > pdf.numPages
@@ -173,10 +205,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
       );
     }
 
-
-    /**
-     * Normalize requested width.
-     */
     const safeTargetWidth =
       Math.max(
         96,
@@ -186,12 +214,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         )
       );
 
-
-    /**
-     * --------------------------------------------------------
-     * CACHE LOOKUP
-     * --------------------------------------------------------
-     */
     const cacheKey =
       this.createCacheKey(
         pdf,
@@ -203,51 +225,82 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
     const pdfGeneration =
       this.getPdfGeneration(pdf);
 
-
-    const cached =
-      this.cache.get(cacheKey);
-
-
-    if (cached) {
-
-      /**
-       * Refresh LRU timestamp.
-       */
-      cached.lastUsed =
-        Date.now();
-
-
-      /**
-       * Draw the cached bitmap.
-       */
-      this.drawCachedThumbnail(
-        cached,
-        canvas
-      );
-
-      return;
-    }
-
-
-    /**
-     * --------------------------------------------------------
-     * FIRST RENDER
-     * --------------------------------------------------------
-     */
-    const page =
-      await pdf.getPage(pageNumber);
-
-    // The PDF may have been replaced or closed while getPage()
-    // was awaiting. Do not continue stale work.
     if (
-      !this.isPdfGenerationCurrent(
-        pdf,
-        pdfGeneration
+      !this.isCanvasRequestCurrent(
+        canvas,
+        requestVersion
       )
     ) {
       return;
     }
 
+    const cached =
+      this.cache.get(cacheKey);
+
+    if (cached) {
+
+      if (
+        !this.isCanvasRequestCurrent(
+          canvas,
+          requestVersion
+        )
+      ) {
+        return;
+      }
+
+      cached.lastUsed =
+        Date.now();
+
+      try {
+        this.drawCachedThumbnail(
+          cached,
+          canvas
+        );
+      } catch (error: unknown) {
+        /**
+         * A bitmap can become unusable if the browser releases its backing
+         * resource. Remove only this bad entry and fall through to a fresh
+         * PDF.js render.
+         */
+        this.removeCacheEntry(cacheKey);
+
+        if (
+          !this.isCanvasRequestCurrent(
+            canvas,
+            requestVersion
+          )
+        ) {
+          return;
+        }
+      }
+
+      if (
+        this.cache.has(cacheKey) &&
+        this.isCanvasRequestCurrent(
+          canvas,
+          requestVersion
+        )
+      ) {
+        return;
+      }
+    }
+
+    const page =
+      await pdf.getPage(pageNumber);
+
+    if (
+      !this.isPdfGenerationCurrent(
+        pdf,
+        pdfGeneration
+      ) ||
+      !this.isCanvasRequestCurrent(
+        canvas,
+        requestVersion
+      )
+    ) {
+      page.cleanup();
+      return;
+    }
 
     try {
 
@@ -257,11 +310,9 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
           rotation
         });
 
-
       const scale =
         safeTargetWidth /
         baseViewport.width;
-
 
       const viewport =
         page.getViewport({
@@ -269,10 +320,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
           rotation
         });
 
-
       const outputScale =
         this.getDevicePixelRatio();
-
 
       const context =
         canvas.getContext(
@@ -282,17 +331,25 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
           }
         );
 
-
       if (!context) {
         throw new Error(
           'Unable to create thumbnail canvas context.'
         );
       }
 
+      if (
+        !this.isPdfGenerationCurrent(
+          pdf,
+          pdfGeneration
+        ) ||
+        !this.isCanvasRequestCurrent(
+          canvas,
+          requestVersion
+        )
+      ) {
+        return;
+      }
 
-      /**
-       * Physical bitmap dimensions.
-       */
       canvas.width =
         Math.max(
           1,
@@ -301,7 +358,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
             outputScale
           )
         );
-
 
       canvas.height =
         Math.max(
@@ -312,21 +368,12 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
           )
         );
 
-
-      /**
-       * Logical CSS dimensions.
-       */
       canvas.style.width =
         `${Math.ceil(viewport.width)}px`;
-
 
       canvas.style.height =
         `${Math.ceil(viewport.height)}px`;
 
-
-      /**
-       * Reset previous drawing state.
-       */
       context.setTransform(
         1,
         0,
@@ -336,7 +383,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         0
       );
 
-
       context.clearRect(
         0,
         0,
@@ -344,10 +390,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         canvas.height
       );
 
-
-      /**
-       * PDF.js HiDPI transform.
-       */
       const transform =
         outputScale !== 1
           ? [
@@ -360,10 +402,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
             ]
           : undefined;
 
-
-      /**
-       * Start PDF.js rendering.
-       */
       const renderTask =
         page.render({
           canvasContext: context,
@@ -371,17 +409,32 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
           transform
         });
 
-
-      /**
-       * Track the active render for this canvas.
-       */
       const pdfId =
         this.getPdfId(pdf);
 
       const activeRender: ActiveThumbnailRender = {
         cancel: () => renderTask.cancel(),
-        pdfId
+        pdfId,
+        requestVersion
       };
+
+      /**
+       * A newer request can arrive between renderTask creation and tracking.
+       * Do not let this stale task become the active owner.
+       */
+      if (
+        !this.isPdfGenerationCurrent(
+          pdf,
+          pdfGeneration
+        ) ||
+        !this.isCanvasRequestCurrent(
+          canvas,
+          requestVersion
+        )
+      ) {
+        renderTask.cancel();
+        return;
+      }
 
       this.activeRenders.set(
         canvas,
@@ -392,7 +445,9 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         this.activeCanvasesByPdf.get(pdfId);
 
       if (!activePdfCanvases) {
-        activePdfCanvases = new Set<HTMLCanvasElement>();
+        activePdfCanvases =
+          new Set<HTMLCanvasElement>();
+
         this.activeCanvasesByPdf.set(
           pdfId,
           activePdfCanvases
@@ -400,7 +455,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
       }
 
       activePdfCanvases.add(canvas);
-
 
       try {
 
@@ -410,10 +464,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         error: unknown
       ) {
 
-        /**
-         * A render cancelled because another render started
-         * is normal lifecycle behavior.
-         */
         if (
           this.isRenderCancellation(
             error
@@ -429,9 +479,9 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         const active =
           this.activeRenders.get(canvas);
 
-        // Only clean up the PDF index if this render still owns
-        // the canvas. A newer render may already have replaced it.
-        if (active === activeRender) {
+        if (
+          active === activeRender
+        ) {
           this.activeRenders.delete(canvas);
 
           const canvases =
@@ -439,59 +489,49 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
 
           canvases?.delete(canvas);
 
-          if (canvases?.size === 0) {
+          if (
+            canvases?.size === 0
+          ) {
             this.activeCanvasesByPdf.delete(pdfId);
           }
         }
       }
 
+      if (
+        !this.isPdfGenerationCurrent(
+          pdf,
+          pdfGeneration
+        ) ||
+        !this.isCanvasRequestCurrent(
+          canvas,
+          requestVersion
+        )
+      ) {
+        return;
+      }
 
-      /**
-       * ------------------------------------------------------
-       * CACHE THE FINISHED THUMBNAIL
-       * ------------------------------------------------------
-       *
-       * Convert the rendered canvas into an ImageBitmap.
-       *
-       * ImageBitmap is much safer for reuse than storing the
-       * original HTML canvas element.
-       */
       const bitmap =
-        await this.createBitmap(
-          canvas
-        );
-
+        await this.createBitmap(canvas);
 
       if (!bitmap) {
         return;
       }
 
-      // createImageBitmap() is asynchronous too. Discard the bitmap
-      // if this PDF was invalidated while it was being created.
       if (
         !this.isPdfGenerationCurrent(
           pdf,
           pdfGeneration
+        ) ||
+        !this.isCanvasRequestCurrent(
+          canvas,
+          requestVersion
         )
       ) {
         bitmap.close();
         return;
       }
 
-
-      /**
-       * Replace an existing entry if necessary.
-       */
-      const previous =
-        this.cache.get(
-          cacheKey
-        );
-
-
-      previous?.bitmap.close();
-
-
-      this.cache.set(
+      this.setCacheEntry(
         cacheKey,
         {
           width:
@@ -504,6 +544,11 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
               viewport.height
             ),
 
+          bytes:
+            this.estimateBitmapBytes(
+              bitmap
+            ),
+
           bitmap,
 
           lastUsed:
@@ -511,10 +556,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         }
       );
 
-
-      /**
-       * Keep the cache bounded.
-       */
       this.evictOldEntries();
 
     } finally {
@@ -524,11 +565,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
   }
 
 
-  /**
-   * ----------------------------------------------------------
-   * DRAW CACHED THUMBNAIL
-   * ----------------------------------------------------------
-   */
   private drawCachedThumbnail(
     cached: CachedThumbnail,
     canvas: HTMLCanvasElement
@@ -642,6 +678,129 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
 
   /**
    * ----------------------------------------------------------
+   * CANVAS REQUEST OWNERSHIP
+   * ----------------------------------------------------------
+   */
+  private beginCanvasRequest(
+    canvas: HTMLCanvasElement
+  ): number {
+
+    const next =
+      (this.canvasRequestVersions.get(canvas) ?? 0) +
+      1;
+
+    this.canvasRequestVersions.set(
+      canvas,
+      next
+    );
+
+    return next;
+  }
+
+  private isCanvasRequestCurrent(
+    canvas: HTMLCanvasElement,
+    requestVersion: number
+  ): boolean {
+    return (
+      this.canvasRequestVersions.get(canvas) ===
+      requestVersion
+    );
+  }
+
+
+  /**
+   * ----------------------------------------------------------
+   * CACHE MEMORY ACCOUNTING
+   * ----------------------------------------------------------
+   */
+  private estimateBitmapBytes(
+    bitmap: ImageBitmap
+  ): number {
+
+    return (
+      Math.max(
+        1,
+        bitmap.width
+      ) *
+      Math.max(
+        1,
+        bitmap.height
+      ) *
+      4
+    );
+  }
+
+  private setCacheEntry(
+    key: string,
+    entry: CachedThumbnail
+  ): void {
+
+    const previous =
+      this.cache.get(key);
+
+    if (previous) {
+      this.cacheBytes =
+        Math.max(
+          0,
+          this.cacheBytes -
+          previous.bytes
+        );
+
+      this.closeBitmap(
+        previous.bitmap
+      );
+    }
+
+    this.cache.set(
+      key,
+      entry
+    );
+
+    this.cacheBytes +=
+      entry.bytes;
+  }
+
+  private removeCacheEntry(
+    key: string
+  ): void {
+
+    const entry =
+      this.cache.get(key);
+
+    if (!entry) {
+      return;
+    }
+
+    this.cache.delete(key);
+
+    this.cacheBytes =
+      Math.max(
+        0,
+        this.cacheBytes -
+        entry.bytes
+      );
+
+    this.closeBitmap(
+      entry.bitmap
+    );
+  }
+
+  private closeBitmap(
+    bitmap: ImageBitmap
+  ): void {
+
+    try {
+      bitmap.close();
+    } catch {
+      /**
+       * ImageBitmap.close() is best-effort cleanup.
+       */
+    }
+  }
+
+
+  /**
+   * ----------------------------------------------------------
    * CACHE KEY
    * ----------------------------------------------------------
    */
@@ -727,7 +886,9 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
 
     while (
       this.cache.size >
-      this.MAX_CACHE_ENTRIES
+        this.MAX_CACHE_ENTRIES ||
+      this.cacheBytes >
+        this.MAX_CACHE_BYTES
     ) {
 
       let oldestKey:
@@ -735,7 +896,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
 
       let oldestTime =
         Number.POSITIVE_INFINITY;
-
 
       for (
         const [
@@ -748,7 +908,6 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
           entry.lastUsed <
           oldestTime
         ) {
-
           oldestTime =
             entry.lastUsed;
 
@@ -757,24 +916,13 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
         }
       }
 
-
       if (
         oldestKey === null
       ) {
         return;
       }
 
-
-      const oldest =
-        this.cache.get(
-          oldestKey
-        );
-
-
-      oldest?.bitmap.close();
-
-
-      this.cache.delete(
+      this.removeCacheEntry(
         oldestKey
       );
     }
@@ -894,87 +1042,11 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
    * the generation token so late async completions are ignored.
    */
   clearPdf(
-  pdf: PDFDocumentProxy
-): void {
+    pdf: PDFDocumentProxy
+  ): void {
 
-  const pdfId =
-    this.getPdfId(pdf);
-
-  const currentGeneration =
-    this.getPdfGeneration(pdf);
-
-  this.pdfGenerations.set(
-    pdf,
-    currentGeneration + 1
-  );
-
-  const canvases =
-    this.activeCanvasesByPdf.get(
-      pdfId
-    );
-
-  if (canvases) {
-
-    for (
-      const canvas of Array.from(canvases)
-    ) {
-      this.cancel(canvas);
-    }
-
-    this.activeCanvasesByPdf.delete(
-      pdfId
-    );
-  }
-
-  const prefix =
-    `${pdfId}:`;
-
-  for (
-    const [
-      key,
-      entry
-    ] of this.cache
-  ) {
-
-    if (!key.startsWith(prefix)) {
-      continue;
-    }
-
-    entry.bitmap.close();
-
-    this.cache.delete(
-      key
-    );
-  }
-
-  this.registeredPdfs.delete(
-    pdf
-  );
-}
-
-
-  /**
-   * ----------------------------------------------------------
-   * CLEAR ALL CACHE
-   * ----------------------------------------------------------
-   *
-   * Useful when a completely new document replaces the old
-   * document and we deliberately want to release all cached
-   * thumbnail memory.
-   */
-  clearCache(): void {
-
-  /**
-   * Invalidate every registered PDF first.
-   *
-   * This prevents asynchronous thumbnail renders
-   * from repopulating the cache after the reset.
-   */
-  for (
-    const pdf of Array.from(
-      this.registeredPdfs
-    )
-  ) {
+    const pdfId =
+      this.getPdfId(pdf);
 
     const currentGeneration =
       this.getPdfGeneration(pdf);
@@ -984,13 +1056,8 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
       currentGeneration + 1
     );
 
-    const pdfId =
-      this.getPdfId(pdf);
-
     const canvases =
-      this.activeCanvasesByPdf.get(
-        pdfId
-      );
+      this.activeCanvasesByPdf.get(pdfId);
 
     if (canvases) {
 
@@ -999,27 +1066,102 @@ private readonly registeredPdfs = new Set<PDFDocumentProxy>();
           canvases
         )
       ) {
+        /**
+         * Invalidate pre-render ownership too, not only active PDF.js tasks.
+         */
+        this.beginCanvasRequest(canvas);
         this.cancel(canvas);
       }
 
-      this.activeCanvasesByPdf.delete(
-        pdfId
-      );
+      this.activeCanvasesByPdf.delete(pdfId);
     }
+
+    const prefix =
+      `${pdfId}:`;
+
+    for (
+      const key of Array.from(
+        this.cache.keys()
+      )
+    ) {
+      if (
+        key.startsWith(prefix)
+      ) {
+        this.removeCacheEntry(key);
+      }
+    }
+
+    this.registeredPdfs.delete(pdf);
   }
+
 
   /**
-   * Release every cached ImageBitmap.
+   * ----------------------------------------------------------
+   * CLEAR ALL CACHE
+   * ----------------------------------------------------------
    */
-  for (
-    const entry of this.cache.values()
-  ) {
+  clearCache(): void {
 
-    entry.bitmap.close();
+    /**
+     * Invalidate every known PDF first so asynchronous getPage(),
+     * renderTask and createImageBitmap completions become non-authoritative.
+     */
+    for (
+      const pdf of Array.from(
+        this.registeredPdfs
+      )
+    ) {
+
+      const currentGeneration =
+        this.getPdfGeneration(pdf);
+
+      this.pdfGenerations.set(
+        pdf,
+        currentGeneration + 1
+      );
+    }
+
+    /**
+     * Invalidate every active canvas request before cancelling PDF.js tasks.
+     */
+    for (
+      const [
+        pdfId,
+        canvases
+      ] of Array.from(
+        this.activeCanvasesByPdf.entries()
+      )
+    ) {
+
+      for (
+        const canvas of Array.from(
+          canvases
+        )
+      ) {
+        this.beginCanvasRequest(canvas);
+        this.cancel(canvas);
+      }
+
+      this.activeCanvasesByPdf.delete(pdfId);
+    }
+
+    for (
+      const key of Array.from(
+        this.cache.keys()
+      )
+    ) {
+      this.removeCacheEntry(key);
+    }
+
+    this.cacheBytes = 0;
+
+    /**
+     * This Set is intentionally strong. Leaving old PDF proxies here would
+     * retain replaced documents during a long session even after their cache
+     * entries were released.
+     */
+    this.registeredPdfs.clear();
   }
-
-  this.cache.clear();
-}
 
 
   /**

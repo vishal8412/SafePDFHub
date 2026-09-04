@@ -32,14 +32,23 @@ interface StudioHistoryEntry {
 
   readonly after:
     StudioHistorySnapshot;
+
+  /**
+   * Approximate serialized payload retained by this entry.
+   *
+   * F6.3 uses this to bound history memory in addition to the entry count.
+   */
+  readonly byteSize:
+    number;
 }
 
 /**
- * F5 — Studio history manager.
+ * F6.3 — Studio history manager.
  *
- * The history stores immutable before/after snapshots instead of trying to
- * reverse each command manually. This makes page operations deterministic and
- * also gives future object editing features the same history foundation.
+ * History stores immutable before/after snapshots. The service now also keeps
+ * the retained snapshot payload bounded so image-heavy editing sessions cannot
+ * grow indefinitely merely because every mutation captured the full document
+ * object collection.
  */
 @Injectable({
   providedIn: 'root'
@@ -69,15 +78,28 @@ export class StudioHistoryService {
     );
 
   /**
-   * Keep history bounded so a very long editing session does not grow without
-   * limit. Full snapshots are deliberate because correctness is more important
-   * than command replay complexity at this stage.
+   * Count cap remains useful for ordinary small documents.
    */
   private readonly maxEntries = 100;
+
+  /**
+   * Approximate total serialized history retained by this service.
+   *
+   * Snapshot cloning is intentionally simple and deterministic, but images can
+   * contain large data URLs. The byte cap prevents the history from retaining
+   * an unbounded number of those copies.
+   */
+  private readonly maxBytes =
+    32 * 1024 * 1024;
+
+  private undoBytes = 0;
+  private redoBytes = 0;
 
   reset(): void {
     this.undoStack.set([]);
     this.redoStack.set([]);
+    this.undoBytes = 0;
+    this.redoBytes = 0;
   }
 
   record(
@@ -86,43 +108,47 @@ export class StudioHistoryService {
     after: StudioHistorySnapshot
   ): void {
 
-    if (
-      this.sameSnapshot(
-        before,
-        after
-      )
-    ) {
+    const beforeJson =
+      this.serializeSnapshot(before);
+
+    const afterJson =
+      this.serializeSnapshot(after);
+
+    if (beforeJson === afterJson) {
       return;
     }
 
+    const entry: StudioHistoryEntry = {
+      label,
+      before:
+        this.cloneFromJson(beforeJson),
+      after:
+        this.cloneFromJson(afterJson),
+      byteSize:
+        beforeJson.length +
+        afterJson.length
+    };
+
     const nextUndo = [
       ...this.undoStack(),
-      {
-        label,
-        before:
-          this.cloneSnapshot(before),
-        after:
-          this.cloneSnapshot(after)
-      }
+      entry
     ];
 
     const boundedUndo =
-      nextUndo.length >
-        this.maxEntries
-        ? nextUndo.slice(
-            nextUndo.length -
-              this.maxEntries
-          )
-        : nextUndo;
+      this.trimUndo(nextUndo);
 
     this.undoStack.set(
-      boundedUndo
+      boundedUndo.entries
     );
+
+    this.undoBytes =
+      boundedUndo.bytes;
 
     /**
      * A new mutation creates a new history branch.
      */
     this.redoStack.set([]);
+    this.redoBytes = 0;
   }
 
   undo(): StudioHistorySnapshot | null {
@@ -143,12 +169,25 @@ export class StudioHistoryService {
       entries.slice(0, -1)
     );
 
-    this.redoStack.update(
-      stack => [
-        ...stack,
-        entry
-      ]
+    this.undoBytes = Math.max(
+      0,
+      this.undoBytes - entry.byteSize
     );
+
+    const nextRedo = [
+      ...this.redoStack(),
+      entry
+    ];
+
+    const boundedRedo =
+      this.trimRedo(nextRedo);
+
+    this.redoStack.set(
+      boundedRedo.entries
+    );
+
+    this.redoBytes =
+      boundedRedo.bytes;
 
     return this.cloneSnapshot(
       entry.before
@@ -173,72 +212,123 @@ export class StudioHistoryService {
       entries.slice(0, -1)
     );
 
-    this.undoStack.update(
-      stack => [
-        ...stack,
-        entry
-      ]
+    this.redoBytes = Math.max(
+      0,
+      this.redoBytes - entry.byteSize
     );
+
+    const nextUndo = [
+      ...this.undoStack(),
+      entry
+    ];
+
+    const boundedUndo =
+      this.trimUndo(nextUndo);
+
+    this.undoStack.set(
+      boundedUndo.entries
+    );
+
+    this.undoBytes =
+      boundedUndo.bytes;
 
     return this.cloneSnapshot(
       entry.after
     );
   }
 
-  private sameSnapshot(
-    left: StudioHistorySnapshot,
-    right: StudioHistorySnapshot
-  ): boolean {
+  private trimUndo(
+    entries: readonly StudioHistoryEntry[]
+  ): {
+    entries: readonly StudioHistoryEntry[];
+    bytes: number;
+  } {
 
-    return (
-      left.currentPage ===
-        right.currentPage &&
-      JSON.stringify(
-        left.pages
-      ) ===
-        JSON.stringify(
-          right.pages
-        ) &&
-      JSON.stringify(
-        left.objects
-      ) ===
-        JSON.stringify(
-          right.objects
-        )
+    const mutable = [...entries];
+    let bytes =
+      this.sumBytes(mutable);
+
+    while (
+      mutable.length > this.maxEntries ||
+      (
+        bytes > this.maxBytes &&
+        mutable.length > 1
+      )
+    ) {
+      const removed =
+        mutable.shift();
+
+      bytes -=
+        removed?.byteSize ?? 0;
+    }
+
+    return {
+      entries: mutable,
+      bytes: Math.max(0, bytes)
+    };
+  }
+
+  private trimRedo(
+    entries: readonly StudioHistoryEntry[]
+  ): {
+    entries: readonly StudioHistoryEntry[];
+    bytes: number;
+  } {
+
+    const mutable = [...entries];
+    let bytes =
+      this.sumBytes(mutable);
+
+    while (
+      mutable.length > this.maxEntries ||
+      (
+        bytes > this.maxBytes &&
+        mutable.length > 1
+      )
+    ) {
+      /**
+       * Remove the oldest redo state and preserve the nearest redo actions.
+       */
+      const removed =
+        mutable.shift();
+
+      bytes -=
+        removed?.byteSize ?? 0;
+    }
+
+    return {
+      entries: mutable,
+      bytes: Math.max(0, bytes)
+    };
+  }
+
+  private sumBytes(
+    entries: readonly StudioHistoryEntry[]
+  ): number {
+    return entries.reduce(
+      (total, entry) =>
+        total + entry.byteSize,
+      0
     );
+  }
+
+  private serializeSnapshot(
+    snapshot: StudioHistorySnapshot
+  ): string {
+    return JSON.stringify(snapshot);
+  }
+
+  private cloneFromJson(
+    serialized: string
+  ): StudioHistorySnapshot {
+    return JSON.parse(serialized) as StudioHistorySnapshot;
   }
 
   private cloneSnapshot(
     snapshot: StudioHistorySnapshot
   ): StudioHistorySnapshot {
-
-    return {
-      pages:
-        this.cloneValue(
-          snapshot.pages
-        ),
-
-      objects:
-        this.cloneValue(
-          snapshot.objects
-        ),
-
-      currentPage:
-        snapshot.currentPage
-    };
-  }
-
-  /**
-   * Studio page/object models are persisted as plain data. JSON cloning keeps
-   * every history entry isolated without sharing mutable nested style/point
-   * objects with the live editor.
-   */
-  private cloneValue<T>(
-    value: T
-  ): T {
-
-    return JSON.parse(
-      JSON.stringify(value)
-    ) as T;
+    return this.cloneFromJson(
+      this.serializeSnapshot(snapshot)
+    );
   }
 }
