@@ -80,6 +80,9 @@ export class StudioPdfExportService {
       PDFFont
     >();
 
+    // F7.2: Studio comments are review metadata. They remain in Studio state
+    // and history but are not flattened into visible PDF content. This avoids
+    // silently converting private review notes into document artwork.
     const editableObjects =
       objects.filter(
         object =>

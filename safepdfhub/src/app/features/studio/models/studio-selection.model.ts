@@ -100,16 +100,37 @@ export interface StudioDrawingData {
   readonly style: StudioDrawingStyle;
 }
 
+/** F7.2 — Persistent Studio comment/annotation payload. */
+
+export interface StudioCommentData {
+  readonly content: string;
+  readonly author: string;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly resolved: boolean;
+}
+
 export interface StudioObject {
   readonly id: string;
   readonly pageNumber: number;
   readonly type: StudioObjectType;
   readonly bounds: StudioObjectBounds;
+
   readonly text?: string;
   readonly textStyle?: StudioTextStyle;
+
   readonly image?: StudioImageData;
+
   readonly shape?: StudioShapeData;
+
   readonly drawing?: StudioDrawingData;
+
+  /**
+   * F7.2 — Comment/annotation data.
+   *
+   * Present only when type === 'comment'.
+   */
+  readonly comment?: StudioCommentData;
 }
 
 export interface StudioSelection {

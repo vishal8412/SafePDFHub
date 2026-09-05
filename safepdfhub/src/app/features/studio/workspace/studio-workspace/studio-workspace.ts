@@ -7,7 +7,8 @@ import {
   ViewChild,
   ViewChildren,
   effect,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 
 import { StudioCanvas } from '../../canvas/studio-canvas/studio-canvas';
@@ -77,6 +78,10 @@ private readonly pagesList!:
   readonly currentPage =
     this.facade.currentPage;
 
+  /** F7.2 — Sidebar can switch between page navigation and review comments. */
+  readonly sidebarTab = signal<'pages' | 'comments'>('pages');
+  readonly comments = this.facade.comments;
+
   constructor() {
 
     /**
@@ -143,6 +148,23 @@ private readonly pagesList!:
    * All page navigation goes through the Facade so
    * the canvas, status bar and sidebar share one state.
    */
+  setSidebarTab(tab: 'pages' | 'comments'): void {
+    this.sidebarTab.set(tab);
+  }
+
+  selectComment(objectId: string): void {
+    const comment = this.facade.comments().find(item => item.id === objectId);
+    if (!comment) { return; }
+    this.facade.goToPage(comment.pageNumber);
+    this.facade.selectObject({
+      objectId: comment.id,
+      pageNumber: comment.pageNumber,
+      bounds: comment.bounds,
+      type: comment.type
+    });
+    this.facade.setActiveTool('comment');
+  }
+
   selectPage(
     pageNumber: number
   ): void {

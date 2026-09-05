@@ -79,6 +79,10 @@ export class StudioFacade {
     readonly before: StudioHistorySnapshot;
   } | null = null;
 
+  /** F7.2 — Empty comment markers stay draft-only until saved. */
+  private readonly pendingCommentDrafts =
+    new Map<string, StudioHistorySnapshot>();
+
   /**
    * F6.4.5 — Document/render lifecycle generation.
    *
@@ -136,6 +140,24 @@ export class StudioFacade {
 
   readonly canRedo =
     this.history.canRedo;
+
+  /** F7.2 — Saved comments only, sorted newest first. */
+  readonly comments = computed(() => {
+    this.objectService.changes();
+
+    return this.objectService.snapshot()
+      .filter(
+        object =>
+          object.type === 'comment' &&
+          !!object.comment &&
+          object.comment.content.trim().length > 0
+      )
+      .sort(
+        (a, b) =>
+          (b.comment?.updatedAt ?? 0) -
+          (a.comment?.updatedAt ?? 0)
+      );
+  });
 
   /**
    * Load a PDF into Studio.
@@ -200,6 +222,7 @@ export class StudioFacade {
        * document must never leak into the new document.
        */
       this.objectService.clearAll();
+      this.pendingCommentDrafts.clear();
 
       /**
        * A new PDF is a new history session.
@@ -674,11 +697,8 @@ runToolAction(
 
     case 'comment':
 
-      this.toast.show(
-        'Comments will be available in the next editing stage.',
-        'info'
-      );
-
+      this.setActiveTool('comment');
+      this.toast.show('Click a page to add a comment.', 'info');
       return;
 
     case 'link':
@@ -709,6 +729,46 @@ runToolAction(
  *
  * Returns true only when an object was actually removed.
  */
+  /** F7.2 — Delete a specific object while preserving history semantics. */
+  deleteObject(objectId: string): boolean {
+    if (!this.hasDocument()) {
+      return false;
+    }
+
+    const object = this.objectService.get(objectId);
+    if (!object) {
+      return false;
+    }
+
+    const draftBefore = this.pendingCommentDrafts.get(objectId);
+    const before = draftBefore ?? this.captureHistorySnapshot();
+
+    if (this.pendingObjectTransform?.objectId === objectId) {
+      this.pendingObjectTransform = null;
+    }
+
+    const removed = this.objectService.remove(objectId);
+
+    if (!removed) {
+      return false;
+    }
+
+    this.pendingCommentDrafts.delete(objectId);
+
+    if (this.selectedObjectId() === objectId) {
+      this.state.clearSelection();
+    }
+
+    if (!draftBefore) {
+      this.commitHistoryMutation(
+        object.type === 'comment' ? 'Delete comment' : 'Delete object',
+        before
+      );
+    }
+
+    return true;
+  }
+
   deleteSelectedObject(): boolean {
 
     if (!this.hasDocument()) {
@@ -727,40 +787,21 @@ runToolAction(
       return false;
     }
 
-    const object =
-      this.objectService.get(
-        selectedObjectId
-      );
-
-    if (!object) {
-      this.state.clearSelection();
-      return false;
-    }
-
-    const before =
-      this.captureHistorySnapshot();
-
-    if (
-      this.pendingObjectTransform?.objectId === selectedObjectId
-    ) {
-      this.pendingObjectTransform = null;
-    }
-
+    /**
+     * Keep all deletion entry points on the same lifecycle path.
+     *
+     * This is especially important for comment drafts: an empty draft has not
+     * been committed to history yet, so deleting it must discard the pending
+     * draft instead of creating a phantom "Delete object" history entry.
+     */
     const removed =
-      this.objectService.remove(
+      this.deleteObject(
         selectedObjectId
       );
-
-    this.state.clearSelection();
 
     if (!removed) {
       return false;
     }
-
-    this.commitHistoryMutation(
-      'Delete object',
-      before
-    );
 
     this.toast.show(
       'Object deleted.',
@@ -865,6 +906,7 @@ fitWidth(): void {
        * while a replacement document is opening.
        */
       this.objectService.clearAll();
+      this.pendingCommentDrafts.clear();
       this.pageService.clear();
       this.history.reset();
       this.state.clear();
@@ -1488,6 +1530,7 @@ goToLastPage(): void {
   ): void {
 
     this.pendingObjectTransform = null;
+    this.pendingCommentDrafts.clear();
 
     this.pageService.restore(
       snapshot.pages
@@ -2150,6 +2193,192 @@ clearSelection(): void {
   this.state.clearSelection();
 }
 
+createCommentObject(
+  x: number,
+  y: number
+): StudioSelection | null {
+  if (!this.hasDocument()) {
+    return null;
+  }
+
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.createCommentObject(
+    this.currentPage(),
+    x,
+    y
+  );
+
+  this.pendingCommentDrafts.set(object.id, before);
+
+  const selection: StudioSelection = {
+    objectId: object.id,
+    pageNumber: object.pageNumber,
+    bounds: object.bounds,
+    type: object.type
+  };
+
+  this.state.setSelection(selection);
+  return selection;
+}
+
+updateComment(
+  objectId: string,
+  content: string
+): StudioSelection | null {
+  if (!this.hasDocument()) {
+    return null;
+  }
+
+  const existing =
+    this.objectService.get(objectId);
+
+  if (
+    !existing ||
+    existing.type !== 'comment' ||
+    !existing.comment
+  ) {
+    return null;
+  }
+
+  const nextContent =
+    content.slice(0, 4000);
+
+  const draftBefore =
+    this.pendingCommentDrafts.get(objectId);
+
+  /**
+   * Saving unchanged text is a lifecycle no-op. This prevents duplicate
+   * Edit comment history entries when Save is clicked without an edit.
+   */
+  if (
+    !draftBefore &&
+    nextContent === existing.comment.content
+  ) {
+    const selection: StudioSelection = {
+      objectId: existing.id,
+      pageNumber: existing.pageNumber,
+      bounds: existing.bounds,
+      type: existing.type
+    };
+
+    this.state.setSelection(selection);
+
+    return selection;
+  }
+
+  const before =
+    draftBefore ?? this.captureHistorySnapshot();
+
+  const object =
+    this.objectService.updateComment(
+      objectId,
+      { content: nextContent }
+    );
+
+  if (!object) {
+    return null;
+  }
+
+  const selection: StudioSelection = {
+    objectId: object.id,
+    pageNumber: object.pageNumber,
+    bounds: object.bounds,
+    type: object.type
+  };
+
+  this.state.setSelection(selection);
+
+  if (draftBefore) {
+    if (object.comment?.content.trim().length) {
+      this.pendingCommentDrafts.delete(objectId);
+      this.commitHistoryMutation(
+        'Add comment',
+        before
+      );
+    }
+  } else {
+    this.commitHistoryMutation(
+      'Edit comment',
+      before
+    );
+  }
+
+  return selection;
+}
+
+setCommentResolved(
+  objectId: string,
+  resolved: boolean
+): StudioSelection | null {
+  if (!this.hasDocument()) {
+    return null;
+  }
+
+  const existing =
+    this.objectService.get(objectId);
+
+  if (
+    !existing ||
+    existing.type !== 'comment' ||
+    !existing.comment
+  ) {
+    return null;
+  }
+
+  const draftBefore =
+    this.pendingCommentDrafts.get(objectId);
+
+  /**
+   * Resolve/Reopen is idempotent. Repeating the current state must not create
+   * another history entry or refresh the comment timestamp.
+   */
+  if (existing.comment.resolved === resolved) {
+    const selection: StudioSelection = {
+      objectId: existing.id,
+      pageNumber: existing.pageNumber,
+      bounds: existing.bounds,
+      type: existing.type
+    };
+
+    this.state.setSelection(selection);
+
+    return selection;
+  }
+
+  const before =
+    draftBefore ?? this.captureHistorySnapshot();
+
+  const object =
+    this.objectService.updateComment(
+      objectId,
+      { resolved }
+    );
+
+  if (!object) {
+    return null;
+  }
+
+  const selection: StudioSelection = {
+    objectId: object.id,
+    pageNumber: object.pageNumber,
+    bounds: object.bounds,
+    type: object.type
+  };
+
+  this.state.setSelection(selection);
+
+  if (!draftBefore) {
+    this.commitHistoryMutation(
+      resolved
+        ? 'Resolve comment'
+        : 'Reopen comment',
+      before
+    );
+  }
+
+  return selection;
+}
+
 createTextObject(
   x: number,
   y: number
@@ -2402,6 +2631,16 @@ commitObjectTransform(
   }
 
   this.pendingObjectTransform = null;
+
+  /**
+   * A draft comment is committed as one atomic Add comment mutation when its
+   * first non-empty content is saved. Moving/resizing that draft must remain
+   * part of the same pending creation instead of creating an orphaned history
+   * entry before the comment exists as a saved annotation.
+   */
+  if (this.pendingCommentDrafts.has(objectId)) {
+    return true;
+  }
 
   this.commitHistoryMutation(
     'Transform object',

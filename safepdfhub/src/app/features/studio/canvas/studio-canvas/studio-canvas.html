@@ -21,7 +21,8 @@
       [class.studio-canvas__stage--crosshair]="
         facade.activeTool() === 'draw' ||
         facade.activeTool() === 'highlight' ||
-        facade.activeTool() === 'shape'
+        facade.activeTool() === 'shape' ||
+        facade.activeTool() === 'comment'
       "
       [class.studio-canvas__stage--copy]="
         facade.activeTool() === 'image'
@@ -74,6 +75,8 @@
                 object.type === 'draw' ||
                 object.type === 'highlight'
               "
+              [class.studio-editor-object--comment]="object.type === 'comment'"
+              [class.studio-editor-object--comment-resolved]="object.comment?.resolved"
               [class.studio-editor-object--selected]="
                 facade.selectedObjectId() === object.id
               "
@@ -116,7 +119,21 @@
               "
             >
 
-              @if (
+              @if (object.type === 'comment' && object.comment) {
+                <button
+                  type="button"
+                  class="studio-comment-marker"
+                  [class.studio-comment-marker--resolved]="object.comment.resolved"
+                  [attr.aria-label]="getCommentMarkerAriaLabel(object.comment)"
+                  [title]="object.comment.content || 'New comment'"
+                  (pointerdown)="$event.stopPropagation()"
+                  (click)="openCommentEditor(object.id); $event.stopPropagation()">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-4.5 3V18H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>
+                    @if (object.comment.resolved) { <path d="m8.5 12 2.2 2.2 4.8-5"/> } @else { <path d="M8 10h8M8 14h5"/> }
+                  </svg>
+                </button>
+              } @else if (
                 object.type === 'image'
               ) {
 
@@ -479,6 +496,100 @@
 
         }
 
+
+@if (
+  editingCommentId &&
+  facade.selectedObjectId() === editingCommentId
+) {
+  @let editingComment = objectService.get(editingCommentId);
+
+  @if (editingComment?.comment; as comment) {
+
+    <section
+      class="studio-comment-editor"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="studio-comment-editor-title"
+      aria-describedby="studio-comment-editor-state studio-comment-editor-count"
+      (pointerdown)="$event.stopPropagation()"
+      (click)="$event.stopPropagation()"
+      (dblclick)="$event.stopPropagation()"
+    >
+
+      <div class="studio-comment-editor__header">
+        <span id="studio-comment-editor-title">Comment</span>
+
+        <button
+          type="button"
+          aria-label="Close comment editor"
+          title="Close comment editor"
+          (click)="cancelCommentEditor()"
+        >
+          ×
+        </button>
+      </div>
+
+      <textarea
+        #commentEditor
+        class="studio-comment-editor__input"
+        [value]="editingCommentText"
+        placeholder="Write a comment…"
+        maxlength="4000"
+        aria-describedby="studio-comment-editor-state studio-comment-editor-count"
+        (input)="onCommentEditorInput($event)"
+        (keydown)="onCommentEditorKeyDown($event)"
+      ></textarea>
+
+      <div class="studio-comment-editor__meta" aria-live="polite">
+        <span id="studio-comment-editor-state">
+          {{ comment.resolved ? 'Resolved comment' : 'Open comment' }}
+        </span>
+        <span id="studio-comment-editor-count">
+          {{ editingCommentCharacterCount }} / 4000
+        </span>
+      </div>
+
+      <div class="studio-comment-editor__footer">
+
+        <div class="studio-comment-editor__actions">
+          <button
+            type="button"
+            class="studio-comment-editor__secondary"
+            title="Close without saving current text"
+            (click)="cancelCommentEditor()"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            class="studio-comment-editor__secondary"
+            [attr.aria-pressed]="comment.resolved"
+            [attr.aria-label]="comment.resolved ? 'Reopen comment' : 'Resolve comment'"
+            (click)="toggleEditingCommentResolved()"
+          >
+            {{ comment.resolved ? 'Reopen' : 'Resolve' }}
+          </button>
+        </div>
+
+        <button
+          type="button"
+          class="studio-comment-editor__primary"
+          [disabled]="!editingCommentText.trim()"
+          [attr.aria-disabled]="!editingCommentText.trim()"
+          [attr.title]="editingCommentText.trim() ? 'Save comment' : 'Write a comment before saving'"
+          (pointerdown)="$event.stopPropagation()"
+          (pointerup)="$event.stopPropagation()"
+          (click)="saveCommentEditor($event)"
+        >
+          Save
+        </button>
+
+      </div>
+
+    </section>
+  }
+}
 
         <!-- =====================================================
              F3 TOOL OPTIONS

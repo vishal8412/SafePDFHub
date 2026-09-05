@@ -136,7 +136,7 @@ export class StudioToolbar {
     {
       id: 'comment',
       label: 'Comment',
-      kind: 'action'
+      kind: 'interaction'
     },
 
     {

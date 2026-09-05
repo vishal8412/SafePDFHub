@@ -32,7 +32,8 @@ export type StudioInteractionTool =
   | 'image'
   | 'draw'
   | 'highlight'
-  | 'shape';
+  | 'shape'
+  | 'comment';
 
 export const STUDIO_INTERACTION_TOOLS:
   readonly StudioInteractionTool[] = [
@@ -42,5 +43,6 @@ export const STUDIO_INTERACTION_TOOLS:
     'image',
     'draw',
     'highlight',
-    'shape'
+    'shape',
+    'comment'
   ];

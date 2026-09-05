@@ -1138,3 +1138,52 @@
   border-top:
     1px solid rgba(255, 255, 255, 0.08);
 }
+
+
+/* ==========================================================
+   F7.2 — COMMENTS SIDEBAR
+========================================================== */
+.sidebar__tab--comments {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.sidebar__tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar__tab-count {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(0, 212, 179, .16);
+  color: #4fe0c9;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+.sidebar__comments { flex:1 1 auto; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+.sidebar__comments-list { min-height:0; overflow:auto; padding:10px; display:grid; gap:8px; scrollbar-width:thin; scrollbar-color:rgba(148,163,184,.55) transparent; }
+.sidebar__comment-card { width:100%; min-width:0; display:flex; align-items:flex-start; gap:9px; padding:10px; border:1px solid rgba(255,255,255,.08); border-radius:10px; background:rgba(255,255,255,.025); color:rgba(255,255,255,.86); text-align:left; cursor:pointer; }
+.sidebar__comment-card:hover,.sidebar__comment-card--active { border-color:rgba(0,212,179,.42); background:rgba(0,212,179,.06); }
+.sidebar__comment-card--resolved { opacity:.72; }
+.sidebar__comment-card-icon { flex:0 0 auto; font-size:14px; line-height:18px; }
+.sidebar__comment-card-copy { min-width:0; display:grid; gap:3px; flex:1 1 auto; }
+.sidebar__comment-card-copy strong { font-size:10px; color:#8ce9dc; }
+.sidebar__comment-card-copy span { overflow:hidden; color:rgba(255,255,255,.66); font-size:11px; line-height:1.35; text-overflow:ellipsis; white-space:nowrap; }
+.sidebar__comment-card em { flex:0 0 auto; color:#7dd3a7; font-size:9px; font-style:normal; }
+.sidebar__comments-empty { margin:auto; padding:24px; text-align:center; color:rgba(255,255,255,.48); }
+.sidebar__comments-empty span { display:block; margin-bottom:10px; color:#00d4b3; font-size:28px; }
+.sidebar__comments-empty strong { display:block; color:rgba(255,255,255,.82); font-size:12px; }
+.sidebar__comments-empty p { margin:7px 0 0; font-size:10px; line-height:1.5; }

@@ -683,6 +683,7 @@ onToolSelected(
     case 'draw':
     case 'highlight':
     case 'shape':
+    case 'comment':
 
       this.facade.setActiveTool(
         tool
@@ -702,7 +703,6 @@ onToolSelected(
 
     case 'rotate':
     case 'delete':
-    case 'comment':
     case 'link':
     case 'more':
       this.facade.runToolAction(

@@ -18,35 +18,43 @@
 
         <button
           type="button"
-          class="sidebar__tab sidebar__tab--active"
-          aria-selected="true">
-
+          class="sidebar__tab"
+          [class.sidebar__tab--active]="sidebarTab() === 'pages'"
+          [attr.aria-selected]="sidebarTab() === 'pages'"
+          (click)="setSidebarTab('pages')">
           Pages
-
         </button>
 
         <button
           type="button"
           class="sidebar__tab"
-          aria-selected="false">
-
+          aria-selected="false"
+          disabled>
           Bookmarks
-
         </button>
 
         <button
           type="button"
-          class="sidebar__tab"
-          aria-selected="false">
-
-          Comments
-
+          class="sidebar__tab sidebar__tab--comments"
+          [class.sidebar__tab--active]="sidebarTab() === 'comments'"
+          [attr.aria-selected]="sidebarTab() === 'comments'"
+          (click)="setSidebarTab('comments')">
+          <span class="sidebar__tab-label">Comments</span>
+          @if (comments().length) {
+            <span
+              class="sidebar__tab-count"
+              [attr.aria-label]="comments().length + ' comments'">
+              {{ comments().length }}
+            </span>
+          }
         </button>
 
       </nav>
 
 
       <div class="sidebar__body">
+
+        @if (sidebarTab() === 'pages') {
 
         <!-- ====================================================
              SEARCH
@@ -360,6 +368,35 @@
 
         }
 
+        } @else {
+          <section class="sidebar__comments" aria-label="Document comments">
+            @if (!comments().length) {
+              <div class="sidebar__comments-empty">
+                <span aria-hidden="true">◌</span>
+                <strong>No comments yet</strong>
+                <p>Select the Comment tool and click anywhere on a page to add one.</p>
+              </div>
+            } @else {
+              <div class="sidebar__comments-list">
+                @for (comment of comments(); track comment.id) {
+                  <button
+                    type="button"
+                    class="sidebar__comment-card"
+                    [class.sidebar__comment-card--active]="facade.selectedObjectId() === comment.id"
+                    [class.sidebar__comment-card--resolved]="comment.comment?.resolved"
+                    (click)="selectComment(comment.id)">
+                    <span class="sidebar__comment-card-icon" aria-hidden="true">💬</span>
+                    <span class="sidebar__comment-card-copy">
+                      <strong>Page {{ comment.pageNumber }}</strong>
+                      <span>{{ comment.comment?.content || 'New comment' }}</span>
+                    </span>
+                    @if (comment.comment?.resolved) { <em>Resolved</em> }
+                  </button>
+                }
+              </div>
+            }
+          </section>
+        }
       </div>
 
     </div>

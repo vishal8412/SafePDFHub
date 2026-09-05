@@ -49,6 +49,7 @@ interface PaletteDragState {
 interface ObjectInteraction {
   readonly mode: 'move' | 'resize';
   readonly objectId: string;
+  readonly objectType: StudioObject['type'];
   readonly pointerId: number;
   readonly handle?: SelectionResizeHandle;
   readonly startClientX: number;
@@ -210,7 +211,7 @@ private activeRenderVersion: number | null = null;
    */
   private readonly zoomSteps = [50,75,100,125,150,175,200];
   private readonly selectionEngine = inject(SelectionEngineService);
-  private readonly objectService = inject(StudioObjectService);
+  readonly objectService = inject(StudioObjectService);
 
   /** Selection-through state for overlapping annotations. */
   private selectionCycle = {
@@ -276,6 +277,10 @@ private activeRenderVersion: number | null = null;
   @ViewChild('textEditor')
   private textEditorRef?: ElementRef<HTMLTextAreaElement>;
 
+  /** F7.2 Phase E — focus target for the comment editor. */
+  @ViewChild('commentEditor')
+  private commentEditorRef?: ElementRef<HTMLTextAreaElement>;
+
   @ViewChild('imageInput')
   private imageInputRef?: ElementRef<HTMLInputElement>;
 
@@ -305,6 +310,21 @@ private activeRenderVersion: number | null = null;
    * Last committed tool. Used to cancel an in-progress drawing gesture
    * when the user intentionally switches to another tool.
    */
+  /** F7.2 — Inline editor state for page-anchored comments. */
+  editingCommentId: string | null = null;
+  editingCommentText = '';
+  private editingCommentOriginalText = '';
+  private editingCommentOriginalResolved = false;
+  private editingCommentOriginalUpdatedAt = 0;
+
+  /** Element that had focus before the comment editor opened. */
+  private commentEditorReturnFocus: HTMLElement | null = null;
+
+  /**
+   * Tracks the last logical comment selection seen by the reactive effect.
+   */
+  private lastObservedCommentSelectionId: string | null = null;
+
   private lastActiveTool: StudioToolId = 'select';
 
   selectedShapeKind: StudioShapeKind = 'rectangle';
@@ -328,12 +348,85 @@ private activeRenderVersion: number | null = null;
 
   private readonly MIN_OBJECT_WIDTH = 40;
   private readonly MIN_OBJECT_HEIGHT = 24;
+  private readonly MIN_COMMENT_SIZE = 18;
 
   constructor() {
     /**
      * Re-render whenever a render-relevant Studio
      * state value changes.
      */
+    /**
+     * F7.2 — Sidebar selection and marker selection share the same opening
+     * path. Selecting a comment while the Comment tool is active must reveal
+     * its editor, not leave the user with only a highlighted marker.
+     */    effect(() => {
+      const selection = this.facade.selection();
+      const activeTool = this.facade.activeTool();
+
+      const selectedCommentId =
+        activeTool === 'comment' &&
+        selection?.type === 'comment'
+          ? selection.objectId
+          : null;
+
+      /**
+       * Save/update re-selects the same comment. That state update must not
+       * reopen an editor that the user has just closed.
+       */
+      if (
+        selectedCommentId &&
+        selectedCommentId !== this.lastObservedCommentSelectionId &&
+        selectedCommentId !== this.editingCommentId
+      ) {
+        this.openCommentEditor(selectedCommentId);
+      }
+
+      this.lastObservedCommentSelectionId =
+        selectedCommentId;
+    });
+
+    /**
+     * F7.2 Phase B — The editor must never outlive its backing comment.
+     *
+     * Comments can disappear through Delete, Undo, Redo, document replacement
+     * or other object-store mutations. Register the object revision as a
+     * dependency so an externally removed comment immediately tears down the
+     * editor instead of leaving a stale popup that blocks further comments.
+     */
+    effect(() => {
+      const objectId = this.editingCommentId;
+      this.objectService.changes();
+
+      if (!objectId) {
+        return;
+      }
+
+      const object = this.objectService.get(objectId);
+
+      if (
+        !object ||
+        object.type !== 'comment' ||
+        !object.comment
+      ) {
+        this.resetCommentEditorState(true);
+        return;
+      }
+
+      /**
+       * Undo/Redo restores complete object snapshots. If that restored state
+       * changes the comment currently being edited, keeping the old textarea
+       * would allow stale text to be saved over restored history state.
+       * Bounds-only mutations intentionally keep the editor open.
+       */
+      if (
+        object.comment.content !== this.editingCommentOriginalText ||
+        object.comment.resolved !== this.editingCommentOriginalResolved ||
+        object.comment.updatedAt !== this.editingCommentOriginalUpdatedAt
+      ) {
+        this.resetCommentEditorState(true);
+      }
+    });
+
     effect(() => {
 
       const hasDocument =
@@ -350,6 +443,12 @@ private activeRenderVersion: number | null = null;
 
       const activeTool =
         this.facade.activeTool();
+
+      /**
+       * A comment editor is page-scoped. Navigation must not leave a stale
+       * editor attached to an object from another page.
+       */
+      this.closeCommentEditorForPageChange(page);
 
       /**
        * F4/F5 — Register the logical page collection as a render dependency.
@@ -392,6 +491,22 @@ private activeRenderVersion: number | null = null;
         this.resetSelectionCycle();
       }
 
+      /**
+       * F7.2 Phase D — A comment editor may remain open while the user is in
+       * Select mode so the same comment can still be moved/resized. Switching
+       * to any other interaction tool must end the comment session; otherwise
+       * the popup can block another tool while retaining stale edit state.
+       * Commit meaningful content on an intentional tool switch so typed work
+       * is not silently lost. Explicit Cancel remains the discard path.
+       */
+      if (
+        this.editingCommentId &&
+        activeTool !== 'comment' &&
+        activeTool !== 'select'
+      ) {
+        this.closeCommentEditor(true);
+      }
+
       this.lastActiveTool = activeTool;
 
       if (
@@ -426,6 +541,9 @@ private activeRenderVersion: number | null = null;
   this.editingOriginalText = '';
   this.editingOriginalStyle = null;
   this.editingFontSizeInput = '14';
+
+  /** F7.2 Phase D — document teardown must also clear comment editor state. */
+  this.resetCommentEditorState(false);
 
   return;
 }
@@ -488,6 +606,9 @@ ngAfterViewInit(): void {
   
       case 'image':
         return 'studio-canvas__stage--copy';
+
+      case 'comment':
+        return 'studio-canvas__stage--comment';
   
       default:
         return 'studio-canvas__stage--select';
@@ -2437,6 +2558,14 @@ private async render(
   }
 
   /**
+   * F7.2 — COMMENT TOOL
+   */
+  if (activeTool === 'comment' && event.button === 0 && !this.spacePressed) {
+    this.handleCommentToolPointerDown(event);
+    return;
+  }
+
+  /**
    * SHAPE / DRAW / HIGHLIGHT TOOLS
    */
   if (
@@ -2564,6 +2693,35 @@ onEditorObjectPointerDown(
     return;
   }
 
+  if (
+    object.type === 'comment' &&
+    (activeTool === 'comment' || activeTool === 'select')
+  ) {
+    const page = this.pageRef?.nativeElement;
+    const rect = page?.getBoundingClientRect();
+
+    if (rect && rect.width > 0 && rect.height > 0) {
+      const point = this.clientToPagePoint(
+        event.clientX,
+        event.clientY,
+        rect
+      );
+      const selected = this.selectObjectAtPoint(
+        point.x,
+        point.y,
+        objectId
+      );
+
+      if (selected?.type === 'comment') {
+        this.openCommentEditor(selected.id);
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+
+    return;
+  }
+
   if (activeTool !== 'select') {
     return;
   }
@@ -2593,6 +2751,272 @@ onEditorObjectPointerDown(
 
   event.preventDefault();
   event.stopPropagation();
+}
+
+private handleCommentToolPointerDown(event: PointerEvent): void {
+  const page = this.pageRef?.nativeElement;
+
+  if (!page) {
+    return;
+  }
+
+  const rect = page.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return;
+  }
+
+  const point = this.clientToPagePoint(
+    event.clientX,
+    event.clientY,
+    rect
+  );
+
+  const existing = this.selectCommentAtPoint(
+    point.x,
+    point.y
+  );
+
+  if (this.editingCommentId) {
+    /**
+     * F7.2 Phase D — While editing, a blank page click must never create a
+     * second draft. Existing markers remain reachable so overlapping comments
+     * can still be cycled; switching to one finalizes the current session.
+     */
+    if (existing) {
+      this.openCommentEditor(existing.id);
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+
+  if (existing) {
+    this.openCommentEditor(existing.id);
+  } else {
+    const selection = this.facade.createCommentObject(
+      point.x,
+      point.y
+    );
+
+    if (selection) {
+      this.openCommentEditor(selection.objectId);
+    }
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+openCommentEditor(objectId: string): void {
+  /**
+   * F7.2 Phase E — Re-opening the same marker must never replace unsaved
+   * textarea content with the stored object content. Keep the active editor
+   * session intact and simply return keyboard focus to it.
+   */
+  if (this.editingCommentId === objectId) {
+    this.focusCommentEditor();
+    return;
+  }
+
+  /**
+   * F7.2 Phase D — Switching directly from one comment marker/sidebar item
+   * to another must not orphan the first editor session. Finish the current
+   * session first, preserving meaningful typed content, then open the next
+   * comment. This keeps one editor <-> one selected comment at all times.
+   */
+  if (this.editingCommentId) {
+    this.closeCommentEditor(true);
+  }
+
+  const object = this.objectService.get(objectId);
+  if (!object || object.type !== 'comment' || !object.comment) { return; }
+
+  const activeElement =
+    typeof document !== 'undefined'
+      ? document.activeElement
+      : null;
+
+  this.commentEditorReturnFocus =
+    activeElement instanceof HTMLElement ? activeElement : null;
+
+  this.editingCommentId = objectId;
+  this.editingCommentText = object.comment.content;
+  this.editingCommentOriginalText = object.comment.content;
+  this.editingCommentOriginalResolved = object.comment.resolved;
+  this.editingCommentOriginalUpdatedAt = object.comment.updatedAt;
+  this.facade.selectObject({ objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type });
+  this.focusCommentEditor();
+}
+
+closeCommentEditor(save: boolean): void {
+  const objectId = this.editingCommentId;
+
+  if (!objectId) {
+    return;
+  }
+
+  const text = this.editingCommentText.trim();
+  const original = this.editingCommentOriginalText;
+  const isUnsavedDraft = !original;
+
+  if (save && text && text !== original) {
+    this.facade.updateComment(objectId, text);
+  } else if (
+    (save && !text && isUnsavedDraft) ||
+    (!save && isUnsavedDraft)
+  ) {
+    this.facade.deleteObject(objectId);
+  }
+
+  /**
+   * Always clear the logical selection when an editor session ends.
+   *
+   * Leaving a saved comment selected after Cancel can cause a later reactive
+   * tool/selection change to reopen a popup the user explicitly closed.
+   */
+  this.resetCommentEditorState(true);
+}
+
+private resetCommentEditorState(
+  clearSelection: boolean
+): void {
+  const returnFocus = this.commentEditorReturnFocus;
+
+  this.editingCommentId = null;
+  this.editingCommentText = '';
+  this.editingCommentOriginalText = '';
+  this.editingCommentOriginalResolved = false;
+  this.editingCommentOriginalUpdatedAt = 0;
+  this.commentEditorReturnFocus = null;
+
+  if (clearSelection) {
+    this.facade.clearSelection();
+  }
+
+  this.restoreCommentEditorFocus(returnFocus);
+}
+
+/** F7.2 Phase E — move keyboard focus into the active editor. */
+private focusCommentEditor(): void {
+  setTimeout(() => {
+    const editor = this.commentEditorRef?.nativeElement;
+    if (editor && this.editingCommentId) {
+      editor.focus();
+    }
+  });
+}
+
+/** Restore focus when the dialog-like editor closes, if its trigger survives. */
+private restoreCommentEditorFocus(
+  element: HTMLElement | null
+): void {
+  if (!element || !element.isConnected) {
+    return;
+  }
+
+  setTimeout(() => element.focus());
+}
+
+get editingCommentCharacterCount(): number {
+  return this.editingCommentText.length;
+}
+
+getCommentMarkerAriaLabel(
+  comment: { content: string; resolved: boolean }
+): string {
+  const state = comment.resolved ? 'Resolved comment' : 'Open comment';
+  const preview = comment.content.trim();
+
+  if (!preview) {
+    return `${state}, empty draft`;
+  }
+
+  const compact = preview.replace(/\s+/g, ' ');
+  const summary = compact.length > 80
+    ? `${compact.slice(0, 77)}…`
+    : compact;
+
+  return `${state}: ${summary}`;
+}
+
+saveCommentEditor(event?: MouseEvent): void {
+  event?.preventDefault();
+  event?.stopPropagation();
+
+  this.closeCommentEditor(true);
+}
+
+cancelCommentEditor(): void {
+  this.closeCommentEditor(false);
+}
+
+private closeCommentEditorForPageChange(
+  currentPage: number
+): void {
+  const objectId = this.editingCommentId;
+
+  if (!objectId) {
+    return;
+  }
+
+  const object =
+    this.objectService.get(objectId);
+
+  if (
+    !object ||
+    object.pageNumber !== currentPage
+  ) {
+    /**
+     * Page navigation is an intentional cross-feature transition. Preserve
+     * meaningful typed content rather than silently discarding it. Empty
+     * drafts still disappear because closeCommentEditor(true) removes them.
+     */
+    this.closeCommentEditor(true);
+  }
+}
+
+onCommentEditorInput(event: Event): void {
+  const target = event.target as HTMLTextAreaElement | null;
+  this.editingCommentText = target?.value ?? '';
+}
+
+onCommentEditorKeyDown(event: KeyboardEvent): void {
+  if (event.key === 'Escape') { event.preventDefault(); this.closeCommentEditor(false); }
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); this.closeCommentEditor(true); }
+}
+
+toggleEditingCommentResolved(): void {
+  const objectId = this.editingCommentId;
+  if (!objectId) { return; }
+  const object = this.objectService.get(objectId);
+  if (!object?.comment) { return; }
+  const resolved =
+    !object.comment.resolved;
+
+  this.facade.setCommentResolved(
+    objectId,
+    resolved
+  );
+
+  /**
+   * Resolve/Reopen is an immediate committed action. Refresh the local editor
+   * baseline so the lifecycle effect does not mistake this intentional mutation
+   * for an external Undo/Redo restore.
+   */
+  const updated =
+    this.objectService.get(objectId);
+
+  if (
+    updated?.type === 'comment' &&
+    updated.comment
+  ) {
+    this.editingCommentOriginalResolved =
+      updated.comment.resolved;
+
+    this.editingCommentOriginalUpdatedAt =
+      updated.comment.updatedAt;
+  }
 }
 
 private handleTextToolPointerDown(
@@ -3456,7 +3880,7 @@ setTextAlign(
     if (
       event.button !== 0 ||
       this.spacePressed ||
-      this.facade.activeTool() !== 'select'
+      !this.canTransformCurrentSelection()
     ) {
       return;
     }
@@ -3513,7 +3937,7 @@ setTextAlign(
     if (
       event.button !== 0 ||
       this.spacePressed ||
-      this.facade.activeTool() !== 'select'
+      !this.canTransformCurrentSelection()
     ) {
       return;
     }
@@ -3547,6 +3971,20 @@ setTextAlign(
       object,
       handle
     );
+  }
+
+  private canTransformCurrentSelection(): boolean {
+    const activeTool = this.facade.activeTool();
+
+    if (activeTool === 'select') {
+      return true;
+    }
+
+    if (activeTool !== 'comment') {
+      return false;
+    }
+
+    return this.facade.selection()?.type === 'comment';
   }
 
   private startObjectInteraction(
@@ -3587,6 +4025,7 @@ setTextAlign(
     this.objectInteraction = {
       mode,
       objectId: object.id,
+      objectType: object.type,
       pointerId: event.pointerId,
       handle,
       startClientX: event.clientX,
@@ -3777,11 +4216,18 @@ if (updatedObject) {
      * Minimum dimensions are defined in pixels for predictable
      * UI behavior, then normalized for the current page size.
      */
+    const isComment =
+      interaction.objectType === 'comment';
+
     const minWidthPx =
-      this.MIN_OBJECT_WIDTH;
+      isComment
+        ? this.MIN_COMMENT_SIZE
+        : this.MIN_OBJECT_WIDTH;
 
     const minHeightPx =
-      this.MIN_OBJECT_HEIGHT;
+      isComment
+        ? this.MIN_COMMENT_SIZE
+        : this.MIN_OBJECT_HEIGHT;
 
     const minWidth =
       interaction.pageWidth > 0
@@ -4276,6 +4722,74 @@ if (updatedObject) {
 
 
   /**
+   * Find only an existing comment marker. The Comment tool must not select a
+   * text/image/shape underneath the pointer and accidentally treat that click
+   * as a new comment-placement gesture.
+   */
+  private selectCommentAtPoint(
+    x: number,
+    y: number
+  ): StudioObject | null {
+    const pageNumber = this.facade.currentPage();
+    const comments = this.objectService
+      .listForPage(pageNumber)
+      .filter(object => object.type === 'comment');
+
+    const hits = this.selectionEngine.hitTestAll(
+      comments,
+      pageNumber,
+      x,
+      y
+    );
+
+    if (!hits.length) {
+      this.resetSelectionCycle();
+      return null;
+    }
+
+    /**
+     * F7.2 Phase D — Multiple comments may occupy the same page-space point.
+     * Repeated clicks cycle through comment markers only, matching the normal
+     * overlapping-object selection behavior without ever selecting a
+     * non-comment while the Comment tool is active.
+     */
+    const now = Date.now();
+    const key = `comment:${x.toFixed(4)}:${y.toFixed(4)}`;
+    const objectIds = hits.map(hit => hit.id);
+    const sameStack =
+      this.selectionCycle.key === key &&
+      this.selectionCycle.pageNumber === pageNumber &&
+      this.selectionCycle.objectIds.length === objectIds.length &&
+      this.selectionCycle.objectIds.every(
+        (id, index) => id === objectIds[index]
+      ) &&
+      now - this.selectionCycle.timestamp <=
+        this.selectionCycleWindowMs;
+
+    const index = sameStack
+      ? (this.selectionCycle.index - 1 + hits.length) % hits.length
+      : hits.length - 1;
+
+    const comment = hits[index];
+
+    this.selectionCycle = {
+      key,
+      objectIds,
+      index,
+      timestamp: now,
+      x,
+      y,
+      pageNumber
+    };
+
+    this.facade.selectObject(
+      this.selectionEngine.toSelection(comment)
+    );
+    this.syncSelectionStyleControls(comment);
+    return comment;
+  }
+
+  /**
    * Select an object at a point, cycling through every overlapping object.
    * This solves the case where an older annotation is completely covered by
    * a newer shape/draw/highlight. Repeated clicks at the same point move from
@@ -4639,6 +5153,26 @@ private clientToPagePoint(clientX: number,clientY: number,pageRect: DOMRect): {
 onWindowKeyDown(
   event: KeyboardEvent
 ): void {
+
+  /**
+   * F7.2 Phase D — Escape must close an active comment editor even when
+   * focus is on one of the dialog buttons instead of the textarea. The
+   * textarea handles Escape locally, so this branch covers the remaining
+   * dialog focus states before generic keyboard routing runs.
+   */
+  if (
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    event.key === 'Escape' &&
+    this.editingCommentId &&
+    !this.isEditableTarget(event.target)
+  ) {
+    event.preventDefault();
+    this.closeCommentEditor(false);
+    this.facade.setActiveTool('select');
+    return;
+  }
 
   /**
    * IMPORTANT:

@@ -15,7 +15,8 @@ import type {
   StudioShapeStyle,
   StudioDrawingData,
   StudioDrawingStyle,
-  StudioPoint
+  StudioPoint,
+  StudioCommentData
 } from '../models/studio-selection.model';
 
 const DEFAULT_TEXT_STYLE: StudioTextStyle = {
@@ -121,6 +122,109 @@ export class StudioObjectService {
       this.cloneObject(object)
     );
     this.touch();
+  }
+
+
+  /** F7.2 — Create a page-anchored comment marker. */
+  createCommentObject(
+    pageNumber: number,
+    normalizedX: number,
+    normalizedY: number,
+    author = 'You'
+  ): StudioObject {
+
+    const size = 0.042;
+    const now = Date.now();
+    const bounds: StudioObjectBounds = {
+      x: this.clamp(normalizedX - size / 2, 0, 1 - size),
+      y: this.clamp(normalizedY - size / 2, 0, 1 - size),
+      width: size,
+      height: size
+    };
+
+    const object: StudioObject = {
+      id: this.createObjectId(),
+      pageNumber,
+      type: 'comment',
+      bounds,
+      comment: {
+        content: '',
+        author: author.trim() || 'You',
+        createdAt: now,
+        updatedAt: now,
+        resolved: false
+      }
+    };
+
+    this.objects.set(object.id, object);
+    this.touch();
+    return this.cloneObject(object);
+  }
+
+  updateComment(
+    objectId: string,
+    patch: Partial<Pick<StudioCommentData, 'content' | 'resolved' | 'author'>>
+  ): StudioObject | null {
+    const object =
+      this.objects.get(objectId);
+
+    if (
+      !object ||
+      object.type !== 'comment' ||
+      !object.comment
+    ) {
+      return null;
+    }
+
+    const current =
+      object.comment;
+
+    const nextContent =
+      patch.content !== undefined
+        ? patch.content.slice(0, 4000)
+        : current.content;
+
+    const nextAuthor =
+      patch.author !== undefined
+        ? (patch.author.trim() || 'You').slice(0, 120)
+        : current.author;
+
+    const nextResolved =
+      patch.resolved !== undefined
+        ? patch.resolved
+        : current.resolved;
+
+    /**
+     * Semantic no-ops must not refresh updatedAt or touch the reactive object
+     * store. Re-saving unchanged text or resolving an already resolved comment
+     * should not manufacture a new object mutation.
+     */
+    if (
+      nextContent === current.content &&
+      nextAuthor === current.author &&
+      nextResolved === current.resolved
+    ) {
+      return this.cloneObject(object);
+    }
+
+    const updated: StudioObject = {
+      ...object,
+      comment: {
+        ...current,
+        content: nextContent,
+        author: nextAuthor,
+        resolved: nextResolved,
+        updatedAt: Date.now()
+      }
+    };
+
+    this.objects.set(
+      objectId,
+      updated
+    );
+    this.touch();
+
+    return this.cloneObject(updated);
   }
 
   createTextObject(
