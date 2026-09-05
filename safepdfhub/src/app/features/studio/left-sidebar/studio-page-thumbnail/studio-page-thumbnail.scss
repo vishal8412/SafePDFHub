@@ -163,6 +163,10 @@
 
 .page-thumbnail__number {
   display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   align-items: center;
   justify-content: center;
   min-width: 22px;
@@ -196,4 +200,73 @@
     animation: none;
     transition: none;
   }
+}
+
+/* ==========================================================
+   F7.3 — SIDEBAR PAGE VIEW MODES
+========================================================== */
+
+.page-thumbnail--compact {
+  padding: 6px;
+}
+
+.page-thumbnail--compact .page-thumbnail__preview {
+  height: 82px;
+  min-height: 82px;
+  padding: 5px;
+}
+
+.page-thumbnail--compact .page-thumbnail__footer {
+  min-height: 18px;
+  padding-top: 3px;
+}
+
+.page-thumbnail--compact .page-thumbnail__number {
+  height: 17px;
+  min-width: 20px;
+  font-size: 9px;
+}
+
+.page-thumbnail--grid {
+  padding: 5px;
+  border-radius: 9px;
+}
+
+.page-thumbnail--grid .page-thumbnail__preview {
+  height: 104px;
+  min-height: 104px;
+  padding: 5px;
+  border-radius: 6px;
+}
+
+.page-thumbnail--grid .page-thumbnail__footer {
+  min-height: 19px;
+  padding-top: 3px;
+}
+
+.page-thumbnail--grid .page-thumbnail__number {
+  height: 17px;
+  min-width: 20px;
+  font-size: 9px;
+}
+
+.page-thumbnail--grid .page-thumbnail__blank-sheet {
+  inset: 11px 18%;
+}
+
+.page-thumbnail--grid .page-thumbnail__blank-label {
+  font-size: 8px;
+}
+
+.page-thumbnail--compact .page-thumbnail__loading span,
+.page-thumbnail--grid .page-thumbnail__loading span {
+  width: 15px;
+  height: 15px;
+}
+
+.page-thumbnail--compact .page-thumbnail__error,
+.page-thumbnail--grid .page-thumbnail__error {
+  gap: 2px;
+  padding: 7px;
+  font-size: 8px;
 }

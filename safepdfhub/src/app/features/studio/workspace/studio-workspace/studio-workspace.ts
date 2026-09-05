@@ -14,6 +14,7 @@ import {
 import { StudioCanvas } from '../../canvas/studio-canvas/studio-canvas';
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioPageThumbnail } from '../../left-sidebar/studio-page-thumbnail/studio-page-thumbnail';
+import type { StudioSidebarPageView } from '../../models/studio-sidebar.model';
 
 @Component({
   selector: 'app-studio-workspace',
@@ -81,6 +82,15 @@ private readonly pagesList!:
   /** F7.2 — Sidebar can switch between page navigation and review comments. */
   readonly sidebarTab = signal<'pages' | 'comments'>('pages');
   readonly comments = this.facade.comments;
+
+  /**
+   * F7.3 — User-selected visual density for the Pages sidebar.
+   *
+   * This state is intentionally local to the workspace because it changes
+   * presentation only and must not enter the document/history lifecycle.
+   */
+  readonly sidebarPageView =
+    signal<StudioSidebarPageView>('comfortable');
 
   constructor() {
 
@@ -164,6 +174,29 @@ private readonly pagesList!:
     });
     this.facade.setActiveTool('comment');
   }
+
+  /**
+   * Change the visual density of the Pages sidebar.
+   *
+   * No page data, selection or history state is mutated. After Angular lays
+   * out the new view, re-run active-page synchronization so the current page
+   * remains visible in Comfortable, Compact and Grid modes.
+   */
+  setSidebarPageView(
+    view: StudioSidebarPageView
+  ): void {
+
+    if (
+      this.sidebarPageView() === view
+    ) {
+      return;
+    }
+
+    this.sidebarPageView.set(view);
+
+    this.scheduleActivePageScroll();
+  }
+
 
   selectPage(
     pageNumber: number

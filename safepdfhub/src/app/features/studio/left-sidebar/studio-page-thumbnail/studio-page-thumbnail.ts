@@ -22,6 +22,10 @@ import {
   ThumbnailService
 } from '../../services/thumbnail.service';
 
+import type {
+  StudioSidebarPageView
+} from '../../models/studio-sidebar.model';
+
 
 @Component({
   selector:
@@ -79,6 +83,16 @@ export class StudioPageThumbnail
 
   @Input()
   selected = false;
+
+
+  /**
+   * Presentation density selected by the Pages sidebar.
+   *
+   * This affects layout only; the thumbnail render lifecycle remains
+   * identical across all views.
+   */
+  @Input()
+  viewMode: StudioSidebarPageView = 'comfortable';
 
 
   @Input()

@@ -48,6 +48,8 @@
 }
 
 .sidebar {
+  container-type: inline-size;
+
   display: flex;
   flex-direction: column;
 
@@ -1187,3 +1189,265 @@
 .sidebar__comments-empty span { display:block; margin-bottom:10px; color:#00d4b3; font-size:28px; }
 .sidebar__comments-empty strong { display:block; color:rgba(255,255,255,.82); font-size:12px; }
 .sidebar__comments-empty p { margin:7px 0 0; font-size:10px; line-height:1.5; }
+
+/* ==========================================================
+   F7.3 — SIDEBAR PAGE VIEW MODES & SELECTION-READY LAYOUT
+========================================================== */
+
+/*
+ * The Pages tab is intentionally compact:
+ * - no permanent search field consuming vertical space
+ * - a full-width segmented view switcher directly below the tabs
+ * - the thumbnail list remains the only scrolling region
+ * - the selected-page action area remains fixed at the bottom
+ *
+ * This gives large documents the maximum possible thumbnail area and keeps
+ * the view mode available without scrolling back to the top.
+ */
+.sidebar__view-controls {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(10, 22, 37, 0.72),
+      rgba(7, 17, 31, 0.34)
+    );
+}
+
+.sidebar__view-options {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.18fr)
+    minmax(0, 1fr)
+    minmax(0, 0.82fr);
+  gap: 3px;
+
+  width: 100%;
+  min-width: 0;
+
+  padding: 3px;
+  box-sizing: border-box;
+
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+
+  background: rgba(8, 20, 35, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.018);
+}
+
+.sidebar__view-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  min-width: 0;
+  height: 32px;
+  padding: 0 7px;
+  box-sizing: border-box;
+
+  border: 1px solid transparent;
+  border-radius: 7px;
+
+  background: transparent;
+  color: rgba(255, 255, 255, 0.50);
+
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+
+  cursor: pointer;
+  overflow: hidden;
+
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.sidebar__view-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__view-option:hover {
+  color: rgba(255, 255, 255, 0.90);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.sidebar__view-option:active {
+  transform: translateY(1px);
+}
+
+.sidebar__view-option--active {
+  border-color: rgba(0, 212, 179, 0.30);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 212, 179, 0.15),
+      rgba(0, 212, 179, 0.08)
+    );
+  color: #39dcc6;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 0 0 1px rgba(0, 212, 179, 0.035);
+}
+
+.sidebar__view-option:focus-visible {
+  outline: 2px solid rgba(0, 212, 179, 0.58);
+  outline-offset: 2px;
+}
+
+.sidebar__view-option svg {
+  flex: 0 0 auto;
+
+  width: 14px;
+  height: 14px;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/*
+ * Comfortable is the review-oriented default. The page item stays full-width
+ * so content can be inspected easily.
+ */
+.sidebar__pages-list--comfortable {
+  display: block;
+}
+
+/*
+ * Compact keeps a single-column reading order while reducing vertical cost.
+ * This is the best default for navigating large PDFs without losing ordering
+ * clarity.
+ */
+.sidebar__pages-list--compact {
+  display: block;
+}
+
+.sidebar__pages-list--compact .sidebar__page-item {
+  margin-bottom: 3px;
+}
+
+/*
+ * Grid is intentionally two columns at the current sidebar width. It gives
+ * users a dense visual overview and is the strongest foundation for upcoming
+ * multi-page selection and bulk page operations.
+ */
+.sidebar__pages-list--grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 7px;
+
+  padding: 7px 9px 12px 8px;
+}
+
+.sidebar__pages-list--grid .sidebar__page-item {
+  width: auto;
+  min-width: 0;
+  margin: 0;
+
+  border-radius: 10px;
+}
+
+.sidebar__pages-list--grid .sidebar__page-item--active {
+  box-shadow:
+    inset 2px 0 0 #00d4b3,
+    0 0 0 1px rgba(0, 212, 179, 0.10);
+}
+
+/*
+ * Deferred placeholders must match the final component density. Otherwise
+ * large PDFs visually jump as PDF.js renders thumbnails on demand.
+ */
+.sidebar__pages-list--compact .sidebar__thumbnail-placeholder {
+  padding: 6px;
+}
+
+.sidebar__pages-list--compact .sidebar__thumbnail-placeholder-preview {
+  height: 82px;
+  min-height: 82px;
+  padding: 5px;
+}
+
+.sidebar__pages-list--compact .sidebar__thumbnail-placeholder-number {
+  min-height: 18px;
+  padding-top: 3px;
+}
+
+.sidebar__pages-list--grid .sidebar__thumbnail-placeholder {
+  padding: 5px;
+}
+
+.sidebar__pages-list--grid .sidebar__thumbnail-placeholder-preview {
+  height: 96px;
+  min-height: 96px;
+  padding: 5px;
+}
+
+.sidebar__pages-list--grid .sidebar__thumbnail-placeholder-preview span {
+  width: 34px;
+  height: 28px;
+  border-radius: 7px;
+  font-size: 8px;
+}
+
+.sidebar__pages-list--grid .sidebar__thumbnail-placeholder-number {
+  min-height: 19px;
+  padding-top: 3px;
+}
+
+/*
+ * Defensive narrow-sidebar fallback. The text never overflows the segmented
+ * control; icons remain available with native button titles for discovery.
+ */
+@container (max-width: 285px) {
+  .sidebar__view-option span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .sidebar__view-option {
+    gap: 0;
+  }
+}
+
+@media (max-width: 920px) {
+  .sidebar__view-option {
+    gap: 5px;
+    padding-inline: 5px;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar__view-option span {
+    display: none;
+  }
+
+  .sidebar__view-option {
+    gap: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar__view-option {
+    transition: none;
+  }
+}

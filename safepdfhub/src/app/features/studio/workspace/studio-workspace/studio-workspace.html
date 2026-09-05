@@ -57,37 +57,75 @@
         @if (sidebarTab() === 'pages') {
 
         <!-- ====================================================
-             SEARCH
+             F7.3 — PAGE VIEW MODE
+
+             This control intentionally owns no page data. The thumbnail
+             list is the only scrolling region, so the view switcher stays
+             visible while users navigate very large PDFs.
         ===================================================== -->
-        <div class="sidebar__search">
+        <section
+          class="sidebar__view-controls"
+          aria-label="Page view mode">
 
-          <label
-            class="sidebar__search-label"
-            for="studio-page-search">
+          <div class="sidebar__view-options">
 
-            Search pages
+            <button
+              type="button"
+              class="sidebar__view-option"
+              [class.sidebar__view-option--active]="sidebarPageView() === 'comfortable'"
+              [attr.aria-pressed]="sidebarPageView() === 'comfortable'"
+              title="Comfortable view"
+              (click)="setSidebarPageView('comfortable')">
 
-          </label>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="5" y="3.5" width="14" height="17" rx="2" />
+                <path d="M8 7h8M8 10h8M8 13h5" />
+              </svg>
 
-          <div class="sidebar__search-box">
+              <span>Comfortable</span>
 
-            <span
-              class="sidebar__search-icon"
-              aria-hidden="true">
+            </button>
 
-              ⌕
+            <button
+              type="button"
+              class="sidebar__view-option"
+              [class.sidebar__view-option--active]="sidebarPageView() === 'compact'"
+              [attr.aria-pressed]="sidebarPageView() === 'compact'"
+              title="Compact view"
+              (click)="setSidebarPageView('compact')">
 
-            </span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="6" y="4" width="12" height="5" rx="1.5" />
+                <rect x="6" y="11" width="12" height="5" rx="1.5" />
+                <path d="M8 6.5h5M8 13.5h5" />
+              </svg>
 
-            <input
-              id="studio-page-search"
-              type="search"
-              placeholder="Search pages"
-              autocomplete="off" />
+              <span>Compact</span>
+
+            </button>
+
+            <button
+              type="button"
+              class="sidebar__view-option"
+              [class.sidebar__view-option--active]="sidebarPageView() === 'grid'"
+              [attr.aria-pressed]="sidebarPageView() === 'grid'"
+              title="Grid view"
+              (click)="setSidebarPageView('grid')">
+
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4.5" y="4.5" width="6" height="6" rx="1" />
+                <rect x="13.5" y="4.5" width="6" height="6" rx="1" />
+                <rect x="4.5" y="13.5" width="6" height="6" rx="1" />
+                <rect x="13.5" y="13.5" width="6" height="6" rx="1" />
+              </svg>
+
+              <span>Grid</span>
+
+            </button>
 
           </div>
 
-        </div>
+        </section>
 
 
         @if (!facade.hasDocument()) {
@@ -155,6 +193,9 @@
           <div
             #pagesList
             class="sidebar__pages-list"
+            [class.sidebar__pages-list--comfortable]="sidebarPageView() === 'comfortable'"
+            [class.sidebar__pages-list--compact]="sidebarPageView() === 'compact'"
+            [class.sidebar__pages-list--grid]="sidebarPageView() === 'grid'"
             aria-label="PDF pages">
 
             @for (page of pages(); track page.id) {
@@ -185,6 +226,7 @@
           [rotation]="page.rotation"
           [blank]="page.kind === 'blank'"
           [selected]="$index + 1 === currentPage()"
+          [viewMode]="sidebarPageView()"
           [pdf]="facade.document()?.pdf ?? null"
           (pageSelected)="selectPage($event)"
         />
