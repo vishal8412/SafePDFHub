@@ -1,6 +1,7 @@
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   ElementRef,
   EventEmitter,
@@ -43,10 +44,9 @@ export class StudioPageThumbnail
     OnChanges,
     OnDestroy {
 
-  private readonly thumbnailService =
-    inject(ThumbnailService);
+  private readonly thumbnailService = inject(ThumbnailService);
 
-
+  private readonly cdr = inject(ChangeDetectorRef);
   /**
    * Logical Studio page position shown to the user.
    *
@@ -184,14 +184,11 @@ export class StudioPageThumbnail
       this.releaseThumbnailCanvas();
 
 
-      this.loading =
-        false;
-
-      this.loaded =
-        false;
-
-      this.failed =
-        false;
+      this.updateRenderState(
+        false,
+        false,
+        false
+      );
 
 
       if (
@@ -250,182 +247,165 @@ export class StudioPageThumbnail
     );
   }
 
+private updateRenderState(
+  loading: boolean,
+  loaded: boolean,
+  failed: boolean
+): void {
 
-  private renderIfPossible(): void {
+  this.loading = loading;
+  this.loaded = loaded;
+  this.failed = failed;
+
+  /**
+   * PDF.js rendering may complete outside Angular's normal
+   * change-detection flow.
+   *
+   * Explicitly mark this OnPush component for checking so the
+   * loading/error overlay always reflects the actual renderer state.
+   */
+  this.cdr.markForCheck();
+}
+
+private renderIfPossible(): void {
+
+  /**
+   * Blank Studio pages do not have a PDF source page to render.
+   */
+  if (
+    this.blank
+  ) {
+
+    this.updateRenderState(
+      false,
+      true,
+      false
+    );
+
+    return;
+  }
+
+  const pdf =
+    this.pdf;
+
+  const canvas =
+    this.canvasRef?.nativeElement;
+
+  const sourcePageNumber =
+    this.sourcePageNumber;
+
+  /**
+   * A canvas can temporarily be unavailable during a blank -> normal
+   * transition because Angular creates it conditionally.
+   *
+   * The ViewChild setter will call renderIfPossible() again once the
+   * canvas becomes available.
+   */
+  if (
+    !canvas
+  ) {
+
+    this.updateRenderState(
+      false,
+      false,
+      false
+    );
+
+    return;
+  }
+
+  if (
+    !pdf ||
+    !sourcePageNumber ||
+    sourcePageNumber < 1 ||
+    sourcePageNumber > pdf.numPages
+  ) {
+
+    this.releaseThumbnailCanvas();
+
+    this.updateRenderState(
+      false,
+      false,
+      true
+    );
+
+    return;
+  }
+
+  /**
+   * Every render receives a unique token.
+   *
+   * A late completion from an older render cannot overwrite
+   * the current component state.
+   */
+  const token =
+    ++this.renderToken;
+
+  this.updateRenderState(
+    true,
+    false,
+    false
+  );
+
+  void this.render(
+    pdf,
+    sourcePageNumber,
+    canvas,
+    token
+  );
+}
+
+
+private async render(
+  pdf: PDFDocumentProxy,
+  sourcePageNumber: number,
+  canvas: HTMLCanvasElement,
+  token: number
+): Promise<void> {
+
+  try {
+
+    await this.thumbnailService
+      .renderThumbnail(
+        pdf,
+        sourcePageNumber,
+        canvas,
+        168,
+        this.rotation
+      );
 
     /**
-     * Blank Studio pages do not have a PDF source page to render.
-     *
-     * The existing canvas render was already cancelled during the
-     * input transition, so no renderer work remains for this page.
+     * Ignore stale asynchronous completions.
      */
     if (
-      this.blank
+      token !== this.renderToken
     ) {
-
-      this.loading =
-        false;
-
-      this.loaded =
-        true;
-
-      this.failed =
-        false;
-
       return;
     }
 
+    this.updateRenderState(
+      false,
+      true,
+      false
+    );
 
-    const pdf =
-      this.pdf;
-
-
-    const canvas =
-      this.canvasRef?.nativeElement;
-
-
-    const sourcePageNumber =
-      this.sourcePageNumber;
-
+  } catch {
 
     /**
-     * A canvas can temporarily be unavailable during a blank -> normal
-     * transition because Angular creates it conditionally.
-     *
-     * The ViewChild setter will call renderIfPossible() again once the
-     * canvas becomes available.
+     * Ignore failures from stale/cancelled renders.
      */
     if (
-      !canvas
+      token !== this.renderToken
     ) {
-
-      this.loading =
-        false;
-
-      this.loaded =
-        false;
-
-      this.failed =
-        false;
-
       return;
     }
 
-
-    if (
-      !pdf ||
-      !sourcePageNumber ||
-      sourcePageNumber < 1 ||
-      sourcePageNumber > pdf.numPages
-    ) {
-
-      /**
-       * Explicitly release any existing render ownership before entering
-       * the invalid thumbnail state.
-       */
-      this.releaseThumbnailCanvas();
-
-
-      this.loading =
-        false;
-
-      this.loaded =
-        false;
-
-      this.failed =
-        true;
-
-      return;
-    }
-
-
-    /**
-     * Every render receives a unique token.
-     *
-     * A late completion from an older render cannot overwrite the
-     * current component state.
-     */
-    const token =
-      ++this.renderToken;
-
-
-    this.loading =
-      true;
-
-    this.loaded =
-      false;
-
-    this.failed =
-      false;
-
-
-    void this.render(
-      pdf,
-      sourcePageNumber,
-      canvas,
-      token
+    this.updateRenderState(
+      false,
+      false,
+      true
     );
   }
+}
 
-
-  private async render(
-    pdf: PDFDocumentProxy,
-    sourcePageNumber: number,
-    canvas: HTMLCanvasElement,
-    token: number
-  ): Promise<void> {
-
-    try {
-
-      await this.thumbnailService
-        .renderThumbnail(
-          pdf,
-          sourcePageNumber,
-          canvas,
-          168,
-          this.rotation
-        );
-
-
-      /**
-       * Ignore stale asynchronous completions.
-       */
-      if (
-        token !== this.renderToken
-      ) {
-        return;
-      }
-
-
-      this.loading =
-        false;
-
-      this.loaded =
-        true;
-
-      this.failed =
-        false;
-
-    } catch {
-
-      /**
-       * Ignore failures from stale/cancelled renders.
-       */
-      if (
-        token !== this.renderToken
-      ) {
-        return;
-      }
-
-
-      this.loading =
-        false;
-
-      this.loaded =
-        false;
-
-      this.failed =
-        true;
-    }
-  }
 }

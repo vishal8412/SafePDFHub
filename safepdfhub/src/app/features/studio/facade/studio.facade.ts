@@ -1304,48 +1304,161 @@ goToLastPage(): void {
     );
   }
 
-  insertBlankPage(
-    afterCurrent = true
-  ): void {
+  async insertBlankPage(
+  afterCurrent = true
+): Promise<void> {
 
-    this.recordPageMutation(
-      afterCurrent
-        ? 'Insert page after'
-        : 'Insert page before',
-      () => {
-
-        const current =
-          this.currentPage();
-
-        const position =
-          afterCurrent
-            ? current + 1
-            : current;
-
-        const target =
-          this.pageService.insertBlank(
-            position
-          );
-
-        this.objectService.shiftPageNumbers(
-          target,
-          1
-        );
-
-        this.state.setPageCount(
-          this.pageCount()
-        );
-
-        this.state.clearSelection();
-
-        this.state.setCurrentPage(
-          target
-        );
-
-        return true;
-      }
-    );
+  if (!this.hasDocument()) {
+    return;
   }
+
+  const current =
+    this.currentPage();
+
+  const dimensions =
+    await this.resolveBlankPageDimensions(
+      current
+    );
+
+  this.recordPageMutation(
+    afterCurrent
+      ? 'Insert page after'
+      : 'Insert page before',
+    () => {
+
+      const position =
+        afterCurrent
+          ? current + 1
+          : current;
+
+      const target =
+        this.pageService.insertBlank(
+          position,
+          dimensions.width,
+          dimensions.height
+        );
+
+      this.objectService.shiftPageNumbers(
+        target,
+        1
+      );
+
+      this.state.setPageCount(
+        this.pageCount()
+      );
+
+      this.state.clearSelection();
+
+      this.state.setCurrentPage(
+        target
+      );
+
+      return true;
+    }
+  );
+}
+
+private async resolveBlankPageDimensions(
+  pageNumber: number
+): Promise<{
+  width: number;
+  height: number;
+}> {
+
+  const fallback = {
+    width: 595.28,
+    height: 841.89
+  };
+
+  const logicalPage =
+    this.pageService.pageAt(
+      pageNumber
+    );
+
+  if (!logicalPage) {
+    return fallback;
+  }
+
+  /**
+   * Existing blank page:
+   *
+   * Resolve its displayed dimensions, including
+   * any Studio rotation.
+   */
+  if (
+    logicalPage.kind === 'blank'
+  ) {
+
+    const baseWidth =
+      logicalPage.blankWidth ??
+      fallback.width;
+
+    const baseHeight =
+      logicalPage.blankHeight ??
+      fallback.height;
+
+    const rotated =
+      logicalPage.rotation === 90 ||
+      logicalPage.rotation === 270;
+
+    return {
+      width:
+        rotated
+          ? baseHeight
+          : baseWidth,
+
+      height:
+        rotated
+          ? baseWidth
+          : baseHeight
+    };
+  }
+
+  const document =
+    this.document();
+
+  if (
+    !document ||
+    logicalPage.sourcePageNumber === null
+  ) {
+    return fallback;
+  }
+
+  try {
+
+    const pdfPage =
+      await document.pdf.getPage(
+        logicalPage.sourcePageNumber
+      );
+
+    const viewport =
+      pdfPage.getViewport({
+        scale: 1,
+        rotation:
+          logicalPage.rotation
+      });
+
+    return {
+      width:
+        viewport.width > 0
+          ? viewport.width
+          : fallback.width,
+
+      height:
+        viewport.height > 0
+          ? viewport.height
+          : fallback.height
+    };
+
+  } catch {
+
+    /**
+     * Insertion must remain functional even if
+     * page-dimension lookup fails.
+     */
+    return fallback;
+  }
+}
 
   deleteCurrentPage(): void {
 

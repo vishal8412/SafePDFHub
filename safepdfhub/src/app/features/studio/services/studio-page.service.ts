@@ -22,6 +22,14 @@ export class StudioPageService {
   readonly pageCount =
     computed(() => this._pages().length);
 
+  private normalizeBlankDimension(value: number,fallback: number): number {
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+
+  return value;
+}
   initialize(
     sourcePageCount: number
   ): void {
@@ -165,44 +173,56 @@ export class StudioPageService {
   }
 
   insertBlank(
-    position: number
-  ): number {
+  position: number,
+  width = 595.28,
+  height = 841.89
+): number {
 
-    const pages =
-      [...this._pages()];
+  const pages =
+    [...this._pages()];
 
-    const target =
-      Math.min(
-        Math.max(
-          1,
-          Math.floor(position)
-        ),
-        pages.length + 1
-      );
-
-    pages.splice(
-      target - 1,
-      0,
-      {
-        id:
-          `blank-${this.token()}`,
-        kind:
-          'blank',
-        sourcePageNumber:
-          null,
-        rotation:
-          0,
-        blankWidth:
-          595.28,
-        blankHeight:
-          841.89
-      }
+  const target =
+    Math.min(
+      Math.max(
+        1,
+        Math.floor(position)
+      ),
+      pages.length + 1
     );
 
-    this._pages.set(pages);
+  const blankWidth =
+    this.normalizeBlankDimension(
+      width,
+      595.28
+    );
 
-    return target;
-  }
+  const blankHeight =
+    this.normalizeBlankDimension(
+      height,
+      841.89
+    );
+
+  pages.splice(
+    target - 1,
+    0,
+    {
+      id:
+        `blank-${this.token()}`,
+      kind:
+        'blank',
+      sourcePageNumber:
+        null,
+      rotation:
+        0,
+      blankWidth,
+      blankHeight
+    }
+  );
+
+  this._pages.set(pages);
+
+  return target;
+}
 
   delete(
     position: number
