@@ -108,6 +108,296 @@
     (viewModeChanged)="onViewModeChanged($event)"
   />
 
+
+
+  @if (extractDialogOpen()) {
+    <div
+      class="studio-extract-dialog"
+      role="presentation"
+      (click)="closeExtractPagesDialog()">
+
+      <section
+        class="studio-extract-dialog__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="studio-extract-dialog-title"
+        (click)="$event.stopPropagation()">
+
+        <header class="studio-extract-dialog__header">
+          <div class="studio-extract-dialog__heading">
+            <span class="studio-extract-dialog__hero-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48" fill="none">
+                <path d="M13 6.5h14l8 8v18.8A3.7 3.7 0 0 1 31.3 37H13a3.7 3.7 0 0 1-3.7-3.7V10.2A3.7 3.7 0 0 1 13 6.5Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M27 6.5v8h8M15 21h9M15 27h13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M29 34h12m0 0-4-4m4 4-4 4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+
+            <div>
+              <h2
+                id="studio-extract-dialog-title"
+                class="studio-extract-dialog__title">
+                Extract Pages
+              </h2>
+
+              <p class="studio-extract-dialog__description">
+                Create a new PDF from selected pages. All your edits — text, images, shapes,
+                drawings, highlights and other Studio objects on those pages — will be included.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="studio-extract-dialog__close"
+            aria-label="Close Extract Pages dialog"
+            title="Close"
+            [disabled]="isExtractingPages()"
+            (click)="closeExtractPagesDialog()">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+
+        <div class="studio-extract-dialog__body">
+          <div class="studio-extract-dialog__modes">
+
+            <button
+              type="button"
+              class="studio-extract-dialog__mode"
+              [class.studio-extract-dialog__mode--active]="extractMode() === 'current'"
+              [attr.aria-pressed]="extractMode() === 'current'"
+              (click)="selectExtractMode('current')">
+
+              <span class="studio-extract-dialog__radio" aria-hidden="true">
+                <span></span>
+              </span>
+
+              <span class="studio-extract-dialog__mode-icon" aria-hidden="true">
+                <svg viewBox="0 0 40 40" fill="none">
+                  <path d="M10 5h13l7 7v21a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+                  <path d="M23 5v8h8" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+                </svg>
+              </span>
+
+              <span class="studio-extract-dialog__mode-copy">
+                <span class="studio-extract-dialog__mode-title">Current page</span>
+                <span class="studio-extract-dialog__mode-description">
+                  Extract only the current page.
+                </span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              class="studio-extract-dialog__mode"
+              [class.studio-extract-dialog__mode--active]="extractMode() === 'custom'"
+              [attr.aria-pressed]="extractMode() === 'custom'"
+              (click)="selectExtractMode('custom')">
+
+              <span class="studio-extract-dialog__radio" aria-hidden="true">
+                <span></span>
+              </span>
+
+              <span class="studio-extract-dialog__mode-icon studio-extract-dialog__mode-icon--list" aria-hidden="true">
+                <svg viewBox="0 0 40 40" fill="none">
+                  <path d="M13 10h17M13 20h17M13 30h17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                  <circle cx="7" cy="10" r="1.4" fill="currentColor"/>
+                  <circle cx="7" cy="20" r="1.4" fill="currentColor"/>
+                  <circle cx="7" cy="30" r="1.4" fill="currentColor"/>
+                </svg>
+              </span>
+
+              <span class="studio-extract-dialog__mode-copy">
+                <span class="studio-extract-dialog__mode-title">Custom pages / ranges</span>
+                <span class="studio-extract-dialog__mode-description">
+                  Enter page numbers or ranges (e.g. 1, 3, 5-10).
+                </span>
+              </span>
+            </button>
+
+          </div>
+
+          @if (extractMode() === 'current') {
+            <section class="studio-extract-dialog__current-card">
+              <div>
+                <h3>Current page</h3>
+                <p>The currently active page will be extracted.</p>
+              </div>
+
+              <div class="studio-extract-dialog__current-stat">
+                <span class="studio-extract-dialog__current-stat-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M7 3.5h7.2L18 7.3v13.2H7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                    <path d="M14 3.5v4h4M10 12h5M10 15.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                  </svg>
+                </span>
+                <div>
+                  <span>Current page:</span>
+                  <strong>{{ currentPage() }}</strong>
+                  <em>of {{ totalPages() }}</em>
+                </div>
+              </div>
+            </section>
+          } @else {
+            <section class="studio-extract-dialog__custom-card">
+              <label
+                for="studio-extract-page-expression"
+                class="studio-extract-dialog__label">
+                Pages to extract
+              </label>
+
+              <input
+                id="studio-extract-page-expression"
+                type="text"
+                class="studio-extract-dialog__input"
+                [value]="extractExpression()"
+                placeholder="Example: 1-3, 7-10, 15"
+                autocomplete="off"
+                spellcheck="false"
+                [attr.aria-invalid]="extractValidationError() ? 'true' : 'false'"
+                (input)="onExtractionExpressionInput($event)" />
+
+              <p class="studio-extract-dialog__hint">
+                Single pages: <code>1, 3, 5</code>
+                <span>•</span>
+                Range: <code>5-10</code>
+                <span>•</span>
+                Multiple ranges: <code>1-3, 7-10, 15</code>
+              </p>
+
+              @if (extractValidationError()) {
+                <p class="studio-extract-dialog__validation" role="alert">
+                  {{ extractValidationError() }}
+                </p>
+              }
+            </section>
+          }
+
+          <section class="studio-extract-dialog__selection-summary">
+            <div class="studio-extract-dialog__selection-summary-main">
+              <span class="studio-extract-dialog__selection-summary-label">Selected</span>
+              <strong>{{ selectedExtractionPageCount() }} {{ selectedExtractionPageCount() === 1 ? 'page' : 'pages' }}</strong>
+              <span class="studio-extract-dialog__selection-summary-divider" aria-hidden="true"></span>
+              <span class="studio-extract-dialog__selection-summary-range">{{ extractionPreview() }}</span>
+            </div>
+
+            <div class="studio-extract-dialog__view-toggle" aria-label="Preview style">
+              <button
+                type="button"
+                [class.studio-extract-dialog__view-toggle-button--active]="extractPreviewMode() === 'list'"
+                [attr.aria-pressed]="extractPreviewMode() === 'list'"
+                (click)="setExtractPreviewMode('list')">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M8 6h11M8 12h11M8 18h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <circle cx="4.5" cy="6" r="1" fill="currentColor"/>
+                  <circle cx="4.5" cy="12" r="1" fill="currentColor"/>
+                  <circle cx="4.5" cy="18" r="1" fill="currentColor"/>
+                </svg>
+                <span>Summary</span>
+              </button>
+
+              <button
+                type="button"
+                [class.studio-extract-dialog__view-toggle-button--active]="extractPreviewMode() === 'thumbnails'"
+                [attr.aria-pressed]="extractPreviewMode() === 'thumbnails'"
+                (click)="setExtractPreviewMode('thumbnails')">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="4" y="4" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.6"/>
+                  <rect x="15" y="4" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.6"/>
+                  <rect x="4" y="15" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.6"/>
+                  <rect x="15" y="15" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.6"/>
+                </svg>
+                <span>Thumbnails</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="studio-extract-dialog__preview">
+            @if (extractPreviewMode() === 'list') {
+              <div class="studio-extract-dialog__compact-pages">
+                @for (page of extractionPreviewPages(); track page) {
+                  <span class="studio-extract-dialog__compact-page">Page {{ page }}</span>
+                }
+                @if (remainingExtractionPageCount() > 0) {
+                  <button
+                    type="button"
+                    class="studio-extract-dialog__compact-page studio-extract-dialog__compact-page--more"
+                    (click)="toggleExtractionPreview()">
+                    +{{ remainingExtractionPageCount() }} more
+                  </button>
+                }
+              </div>
+            } @else {
+              <div class="studio-extract-dialog__thumbnail-grid studio-extract-dialog__thumbnail-grid--compact">
+                @for (page of extractionPreviewPages(); track page) {
+                  <article class="studio-extract-dialog__thumbnail">
+                    <div class="studio-extract-dialog__thumbnail-sheet">
+                      <span></span><span></span><span></span>
+                      <div></div><div></div><div></div>
+                    </div>
+                    <strong>Page {{ page }}</strong>
+                  </article>
+                }
+                @if (remainingExtractionPageCount() > 0) {
+                  <button
+                    type="button"
+                    class="studio-extract-dialog__thumbnail-more"
+                    (click)="toggleExtractionPreview()">
+                    <strong>+{{ remainingExtractionPageCount() }}</strong>
+                    <span>Show all selected pages</span>
+                  </button>
+                }
+              </div>
+            }
+            @if (extractPreviewExpanded() && extractionPageList().length > 12) {
+              <div class="studio-extract-dialog__preview-actions">
+                <button type="button" (click)="toggleExtractionPreview()">Show less</button>
+              </div>
+            }
+          </section>
+
+          <section class="studio-extract-dialog__info">
+            <span class="studio-extract-dialog__info-icon" aria-hidden="true">i</span>
+            <p>
+              The extracted PDF will include all content and your edits on the selected pages,
+              including text, images, shapes, drawings, highlights and other Studio objects.
+            </p>
+          </section>
+        </div>
+
+        <footer class="studio-extract-dialog__footer">
+          <button
+            type="button"
+            class="studio-extract-dialog__button studio-extract-dialog__button--secondary"
+            [disabled]="isExtractingPages()"
+            (click)="closeExtractPagesDialog()">
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            class="studio-extract-dialog__button studio-extract-dialog__button--primary"
+            [disabled]="
+              isExtractingPages() ||
+              selectedExtractionPageCount() === 0 ||
+              !!extractValidationError()
+            "
+            (click)="confirmExtractPages()">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 3.5h7.2L18 7.3v13.2H7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M12 10v6m0 0-2.5-2.5M12 16l2.5-2.5M9 20.5h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            {{ isExtractingPages()
+              ? 'Extracting…'
+              : 'Extract ' + selectedExtractionPageCount() + ' ' + (selectedExtractionPageCount() === 1 ? 'page' : 'pages') }}
+          </button>
+        </footer>
+      </section>
+    </div>
+  }
+
   <input
     #pdfInput
     type="file"

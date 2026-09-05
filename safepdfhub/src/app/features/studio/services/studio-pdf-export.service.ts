@@ -311,6 +311,72 @@ export class StudioPdfExportService {
     );
   }
 
+  /**
+   * F7.1.2 — Extract one or more logical Studio pages and download them as a
+   * standalone PDF.
+   *
+   * The supplied logical page order is preserved exactly. This supports ranges,
+   * reordered pages, duplicated pages, page rotation, and Studio-created blank
+   * pages because exportTextObjects already rebuilds the output from the logical
+   * page manifest.
+   *
+   * Objects must use output-local page numbers (1..N). StudioFacade performs
+   * that remapping before calling this method so an object on logical page 20
+   * can correctly be painted onto page 1, 2, etc. of an extracted PDF.
+   */
+  async extractPagesAndDownload(
+    sourceFile: File,
+    objects: readonly StudioObject[],
+    logicalPages: readonly StudioPage[],
+    outputFileName: string
+  ): Promise<void> {
+    if (logicalPages.length === 0) {
+      throw new Error(
+        'Select at least one page to extract.'
+      );
+    }
+
+    const blob =
+      await this.exportTextObjects(
+        sourceFile,
+        objects,
+        logicalPages
+      );
+
+    saveAs(
+      blob,
+      outputFileName
+    );
+  }
+
+  /**
+   * Backwards-compatible single-page wrapper.
+   *
+   * Keep this method for any existing caller while routing it through the same
+   * F7.1.2 multi-page pipeline.
+   */
+  async extractAndDownload(
+    sourceFile: File,
+    objects: readonly StudioObject[],
+    logicalPage: StudioPage,
+    outputFileName: string
+  ): Promise<void> {
+    const outputObjects =
+      objects.map(
+        object => ({
+          ...object,
+          pageNumber: 1
+        })
+      );
+
+    await this.extractPagesAndDownload(
+      sourceFile,
+      outputObjects,
+      [ logicalPage ],
+      outputFileName
+    );
+  }
+
   private dataUrlToUint8Array(
     dataUrl: string
   ): Uint8Array {

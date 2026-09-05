@@ -669,11 +669,7 @@ runToolAction(
 
     case 'extract':
 
-      this.toast.show(
-        'Extract will be available in the next editing stage.',
-        'info'
-      );
-
+      void this.extractCurrentPage();
       return;
 
     case 'comment':
@@ -1644,6 +1640,499 @@ async exportPdf(): Promise<void> {
     this.loader.hide();
   }
 }
+
+/**
+ * F7.1 — Extract the currently active logical Studio page into a new PDF.
+ *
+ * This remains the existing toolbar entry point. Internally it now delegates
+ * to the shared multi-page extraction pipeline so single-page and range
+ * extraction always use exactly the same export behavior.
+ *
+ * The original Studio document remains open and unchanged.
+ */
+async extractCurrentPage(): Promise<void> {
+  await this.extractPages(
+    [ this.currentPage() ]
+  );
+}
+
+/**
+ * F7.1.2 — Extract a validated set of logical Studio pages.
+ *
+ * Page numbers are always interpreted against the current logical Studio
+ * document, not against the original source PDF. This is important because
+ * the user may have reordered, duplicated, rotated, inserted, or removed
+ * pages before extraction.
+ *
+ * The extracted output always follows the current logical Studio order.
+ */
+async extractPages(
+  requestedPageNumbers: readonly number[]
+): Promise<void> {
+  if (!this.hasDocument()) {
+    this.toast.show(
+      'Open a PDF before extracting pages.',
+      'info'
+    );
+    return;
+  }
+
+  const document =
+    this.document();
+
+  if (!document) {
+    return;
+  }
+
+  const pageNumbers =
+    this.normalizeExtractionPageNumbers(
+      requestedPageNumbers
+    );
+
+  if (pageNumbers.length === 0) {
+    this.toast.show(
+      'Select at least one valid page to extract.',
+      'info'
+    );
+    return;
+  }
+
+  const totalPages =
+    this.pageCount();
+
+  if (
+    pageNumbers.some(
+      pageNumber =>
+        pageNumber < 1 ||
+        pageNumber > totalPages
+    )
+  ) {
+    this.toast.show(
+      `Select pages between 1 and ${totalPages}.`,
+      'error'
+    );
+    return;
+  }
+
+  const logicalPages: StudioPage[] = [];
+  const outputObjects = [];
+
+  for (
+    let index = 0;
+    index < pageNumbers.length;
+    index++
+  ) {
+    const logicalPageNumber =
+      pageNumbers[index];
+
+    const logicalPage =
+      this.pageService.pageAt(
+        logicalPageNumber
+      );
+
+    if (!logicalPage) {
+      this.toast.show(
+        `Page ${logicalPageNumber} is no longer available for extraction.`,
+        'error'
+      );
+      return;
+    }
+
+    logicalPages.push(
+      logicalPage
+    );
+
+    /**
+     * Studio objects are stored against the current logical page number.
+     * The extracted PDF, however, is a new document whose pages are numbered
+     * from 1. Remap each selected page's objects to that output page index.
+     *
+     * This fixes the single-page case as well: extracting logical page 4 must
+     * paint its objects onto extracted output page 1, not look for page 4 in a
+     * one-page PDF.
+     */
+    const outputPageNumber =
+      index + 1;
+
+    outputObjects.push(
+      ...this.objectService
+        .listForPage(
+          logicalPageNumber
+        )
+        .map(
+          object => ({
+            ...object,
+            pageNumber:
+              outputPageNumber
+          })
+        )
+    );
+  }
+
+  try {
+    const extractionLabel =
+      pageNumbers.length === 1
+        ? `Extracting page ${pageNumbers[0]}...`
+        : `Extracting ${pageNumbers.length} pages...`;
+
+    this.loader.show(
+      'Preparing extracted pages...'
+    );
+
+    this.loader.setText(
+      extractionLabel
+    );
+
+    await this.pdfExportService.extractPagesAndDownload(
+      document.file,
+      outputObjects,
+      logicalPages,
+      this.createExtractedPagesFileName(
+        document.file.name,
+        pageNumbers
+      )
+    );
+
+    this.loader.setText(
+      pageNumbers.length === 1
+        ? 'Page extracted successfully'
+        : 'Pages extracted successfully'
+    );
+
+    this.toast.show(
+      pageNumbers.length === 1
+        ? `Page ${pageNumbers[0]} extracted successfully.`
+        : `${pageNumbers.length} pages extracted successfully.`,
+      'success'
+    );
+
+  } catch (error: unknown) {
+    console.error(
+      '[SafePDFHub Studio] Page extraction failed:',
+      error
+    );
+
+    this.toast.show(
+      pageNumbers.length === 1
+        ? 'Unable to extract the current page. Please try again.'
+        : 'Unable to extract the selected pages. Please try again.',
+      'error'
+    );
+
+  } finally {
+    this.loader.hide();
+  }
+}
+
+/**
+ * F7.1.2 — Extract pages from a user range expression.
+ *
+ * Supported examples:
+ *   1-5
+ *   1, 3, 5
+ *   1-3, 7, 10-12
+ *
+ * Whitespace is ignored. Duplicate page references are collapsed. The final
+ * output follows the current logical Studio page order.
+ */
+async extractPagesByRange(
+  rangeExpression: string
+): Promise<void> {
+  const parsed =
+    this.parseExtractionRange(
+      rangeExpression
+    );
+
+  if (!parsed.ok) {
+    this.toast.show(
+      parsed.message,
+      'error'
+    );
+    return;
+  }
+
+  await this.extractPages(
+    parsed.pageNumbers
+  );
+}
+
+/**
+ * Parse a comma-separated list of page numbers and inclusive page ranges.
+ *
+ * Parsing intentionally performs no source-PDF lookup. Bounds are validated
+ * against the current logical Studio page count, so inserted/duplicated pages
+ * remain addressable exactly as shown in the Studio UI.
+ */
+private parseExtractionRange(
+  value: string
+):
+  | {
+      readonly ok: true;
+      readonly pageNumbers: readonly number[];
+    }
+  | {
+      readonly ok: false;
+      readonly message: string;
+    } {
+
+  const source =
+    value.trim();
+
+  if (!source) {
+    return {
+      ok: false,
+      message:
+        'Enter a page number or range, for example 1-3, 7, 10-12.'
+    };
+  }
+
+  const totalPages =
+    this.pageCount();
+
+  if (totalPages < 1) {
+    return {
+      ok: false,
+      message:
+        'There are no pages available for extraction.'
+    };
+  }
+
+  const selected =
+    new Set<number>();
+
+  const tokens =
+    source.split(',');
+
+  for (const rawToken of tokens) {
+    const token =
+      rawToken.trim();
+
+    if (!token) {
+      return {
+        ok: false,
+        message:
+          'The page range contains an empty entry.'
+      };
+    }
+
+    const singleMatch =
+      /^(\d+)$/.exec(
+        token
+      );
+
+    if (singleMatch) {
+      const pageNumber =
+        Number(
+          singleMatch[1]
+        );
+
+      if (
+        !Number.isSafeInteger(
+          pageNumber
+        ) ||
+        pageNumber < 1 ||
+        pageNumber > totalPages
+      ) {
+        return {
+          ok: false,
+          message:
+            `Page numbers must be between 1 and ${totalPages}.`
+        };
+      }
+
+      selected.add(
+        pageNumber
+      );
+      continue;
+    }
+
+    const rangeMatch =
+      /^(\d+)\s*-\s*(\d+)$/.exec(
+        token
+      );
+
+    if (!rangeMatch) {
+      return {
+        ok: false,
+        message:
+          `Invalid page range "${token}". Use values such as 1-3, 7, 10-12.`
+      };
+    }
+
+    const start =
+      Number(
+        rangeMatch[1]
+      );
+
+    const end =
+      Number(
+        rangeMatch[2]
+      );
+
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(end) ||
+      start < 1 ||
+      end < 1 ||
+      start > totalPages ||
+      end > totalPages
+    ) {
+      return {
+        ok: false,
+        message:
+          `Page ranges must stay between 1 and ${totalPages}.`
+      };
+    }
+
+    if (start > end) {
+      return {
+        ok: false,
+        message:
+          `Invalid range "${token}". The first page must not be greater than the last page.`
+      };
+    }
+
+    for (
+      let pageNumber = start;
+      pageNumber <= end;
+      pageNumber++
+    ) {
+      selected.add(
+        pageNumber
+      );
+    }
+  }
+
+  const pageNumbers =
+    Array.from(
+      selected
+    ).sort(
+      (left, right) =>
+        left - right
+    );
+
+  if (pageNumbers.length === 0) {
+    return {
+      ok: false,
+      message:
+        'Select at least one page to extract.'
+    };
+  }
+
+  return {
+    ok: true,
+    pageNumbers
+  };
+}
+
+/**
+ * Normalize direct page-number input into the current logical Studio order.
+ */
+private normalizeExtractionPageNumbers(
+  requestedPageNumbers: readonly number[]
+): number[] {
+  const selected =
+    new Set<number>();
+
+  for (const value of requestedPageNumbers) {
+    if (
+      Number.isInteger(
+        value
+      )
+    ) {
+      selected.add(
+        value
+      );
+    }
+  }
+
+  return Array.from(
+    selected
+  ).sort(
+    (left, right) =>
+      left - right
+  );
+}
+
+private createExtractedPagesFileName(
+  fileName: string,
+  pageNumbers: readonly number[]
+): string {
+
+  const trimmed =
+    fileName.trim() || 'document.pdf';
+
+  const baseName =
+    trimmed.toLowerCase().endsWith('.pdf')
+      ? trimmed.slice(0, -4)
+      : trimmed;
+
+  if (pageNumbers.length === 1) {
+    return (
+      `${baseName}_page_${pageNumbers[0]}_extracted.pdf`
+    );
+  }
+
+  const selection =
+    this.createExtractionSelectionLabel(
+      pageNumbers
+    );
+
+  return (
+    `${baseName}_pages_${selection}_extracted.pdf`
+  );
+}
+
+private createExtractionSelectionLabel(
+  pageNumbers: readonly number[]
+): string {
+
+  if (pageNumbers.length === 0) {
+    return 'selection';
+  }
+
+  const groups: string[] = [];
+  let start =
+    pageNumbers[0];
+  let previous =
+    pageNumbers[0];
+
+  for (
+    let index = 1;
+    index < pageNumbers.length;
+    index++
+  ) {
+    const current =
+      pageNumbers[index];
+
+    if (
+      current === previous + 1
+    ) {
+      previous = current;
+      continue;
+    }
+
+    groups.push(
+      start === previous
+        ? String(start)
+        : `${start}-${previous}`
+    );
+
+    start = current;
+    previous = current;
+  }
+
+  groups.push(
+    start === previous
+      ? String(start)
+      : `${start}-${previous}`
+  );
+
+  return groups.join(
+    '_'
+  );
+}
+
 
 selectObject(selection: StudioSelection): void {
   if (!this.hasDocument()) {
