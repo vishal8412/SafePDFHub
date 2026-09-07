@@ -138,6 +138,162 @@ export class StudioPageService {
     return true;
   }
 
+  /**
+   * Move multiple logical pages as one ordered group.
+   *
+   * `targetPosition` is expressed in the pre-mutation page order and the
+   * selected pages are inserted immediately before that logical target.
+   * Dropping a group onto one of its own members is treated as a no-op.
+   */
+  moveMany(
+    positions: readonly number[],
+    targetPosition: number
+  ): boolean {
+
+    const pages =
+      [...this._pages()];
+
+    const selected =
+      Array.from(
+        new Set(
+          positions.filter(
+            position =>
+              this.validPosition(
+                position,
+                pages.length
+              )
+          )
+        )
+      ).sort(
+        (a, b) => a - b
+      );
+
+    if (
+      selected.length === 0 ||
+      !Number.isInteger(
+        targetPosition
+      ) ||
+      targetPosition < 1 ||
+      targetPosition > pages.length + 1
+    ) {
+      return false;
+    }
+
+    const selectedSet =
+      new Set(selected);
+
+    if (
+      targetPosition <= pages.length &&
+      selectedSet.has(
+        targetPosition
+      )
+    ) {
+      return false;
+    }
+
+    const moving =
+      selected.map(
+        position =>
+          pages[position - 1]
+      );
+
+    const remaining =
+      pages.filter(
+        (_, index) =>
+          !selectedSet.has(
+            index + 1
+          )
+      );
+
+    /**
+     * Convert the original target into an index in the list after the selected
+     * pages have been removed.
+     */
+    const removedBeforeTarget =
+      selected.filter(
+        position =>
+          position < targetPosition
+      ).length;
+
+    const insertionIndex =
+      Math.max(
+        0,
+        Math.min(
+          remaining.length,
+          targetPosition -
+            1 -
+            removedBeforeTarget
+        )
+      );
+
+    const next = [
+      ...remaining.slice(
+        0,
+        insertionIndex
+      ),
+      ...moving,
+      ...remaining.slice(
+        insertionIndex
+      )
+    ];
+
+    const changed =
+      next.some(
+        (page, index) =>
+          page.id !==
+          pages[index]?.id
+      );
+
+    if (!changed) {
+      return false;
+    }
+
+    this._pages.set(next);
+
+    return true;
+  }
+
+  /**
+   * Move a selected set by one visual position without collapsing
+   * non-contiguous selections into one contiguous block.
+   */
+  moveManyOneStep(
+    positions: readonly number[],
+    direction: 'up' | 'down'
+  ): boolean {
+    const pages = [...this._pages()];
+    const selected = new Set(
+      positions
+        .filter(position => this.validPosition(position, pages.length))
+        .map(position => pages[position - 1]?.id)
+        .filter((id): id is string => !!id)
+    );
+
+    if (!selected.size) return false;
+
+    const next = [...pages];
+
+    if (direction === 'up') {
+      for (let index = 1; index < next.length; index++) {
+        if (selected.has(next[index].id) && !selected.has(next[index - 1].id)) {
+          [next[index - 1], next[index]] = [next[index], next[index - 1]];
+        }
+      }
+    } else {
+      for (let index = next.length - 2; index >= 0; index--) {
+        if (selected.has(next[index].id) && !selected.has(next[index + 1].id)) {
+          [next[index], next[index + 1]] = [next[index + 1], next[index]];
+        }
+      }
+    }
+
+    const changed = next.some((page, index) => page.id !== pages[index]?.id);
+    if (!changed) return false;
+
+    this._pages.set(next);
+    return true;
+  }
+
   duplicate(
     position: number
   ): number | null {

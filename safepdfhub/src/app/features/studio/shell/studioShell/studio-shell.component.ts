@@ -712,4 +712,11 @@ onToolSelected(
   }
 }
 
+/**
+ * Export the current Studio PDF.
+ */
+async onExportPdf(): Promise<void> {
+  await this.facade.exportPdf();
+}
+
 }

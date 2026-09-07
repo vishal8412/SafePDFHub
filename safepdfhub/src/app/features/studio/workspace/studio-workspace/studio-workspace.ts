@@ -6,6 +6,7 @@ import {
   QueryList,
   ViewChild,
   ViewChildren,
+  computed,
   effect,
   inject,
   signal
@@ -92,7 +93,88 @@ private readonly pagesList!:
   readonly sidebarPageView =
     signal<StudioSidebarPageView>('comfortable');
 
+  /** F7.3 — Page selection is UI state keyed by stable logical page IDs. */
+  private readonly selectedPageIds = signal<ReadonlySet<string>>(new Set());
+  private readonly selectionAnchorPageId = signal<string | null>(null);
+
+  /**
+   * Explicit selection mode makes multi-page selection discoverable without
+   * requiring Ctrl/Cmd or Shift knowledge. Keyboard shortcuts remain supported
+   * outside this mode for power users.
+   */
+  readonly pageSelectionMode = signal(false);
+
+  /** Lightweight discoverability hint can be dismissed without affecting selection. */
+  readonly selectionHintDismissed = signal(false);
+
+  /** Contextual actions are expanded by default and may be collapsed by the user. */
+  readonly pageActionsCollapsed = signal(false);
+
+  dismissSelectionHint(): void {
+    this.selectionHintDismissed.set(true);
+  }
+
+  togglePageActionsCollapsed(): void {
+    this.pageActionsCollapsed.update(collapsed => !collapsed);
+  }
+
+  /**
+   * F7.3 — Organize Focus Mode temporarily promotes the Pages experience
+   * from a narrow navigation sidebar into a full-workspace organizer.
+   * It is presentation state only and must never enter document history.
+   */
+  readonly organizeFocusMode = signal(false);
+
+  toggleOrganizeFocusMode(): void {
+    this.organizeFocusMode.update(active => !active);
+  }
+
+  exitOrganizeFocusMode(): void {
+    this.organizeFocusMode.set(false);
+  }
+
+
+  readonly selectedPageNumbers = computed(() => {
+    const selected = this.selectedPageIds();
+
+    return this.pages()
+      .map((page, index) => selected.has(page.id) ? index + 1 : null)
+      .filter((page): page is number => page !== null);
+  });
+
+  readonly selectedPageCount = computed(
+    () => this.selectedPageNumbers().length
+  );
+
+  readonly hasMultiPageSelection = computed(
+    () => this.selectedPageCount() > 1
+  );
+
+  readonly hasPageSelection = computed(
+    () => this.selectedPageCount() > 0
+  );
+
   constructor() {
+
+    /** Keep transient selection valid when logical pages are mutated or restored. */
+    effect(() => {
+      const pages = this.pages();
+      const existingIds = new Set(pages.map(page => page.id));
+      const selected = this.selectedPageIds();
+      const anchor = this.selectionAnchorPageId();
+
+      const next = new Set(
+        Array.from(selected).filter(id => existingIds.has(id))
+      );
+
+      if (next.size !== selected.size) {
+        this.selectedPageIds.set(next);
+      }
+
+      if (anchor && !existingIds.has(anchor)) {
+        this.selectionAnchorPageId.set(null);
+      }
+    });
 
     /**
      * Synchronize the Pages sidebar whenever
@@ -202,38 +284,339 @@ private readonly pagesList!:
     pageNumber: number
   ): void {
 
-    const total =
-      this.pageCount();
+    const total = this.pageCount();
 
-    if (
-      !Number.isInteger(pageNumber) ||
-      pageNumber < 1 ||
-      pageNumber > total
-    ) {
+    if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > total) {
       return;
     }
 
-    this.facade.goToPage(
-      pageNumber
+    this.facade.goToPage(pageNumber);
+  }
+
+  /**
+   * File-manager style selection semantics:
+   * - normal click: navigate
+   * - Ctrl/Cmd click: toggle page
+   * - Shift click: contiguous range from the selection anchor
+   * - Selection Mode: normal click toggles pages without requiring modifiers
+   */
+  onPageThumbnailSelected(
+    event: { pageNumber: number; originalEvent: MouseEvent }
+  ): void {
+    const { pageNumber, originalEvent } = event;
+    const page = this.pages()[pageNumber - 1];
+
+    if (!page) {
+      return;
+    }
+
+    const additive = originalEvent.ctrlKey || originalEvent.metaKey;
+    const range = originalEvent.shiftKey;
+    const selectionMode = this.pageSelectionMode();
+
+    if (range) {
+      this.selectPageRange(pageNumber, additive);
+      return;
+    }
+
+    if (selectionMode || additive) {
+      this.togglePageSelection(page.id);
+      return;
+    }
+
+    /* Plain navigation establishes a range anchor and clears bulk selection. */
+    this.clearPageSelection();
+    this.selectionAnchorPageId.set(page.id);
+    this.selectPage(pageNumber);
+  }
+
+  togglePageSelectionMode(): void {
+    const next = !this.pageSelectionMode();
+    this.pageSelectionMode.set(next);
+
+    if (next && !this.selectionAnchorPageId()) {
+      const current = this.pages()[this.currentPage() - 1];
+      this.selectionAnchorPageId.set(current?.id ?? null);
+    }
+  }
+
+
+  private togglePageSelection(pageId: string): void {
+    const next = new Set(this.selectedPageIds());
+
+    if (next.has(pageId)) {
+      next.delete(pageId);
+    } else {
+      next.add(pageId);
+      this.selectionAnchorPageId.set(pageId);
+    }
+
+    this.selectedPageIds.set(next);
+  }
+
+  private selectPageRange(
+    pageNumber: number,
+    additive: boolean
+  ): void {
+    const page = this.pages()[pageNumber - 1];
+    if (!page) {
+      return;
+    }
+
+    const anchorId = this.selectionAnchorPageId();
+    const anchorIndex = anchorId
+      ? this.pages().findIndex(item => item.id === anchorId)
+      : -1;
+    const start = anchorIndex >= 0 ? anchorIndex : pageNumber - 1;
+    const end = pageNumber - 1;
+    const from = Math.min(start, end);
+    const to = Math.max(start, end);
+    const next = additive
+      ? new Set(this.selectedPageIds())
+      : new Set<string>();
+
+    for (let index = from; index <= to; index++) {
+      next.add(this.pages()[index].id);
+    }
+
+    this.selectedPageIds.set(next);
+
+    if (!anchorId) {
+      this.selectionAnchorPageId.set(page.id);
+    }
+  }
+
+  isPageMultiSelected(pageId: string): boolean {
+    return this.selectedPageIds().has(pageId);
+  }
+
+  clearPageSelection(): void {
+    this.selectedPageIds.set(new Set());
+    this.selectionAnchorPageId.set(null);
+  }
+
+  selectAllPages(): void {
+    const pages = this.pages();
+    this.selectedPageIds.set(new Set(pages.map(page => page.id)));
+    this.selectionAnchorPageId.set(pages[0]?.id ?? null);
+  }
+
+  toggleSelectAllPages(): void {
+    if (this.selectedPageCount() === this.pageCount()) {
+      this.clearPageSelection();
+      return;
+    }
+    this.selectAllPages();
+  }
+
+  duplicateSelectedPages(): void {
+    const selected = this.selectedPageNumbers();
+    if (!selected.length) return;
+    this.facade.duplicatePages(selected);
+    this.clearPageSelection();
+  }
+
+  rotateSelectedPages(direction: 'left' | 'right'): void {
+    const selected = this.selectedPageNumbers();
+    if (!selected.length) return;
+    this.facade.rotatePages(selected, direction);
+  }
+
+  deleteSelectedPages(): void {
+    const selected = this.selectedPageNumbers();
+    if (!selected.length) return;
+    this.facade.deletePages(selected);
+    this.clearPageSelection();
+  }
+
+  /**
+   * Move the selected pages one logical step while preserving their relative
+   * order. Contiguous and non-contiguous selections both move as a group.
+   */
+  moveSelectedPages(
+    direction: 'up' | 'down'
+  ): void {
+    const selected = this.selectedPageNumbers();
+    if (!selected.length) return;
+
+    const pages = this.pages();
+    const selectedIds = new Set(
+      selected
+        .map(pageNumber => pages[pageNumber - 1]?.id)
+        .filter((id): id is string => !!id)
+    );
+
+    this.facade.movePagesOneStep(selected, direction);
+    this.selectedPageIds.set(new Set(selectedIds));
+  }
+
+  canMoveSelectedPages(direction: 'up' | 'down'): boolean {
+    const selectedIds = this.selectedPageIds();
+    const pages = this.pages();
+    if (!selectedIds.size) return false;
+
+    if (direction === 'up') {
+      return pages.some((page, index) =>
+        index > 0 && selectedIds.has(page.id) && !selectedIds.has(pages[index - 1].id)
+      );
+    }
+
+    return pages.some((page, index) =>
+      index < pages.length - 1 && selectedIds.has(page.id) && !selectedIds.has(pages[index + 1].id)
     );
   }
 
+  /**
+   * Drag state is captured at drag start so the exact logical group remains
+   * stable for the complete native drag lifecycle.
+   */
   draggedPage: number | null = null;
 
+  draggedPageIds: readonly string[] = [];
+
   onPageDragStart(pageNumber: number, event: DragEvent): void {
+    const pages = this.pages();
+    const sourcePage = pages[pageNumber - 1];
+
+    if (!sourcePage) {
+      this.onPageDragEnd();
+      return;
+    }
+
     this.draggedPage = pageNumber;
-    event.dataTransfer?.setData('text/plain', String(pageNumber));
-    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+
+    /**
+     * If the drag begins on a selected page, snapshot the complete selection.
+     * This makes selected-group dragging deterministic even if selection state
+     * changes while the native drag operation is in progress.
+     */
+    this.draggedPageIds =
+      this.isPageMultiSelected(sourcePage.id)
+        ? pages
+            .filter(page =>
+              this.selectedPageIds().has(page.id)
+            )
+            .map(page => page.id)
+        : [sourcePage.id];
+
+    const payload = JSON.stringify({
+      sourcePageId: sourcePage.id,
+      movingPageIds: this.draggedPageIds
+    });
+
+    event.dataTransfer?.setData(
+      'application/x-safepdfhub-pages',
+      payload
+    );
+
+    event.dataTransfer?.setData(
+      'text/plain',
+      String(pageNumber)
+    );
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
   }
 
   onPageDrop(targetPage: number, event: DragEvent): void {
     event.preventDefault();
-    const source = this.draggedPage ?? Number(event.dataTransfer?.getData('text/plain'));
-    this.draggedPage = null;
-    if (Number.isInteger(source) && source > 0) this.facade.movePage(source, targetPage);
+
+    let movingIds =
+      this.draggedPageIds;
+
+    if (movingIds.length === 0) {
+      const payload =
+        event.dataTransfer?.getData(
+          'application/x-safepdfhub-pages'
+        );
+
+      if (payload) {
+        try {
+          const parsed =
+            JSON.parse(payload) as {
+              movingPageIds?: unknown;
+            };
+
+          if (
+            Array.isArray(
+              parsed.movingPageIds
+            ) &&
+            parsed.movingPageIds.every(
+              value =>
+                typeof value === 'string'
+            )
+          ) {
+            movingIds =
+              parsed.movingPageIds;
+          }
+        } catch {
+          // Fall back to the legacy plain-text source position below.
+        }
+      }
+    }
+
+    if (movingIds.length === 0) {
+      const source =
+        this.draggedPage ??
+        Number(
+          event.dataTransfer?.getData(
+            'text/plain'
+          )
+        );
+
+      if (
+        Number.isInteger(source) &&
+        source >= 1
+      ) {
+        const sourcePage =
+          this.pages()[source - 1];
+
+        if (sourcePage) {
+          movingIds =
+            [sourcePage.id];
+        }
+      }
+    }
+
+    this.onPageDragEnd();
+
+    if (movingIds.length === 0) {
+      return;
+    }
+
+    /**
+     * Resolve the captured stable IDs against the current page order at drop
+     * time. This preserves selected-group ordering and avoids relying on stale
+     * numeric positions.
+     */
+    const moving =
+      this.pages()
+        .map(
+          (page, index) =>
+            movingIds.includes(page.id)
+              ? index + 1
+              : 0
+        )
+        .filter(
+          pageNumber =>
+            pageNumber > 0
+        );
+
+    if (moving.length === 0) {
+      return;
+    }
+
+    this.facade.movePages(
+      moving,
+      targetPage
+    );
   }
 
-  onPageDragEnd(): void { this.draggedPage = null; }
+  onPageDragEnd(): void {
+    this.draggedPage = null;
+    this.draggedPageIds = [];
+  }
 
   duplicatePage(): void { this.facade.duplicateCurrentPage(); }
   deletePage(): void { this.facade.deleteCurrentPage(); }

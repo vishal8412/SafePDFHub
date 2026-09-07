@@ -1261,6 +1261,167 @@ goToLastPage(): void {
     );
   }
 
+  /**
+   * F7.3 — Move a selected set of logical pages as one ordered group.
+   *
+   * Page identity remains stable while object page numbers are remapped from
+   * the exact before/after logical ordering. This avoids fragile arithmetic
+   * remapping for non-contiguous selections.
+   */
+  movePages(
+    pageNumbers: readonly number[],
+    targetPage: number
+  ): boolean {
+
+    const selected =
+      this.normalizePageNumbers(
+        pageNumbers
+      );
+
+    const count =
+      this.pageCount();
+
+    if (
+      selected.length === 0 ||
+      !Number.isInteger(targetPage) ||
+      targetPage < 1 ||
+      targetPage > count + 1
+    ) {
+      return false;
+    }
+
+    return this.recordPageMutation(
+      selected.length === 1
+        ? 'Move page'
+        : 'Move pages',
+      () => {
+
+        const beforePages =
+          this.pageService.pages();
+
+        const currentId =
+          beforePages[
+            this.currentPage() - 1
+          ]?.id ?? null;
+
+        const oldPositions =
+          new Map(
+            beforePages.map(
+              (page, index) => [
+                page.id,
+                index + 1
+              ] as const
+            )
+          );
+
+        if (
+          !this.pageService.moveMany(
+            selected,
+            targetPage
+          )
+        ) {
+          return false;
+        }
+
+        const afterPages =
+          this.pageService.pages();
+
+        const mapping =
+          new Map<number, number>();
+
+        for (
+          let index = 0;
+          index < afterPages.length;
+          index++
+        ) {
+          const page =
+            afterPages[index];
+
+          const oldPosition =
+            oldPositions.get(
+              page.id
+            );
+
+          if (
+            oldPosition !== undefined
+          ) {
+            mapping.set(
+              oldPosition,
+              index + 1
+            );
+          }
+        }
+
+        this.objectService.remapPageNumbers(
+          mapping
+        );
+
+        this.state.clearSelection();
+
+        const nextCurrent =
+          currentId
+            ? afterPages.findIndex(
+                page =>
+                  page.id === currentId
+              ) + 1
+            : 0;
+
+        this.state.setCurrentPage(
+          nextCurrent > 0
+            ? nextCurrent
+            : this.currentPage()
+        );
+
+        return true;
+      }
+    );
+  }
+
+  /**
+   * Move selected pages by one visual position while preserving gaps in a
+   * non-contiguous selection. This is used by the Move Up/Down bulk actions.
+   */
+  movePagesOneStep(
+    pageNumbers: readonly number[],
+    direction: 'up' | 'down'
+  ): boolean {
+    const selected = this.normalizePageNumbers(pageNumbers);
+    if (!selected.length) return false;
+
+    return this.recordPageMutation(
+      direction === 'up'
+        ? (selected.length === 1 ? 'Move page up' : 'Move pages up')
+        : (selected.length === 1 ? 'Move page down' : 'Move pages down'),
+      () => {
+        const beforePages = this.pageService.pages();
+        const currentId = beforePages[this.currentPage() - 1]?.id ?? null;
+        const oldPositions = new Map(
+          beforePages.map((page, index) => [page.id, index + 1] as const)
+        );
+
+        if (!this.pageService.moveManyOneStep(selected, direction)) {
+          return false;
+        }
+
+        const afterPages = this.pageService.pages();
+        const mapping = new Map<number, number>();
+        afterPages.forEach((page, index) => {
+          const oldPosition = oldPositions.get(page.id);
+          if (oldPosition !== undefined) mapping.set(oldPosition, index + 1);
+        });
+
+        this.objectService.remapPageNumbers(mapping);
+        this.state.clearSelection();
+
+        const nextCurrent = currentId
+          ? afterPages.findIndex(page => page.id === currentId) + 1
+          : 0;
+        this.state.setCurrentPage(nextCurrent > 0 ? nextCurrent : this.currentPage());
+        return true;
+      }
+    );
+  }
+
   duplicateCurrentPage(): void {
 
     this.recordPageMutation(
@@ -1529,6 +1690,163 @@ private async resolveBlankPageDimensions(
         return true;
       }
     );
+  }
+
+
+  /**
+   * F7.3 — Duplicate multiple logical pages as one atomic history mutation.
+   * Selection is supplied as current logical positions and is normalized before
+   * any insertion shifts those positions.
+   */
+  duplicatePages(pageNumbers: readonly number[]): void {
+    const selected = this.normalizePageNumbers(pageNumbers);
+
+    if (!selected.length) {
+      return;
+    }
+
+    this.recordPageMutation(
+      selected.length === 1 ? 'Duplicate page' : 'Duplicate pages',
+      () => {
+        let offset = 0;
+        const current = this.currentPage();
+        let nextCurrent = current;
+
+        for (const originalPosition of selected) {
+          const source = originalPosition + offset;
+          const target = this.pageService.duplicate(source);
+
+          if (!target) {
+            return false;
+          }
+
+          this.objectService.shiftPageNumbers(target, 1);
+          this.objectService.duplicatePage(source, target);
+
+          if (nextCurrent >= target) {
+            nextCurrent++;
+          }
+
+          offset++;
+        }
+
+        this.state.setPageCount(this.pageCount());
+        this.state.clearSelection();
+        this.state.setCurrentPage(nextCurrent);
+        return true;
+      }
+    );
+  }
+
+  /** Rotate a set of logical pages without changing page identity/order. */
+  rotatePages(
+    pageNumbers: readonly number[],
+    direction: 'left' | 'right' = 'right'
+  ): void {
+    const selected = this.normalizePageNumbers(pageNumbers);
+
+    if (!selected.length) {
+      return;
+    }
+
+    this.recordPageMutation(
+      direction === 'left'
+        ? (selected.length === 1 ? 'Rotate page left' : 'Rotate pages left')
+        : (selected.length === 1 ? 'Rotate page right' : 'Rotate pages right'),
+      () => {
+        const delta = direction === 'left' ? -90 : 90;
+        let changed = false;
+
+        for (const pageNumber of selected) {
+          changed = this.pageService.rotate(pageNumber, delta) || changed;
+        }
+
+        if (changed) {
+          this.state.clearSelection();
+        }
+
+        return changed;
+      }
+    );
+  }
+
+  /**
+   * Delete multiple pages atomically while preserving all remaining object
+   * mappings. The last page is protected, matching single-page deletion.
+   */
+  deletePages(pageNumbers: readonly number[]): void {
+    const selected = this.normalizePageNumbers(pageNumbers);
+
+    if (!selected.length) {
+      return;
+    }
+
+    const count = this.pageCount();
+
+    if (selected.length >= count) {
+      this.toast.show(
+        'A PDF must contain at least one page.',
+        'info'
+      );
+      return;
+    }
+
+    this.recordPageMutation(
+      selected.length === 1 ? 'Delete page' : 'Delete pages',
+      () => {
+        const deleted = new Set(selected);
+        const currentBefore = this.currentPage();
+
+        /* Remove objects from deleted pages before remapping survivors. */
+        for (const pageNumber of selected) {
+          this.objectService.clearPage(pageNumber);
+        }
+
+        /* Build the old -> new mapping from the pre-mutation positions. */
+        const mapping = new Map<number, number>();
+        let next = 1;
+
+        for (let old = 1; old <= count; old++) {
+          if (!deleted.has(old)) {
+            mapping.set(old, next++);
+          }
+        }
+
+        /* Delete from the end so original positions remain valid. */
+        for (let index = selected.length - 1; index >= 0; index--) {
+          if (!this.pageService.delete(selected[index])) {
+            return false;
+          }
+        }
+
+        this.objectService.remapPageNumbers(mapping);
+        this.state.setPageCount(this.pageCount());
+        this.state.clearSelection();
+
+        const nextCurrent = mapping.get(currentBefore)
+          ?? Math.min(
+            currentBefore,
+            this.pageCount()
+          );
+
+        this.state.setCurrentPage(nextCurrent);
+        return true;
+      }
+    );
+  }
+
+  private normalizePageNumbers(
+    pageNumbers: readonly number[]
+  ): number[] {
+    const count = this.pageCount();
+
+    return Array.from(
+      new Set(
+        pageNumbers.filter(
+          page => Number.isInteger(page) && page >= 1 && page <= count
+        )
+      )
+    ).sort((a, b) => a - b);
   }
 
   rotateCurrentPage(

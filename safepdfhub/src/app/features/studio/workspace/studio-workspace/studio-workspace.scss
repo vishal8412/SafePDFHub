@@ -66,12 +66,14 @@
 ========================================================== */
 
 .sidebar__tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
   align-items: stretch;
 
   min-width: 0;
 
-  padding-inline: 12px;
+  padding-left: 12px;
+  padding-right: 8px;
 
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
@@ -126,6 +128,95 @@
   border-radius: 2px 2px 0 0;
 
   background: #00d4b3;
+}
+
+/*
+ * F7.3 — Smart Selection entry point
+ *
+ * Multi-page selection should be discoverable without permanently consuming a
+ * full sidebar row. The compact control lives in the Pages header and only
+ * becomes visually prominent while selection mode is active.
+ */
+.sidebar__page-selection-trigger {
+  align-self: center;
+  justify-self: end;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+
+  min-width: 62px;
+  height: 32px;
+  margin-left: 2px;
+  padding: 0 8px;
+
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.52);
+
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.sidebar__page-selection-trigger:hover {
+  border-color: rgba(0, 212, 179, 0.34);
+  background: rgba(0, 212, 179, 0.07);
+  color: rgba(104, 235, 216, 0.96);
+}
+
+.sidebar__page-selection-trigger:active {
+  transform: translateY(1px);
+}
+
+.sidebar__page-selection-trigger:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.sidebar__page-selection-trigger:disabled:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.52);
+}
+
+.sidebar__page-selection-trigger--active {
+  border-color: rgba(0, 212, 179, 0.55);
+  background:
+    linear-gradient(180deg, rgba(0, 212, 179, 0.16), rgba(0, 212, 179, 0.08));
+  color: #54e3cf;
+  box-shadow: 0 0 0 1px rgba(0, 212, 179, 0.06);
+}
+
+.sidebar__page-selection-trigger span {
+  white-space: nowrap;
+}
+
+.sidebar__page-selection-trigger svg {
+  width: 15px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar__page-selection-trigger:focus-visible {
+  outline: 2px solid rgba(0, 212, 179, 0.62);
+  outline-offset: 2px;
 }
 
 
@@ -1451,3 +1542,1041 @@
     transition: none;
   }
 }
+
+/* ==========================================================
+   F7.3 — MULTI-PAGE SELECTION
+========================================================== */
+.sidebar__page-item--multi-selected {
+  background: rgba(0, 212, 179, 0.055);
+  box-shadow:
+    inset 3px 0 0 rgba(0, 212, 179, 0.88),
+    0 0 0 1px rgba(0, 212, 179, 0.10);
+}
+
+.sidebar__pages-list--grid .sidebar__page-item--multi-selected {
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 212, 179, 0.88),
+    0 0 0 1px rgba(0, 212, 179, 0.10);
+}
+
+.sidebar__selected-page-actions-header--selection {
+  align-items: flex-start;
+}
+
+.sidebar__selection-summary {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.sidebar__selection-summary strong {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__selection-summary span {
+  color: rgba(0, 212, 179, 0.68);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.sidebar__selection-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.sidebar__selection-text-button {
+  min-width: 0;
+  height: 25px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.62);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sidebar__selection-text-button:hover {
+  border-color: rgba(0, 212, 179, 0.42);
+  background: rgba(0, 212, 179, 0.07);
+  color: #5ee6d2;
+}
+
+.sidebar__selection-text-button:focus-visible {
+  outline: 2px solid rgba(0, 212, 179, 0.55);
+  outline-offset: 2px;
+}
+
+.sidebar__selected-page-actions-grid--selection {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar__selection-text-button {
+    transition: none;
+  }
+}
+
+
+
+/* ==========================================================
+   F7.3 — ADVANCED MULTI-PAGE ACTIONS
+========================================================== */
+
+.sidebar__selected-page-actions-grid--selection {
+  grid-template-columns:
+    repeat(6, minmax(0, 1fr));
+}
+
+@container (max-width: 285px) {
+  .sidebar__selected-page-actions-grid--selection {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+}
+
+
+/* ==========================================================
+   F7.3 — SELECTED PAGE GROUP DRAGGING
+   ========================================================== */
+
+.sidebar__page-item--dragging {
+  opacity: 0.58;
+}
+
+.sidebar__page-item--dragging .page-thumbnail {
+  cursor: grabbing;
+}
+
+.sidebar__page-item:not(.sidebar__page-item--dragging)[draggable='true'] .page-thumbnail {
+  cursor: grab;
+}
+
+
+/* ==========================================================
+   F7.3 — ORGANIZE FOCUS MODE
+   ========================================================== */
+
+.studio-workspace--organize-focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.studio-workspace--organize-focus .studio-workspace__left-sidebar {
+  grid-column: 1;
+  grid-row: 1;
+  z-index: 30;
+  width: 100%;
+  min-width: 0;
+  border-right: 0;
+}
+
+.studio-workspace--organize-focus .studio-workspace__canvas,
+.studio-workspace--organize-focus .studio-workspace__right-sidebar {
+  display: none;
+}
+
+.studio-workspace--organize-focus .sidebar {
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-workspace--organize-focus .sidebar__tabs {
+  padding-inline: 20px;
+}
+
+.studio-workspace--organize-focus .sidebar__body {
+  width: 100%;
+}
+
+.studio-workspace--organize-focus .sidebar__view-controls,
+.studio-workspace--organize-focus .sidebar__pages-list {
+  max-width: 1600px;
+  width: min(100%, 1600px);
+  margin-inline: auto;
+}
+
+.studio-workspace--organize-focus .sidebar__pages-list--comfortable {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.studio-workspace--organize-focus .sidebar__pages-list--compact {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.studio-workspace--organize-focus .sidebar__pages-list--grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.studio-workspace--organize-focus .sidebar__page-item {
+  min-width: 0;
+}
+
+.studio-workspace--organize-focus .page-thumbnail__preview {
+  min-height: 190px;
+}
+
+.sidebar__organize-focus-trigger {
+  margin-left: auto;
+  min-width: 42px;
+  height: 34px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.sidebar__organize-focus-trigger svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.sidebar__organize-focus-trigger--active {
+  font-weight: 600;
+}
+
+.organize-focus__toolbar {
+  max-width: 1600px;
+  width: min(100%, 1600px);
+  margin: 12px auto 8px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.organize-focus__title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.organize-focus__title span {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.organize-focus__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.organize-focus__actions button {
+  min-height: 34px;
+  padding-inline: 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .studio-workspace--organize-focus .sidebar__pages-list--comfortable {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  .studio-workspace--organize-focus .sidebar__pages-list--grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  .organize-focus__toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .organize-focus__actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+/* ==========================================================
+   F7.3 — ORGANIZE WORKSPACE REFINEMENT
+   A dedicated, action-oriented page manager instead of a stretched sidebar.
+========================================================== */
+.studio-workspace--organize-focus .sidebar__tabs {
+  min-height: 62px;
+  padding: 0 28px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.studio-workspace--organize-focus .sidebar__tab {
+  display: none;
+}
+
+.studio-workspace--organize-focus .sidebar__tab:first-child {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 62px;
+  font-size: 15px;
+  letter-spacing: .01em;
+}
+
+.studio-workspace--organize-focus .sidebar__page-selection-trigger {
+  display: inline-flex;
+  justify-self: center;
+  margin: 0;
+}
+
+.studio-workspace--organize-focus .sidebar__organize-focus-trigger {
+  justify-self: end;
+  min-height: 38px;
+  padding: 0 14px;
+  border-color: rgba(0,212,179,.28);
+  background: rgba(0,212,179,.08);
+  color: #62e5d3;
+}
+
+.studio-workspace--organize-focus .sidebar__body {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+  background: #0b1625;
+}
+
+.organize-focus__header {
+  max-width: 1700px;
+  width: min(calc(100% - 48px), 1700px);
+  margin: 22px auto 0;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+}
+
+.organize-focus__identity { min-width: 0; }
+.organize-focus__eyebrow {
+  margin-bottom: 5px;
+  color: #42d7c1;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.organize-focus__title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.organize-focus__title-row h2 { margin: 0; font-size: 21px; line-height: 1.2; }
+.organize-focus__page-count, .organize-focus__selection-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid rgba(0,212,179,.20);
+  border-radius: 999px;
+  color: #73e9d9;
+  background: rgba(0,212,179,.08);
+  font-size: 12px;
+  font-weight: 700;
+}
+.organize-focus__identity p { margin: 7px 0 0; color: rgba(220,231,240,.62); font-size: 13px; }
+.organize-focus__quick-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
+.organize-focus__quick-button, .organize-focus__done-button {
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 9px;
+  font-weight: 650;
+}
+.organize-focus__quick-button { background: rgba(255,255,255,.035); }
+.organize-focus__done-button { border-color: rgba(0,212,179,.32); background: rgba(0,212,179,.11); color: #6be7d5; cursor: pointer; }
+
+.organize-focus__hint {
+  max-width: 1700px;
+  width: min(calc(100% - 48px), 1700px);
+  margin: 10px auto 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(205,218,230,.48);
+  font-size: 12px;
+}
+
+.studio-workspace--organize-focus .sidebar__view-controls {
+  max-width: 1700px;
+  width: min(calc(100% - 48px), 1700px);
+  margin: 0 auto 10px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.065);
+  border-radius: 12px;
+  background: rgba(255,255,255,.018);
+}
+.studio-workspace--organize-focus .sidebar__view-options { justify-content: center; gap: 6px; }
+.studio-workspace--organize-focus .sidebar__view-option { flex: 0 1 170px; min-height: 38px; }
+
+.studio-workspace--organize-focus .sidebar__pages-list {
+  max-width: 1700px;
+  width: min(calc(100% - 48px), 1700px);
+  margin: 0 auto;
+  padding: 14px 0 108px;
+  scrollbar-gutter: stable;
+}
+.studio-workspace--organize-focus .sidebar__pages-list--comfortable {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+.studio-workspace--organize-focus .sidebar__pages-list--compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+.studio-workspace--organize-focus .sidebar__pages-list--grid {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  padding-left: 0;
+  padding-right: 0;
+}
+.studio-workspace--organize-focus .sidebar__page-item {
+  border-radius: 14px;
+  transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+.studio-workspace--organize-focus .sidebar__page-item:hover { transform: translateY(-2px); }
+.studio-workspace--organize-focus .sidebar__page-item--multi-selected {
+  box-shadow: 0 0 0 2px rgba(0,212,179,.68), 0 8px 26px rgba(0,212,179,.09);
+}
+.studio-workspace--organize-focus .page-thumbnail__preview { min-height: 205px; }
+
+.studio-workspace--organize-focus .sidebar__selected-page-actions {
+  position: sticky;
+  bottom: 14px;
+  z-index: 8;
+  max-width: 1120px;
+  width: min(calc(100% - 48px), 1120px);
+  margin: 0 auto 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 16px;
+  background: rgba(13,25,41,.94);
+  box-shadow: 0 14px 36px rgba(0,0,0,.30);
+  backdrop-filter: blur(14px);
+}
+.studio-workspace--organize-focus .sidebar__selected-page-actions-header {
+  padding: 0 4px 9px;
+}
+.studio-workspace--organize-focus .sidebar__selected-page-actions-grid {
+  grid-template-columns: repeat(6, minmax(0,1fr));
+  gap: 8px;
+}
+.studio-workspace--organize-focus .sidebar__page-icon-button {
+  min-height: 52px;
+  height: auto;
+  padding: 7px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 10px;
+}
+.studio-workspace--organize-focus .sidebar__page-icon-button svg { width: 19px; height: 19px; }
+.sidebar__page-action-label { display: none; }
+.studio-workspace--organize-focus .sidebar__page-action-label {
+  display: block;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: .76;
+}
+
+@media (max-width: 900px) {
+  .organize-focus__header { width: min(calc(100% - 28px), 1700px); align-items: flex-start; flex-direction: column; }
+  .organize-focus__quick-actions { width: 100%; justify-content: flex-start; }
+  .organize-focus__hint, .studio-workspace--organize-focus .sidebar__view-controls, .studio-workspace--organize-focus .sidebar__pages-list { width: min(calc(100% - 28px), 1700px); }
+  .studio-workspace--organize-focus .sidebar__pages-list--comfortable { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .studio-workspace--organize-focus .sidebar__selected-page-actions { width: calc(100% - 28px); }
+}
+
+@media (max-width: 620px) {
+  .studio-workspace--organize-focus .sidebar__tabs { padding: 0 14px; grid-template-columns: 1fr auto; }
+  .studio-workspace--organize-focus .sidebar__page-selection-trigger { justify-self: start; }
+  .studio-workspace--organize-focus .sidebar__organize-focus-trigger span { display: none; }
+  .organize-focus__hint { display: none; }
+  .studio-workspace--organize-focus .sidebar__pages-list--comfortable,
+  .studio-workspace--organize-focus .sidebar__pages-list--grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+  .studio-workspace--organize-focus .sidebar__pages-list--compact { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+  .studio-workspace--organize-focus .sidebar__page-icon-button { min-height: 48px; }
+  .studio-workspace--organize-focus .sidebar__page-action-label { display: none; }
+  .studio-workspace--organize-focus .sidebar__selected-page-actions-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+
+/* ==========================================================
+   F7.3 — ORGANIZE CANVAS PRIORITY REDESIGN
+   The organizing surface is the product. Everything else is compact,
+   contextual, and secondary.
+========================================================== */
+.studio-workspace--organize-focus .sidebar__tabs {
+  min-height: 50px;
+  height: 50px;
+  padding: 0 20px;
+  grid-template-columns: auto 1fr auto;
+}
+
+.studio-workspace--organize-focus .sidebar__tab:first-child {
+  min-height: 50px;
+  font-size: 14px;
+}
+
+.studio-workspace--organize-focus .sidebar__organize-focus-trigger {
+  min-height: 34px;
+  height: 34px;
+  padding: 0 12px;
+}
+
+.studio-workspace--organize-focus .sidebar__body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #0b1625;
+}
+
+.organize-focus__control-bar {
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 24px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  background: rgba(7,17,31,.48);
+}
+
+.organize-focus__primary {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.organize-focus__title-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.organize-focus__title-line h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: .01em;
+}
+
+.organize-focus__page-count,
+.organize-focus__selection-chip {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.organize-focus__micro-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(210,223,234,.48);
+  font-size: 11px;
+}
+
+.organize-focus__view-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+
+.organize-focus__view-button {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(214,226,237,.62);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.organize-focus__view-button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.organize-focus__view-button--active {
+  border-color: rgba(0,212,179,.22);
+  background: rgba(0,212,179,.10);
+  color: #63e5d3;
+}
+
+.organize-focus__quick-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: nowrap;
+}
+
+.organize-focus__quick-button,
+.organize-focus__done-button {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* The page surface owns all remaining height. */
+.studio-workspace--organize-focus .sidebar__pages-list {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 16px 24px 20px;
+  box-sizing: border-box;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.studio-workspace--organize-focus .sidebar__pages-list--comfortable {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.studio-workspace--organize-focus .sidebar__pages-list--compact {
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.studio-workspace--organize-focus .sidebar__pages-list--grid {
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 12px;
+}
+
+/* Avoid an oversized fixed preview height in the organizer. */
+.studio-workspace--organize-focus .page-thumbnail__preview {
+  min-height: 0;
+  aspect-ratio: 0.78;
+}
+
+/* Selection actions only consume space when the user actually selected pages. */
+.studio-workspace--organize-focus .sidebar__selected-page-actions {
+  position: static;
+  width: min(calc(100% - 48px), 1200px);
+  margin: 0 auto 10px;
+  padding: 7px 8px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: rgba(13,25,41,.96);
+  box-shadow: 0 10px 28px rgba(0,0,0,.22);
+}
+
+.studio-workspace--organize-focus .sidebar__selected-page-actions-header {
+  display: none;
+}
+
+.studio-workspace--organize-focus .sidebar__selected-page-actions-grid,
+.studio-workspace--organize-focus .sidebar__selected-page-actions-grid--selection {
+  grid-template-columns: repeat(6, minmax(0,1fr));
+  gap: 6px;
+}
+
+.studio-workspace--organize-focus .sidebar__page-icon-button {
+  min-height: 44px;
+  height: 44px;
+  padding: 5px 8px;
+  flex-direction: row;
+  gap: 7px;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.studio-workspace--organize-focus .sidebar__page-icon-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.studio-workspace--organize-focus .sidebar__page-action-label {
+  display: inline;
+  font-size: 10px;
+  line-height: 1;
+  opacity: .8;
+}
+
+@media (max-width: 1100px) {
+  .organize-focus__control-bar {
+    grid-template-columns: minmax(220px, 1fr) auto;
+  }
+  .organize-focus__quick-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .studio-workspace--organize-focus .sidebar__pages-list--comfortable {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .organize-focus__control-bar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .organize-focus__micro-hint { display: none; }
+  .organize-focus__view-button span { display: none; }
+  .organize-focus__view-button { width: 32px; padding: 0; }
+  .studio-workspace--organize-focus .sidebar__pages-list {
+    padding: 12px;
+  }
+  .studio-workspace--organize-focus .sidebar__pages-list--grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+  .studio-workspace--organize-focus .sidebar__page-action-label { display: none; }
+}
+
+
+/* ==========================================================
+   PRODUCT REFINEMENT — PAGES HEADER & SPACE PRIORITY
+   Bookmarks is intentionally removed until bookmark workflows
+   are implemented. Pages and Comments remain the only tabs.
+========================================================== */
+.sidebar__tabs {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  padding-left: 12px;
+  padding-right: 10px;
+}
+
+.sidebar__tab-actions {
+  align-self: center;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar__page-selection-trigger,
+.sidebar__organize-focus-trigger {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  gap: 0;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 9px;
+  background: rgba(255,255,255,.025);
+}
+
+.sidebar__page-selection-trigger span,
+.sidebar__organize-focus-trigger span {
+  display: none;
+}
+
+.sidebar__page-selection-trigger svg,
+.sidebar__organize-focus-trigger svg {
+  width: 17px;
+  height: 17px;
+}
+
+.sidebar__organize-focus-trigger {
+  color: rgba(255,255,255,.58);
+}
+
+.sidebar__organize-focus-trigger:hover:not(:disabled) {
+  color: #67e8d7;
+  border-color: rgba(0,212,179,.38);
+  background: rgba(0,212,179,.07);
+}
+
+.sidebar__selection-hint {
+  display: grid;
+  grid-template-columns: 30px minmax(0,1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 10px 6px;
+  padding: 8px 8px 8px 9px;
+  border: 1px solid rgba(0,212,179,.14);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(0,212,179,.06), rgba(255,255,255,.018));
+}
+
+.sidebar__selection-hint-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(0,212,179,.08);
+  color: #55dfcf;
+}
+
+.sidebar__selection-hint-icon svg,
+.sidebar__selection-hint-dismiss svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebar__selection-hint-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar__selection-hint-copy strong {
+  color: rgba(255,255,255,.82);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.sidebar__selection-hint-copy span {
+  color: rgba(255,255,255,.46);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.sidebar__selection-hint-copy .sidebar__selection-hint-instruction {
+  color: rgba(255,255,255,.62);
+}
+
+.sidebar__selection-hint-copy .sidebar__selection-hint-instruction b {
+  color: #79eee0;
+  font-weight: 700;
+}
+
+.sidebar__selection-hint-dismiss,
+.sidebar__actions-collapse-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255,255,255,.42);
+  cursor: pointer;
+}
+
+.sidebar__selection-hint-dismiss:hover,
+.sidebar__actions-collapse-button:hover {
+  color: #7debdc;
+  border-color: rgba(255,255,255,.10);
+  background: rgba(255,255,255,.04);
+}
+
+.sidebar__selection-hint-dismiss:focus-visible,
+.sidebar__actions-collapse-button:focus-visible {
+  outline: 2px solid rgba(0,212,179,.55);
+  outline-offset: 2px;
+}
+
+.sidebar__actions-collapse-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 160ms ease;
+}
+
+.sidebar__actions-collapse-icon--collapsed {
+  transform: rotate(180deg);
+}
+
+.sidebar__single-page-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar__selected-page-actions {
+  padding-top: 7px;
+  padding-bottom: 8px;
+}
+
+.sidebar__selected-page-actions-header {
+  margin-bottom: 7px;
+}
+
+/* ==========================================================
+   F7.3 — COMPACT COLLAPSED PAGE ACTION BAR
+   When the user collapses contextual actions, the control must
+   return the maximum possible vertical space to thumbnails.
+   ========================================================== */
+
+.sidebar__selected-page-actions--collapsed {
+  padding: 3px 10px 4px;
+  box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.10);
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selected-page-actions-header {
+  min-height: 30px;
+  margin-bottom: 0;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selected-page-label {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selected-page-count {
+  margin-left: 8px;
+  font-size: 8px;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selection-summary {
+  gap: 0;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selection-summary strong {
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selection-summary span {
+  display: none;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selection-header-actions {
+  gap: 4px;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__selection-text-button {
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 8px;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__actions-collapse-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.sidebar__selected-page-actions--collapsed .sidebar__actions-collapse-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Match the Organize icon to the Select-multiple icon in its idle state. */
+.sidebar__organize-focus-trigger {
+  color: rgba(255, 255, 255, 0.52);
+}
+
+/* ==========================================================
+   UI CONSISTENCY — ORGANIZE ICON + SELECT ALL BUTTON
+========================================================== */
+
+/* ----------------------------------------------------------
+   ORGANIZE ACTION
+   ---------------------------------------------------------- */
+
+/*
+ * Keep the Organize icon visually consistent with the
+ * Select Multiple Pages icon.
+ */
+.sidebar__organize-focus-trigger {
+  color: #ffffff;
+  cursor: pointer;
+}
+
+/*
+ * SVG paths inherit currentColor, so explicitly keep them white.
+ */
+.sidebar__organize-focus-trigger svg {
+  color: #ffffff;
+  stroke: currentColor;
+}
+
+/*
+ * Do not change the icon to teal on hover.
+ * The background can communicate interaction instead.
+ */
+.sidebar__organize-focus-trigger:hover:not(:disabled) {
+  color: #ffffff;
+}
+
+/*
+ * Active Organize state keeps the icon white as well.
+ */
+.sidebar__organize-focus-trigger--active {
+  color: #ffffff;
+}
+
+
+/* ----------------------------------------------------------
+   SELECT ALL — SECONDARY ACTION
+   ---------------------------------------------------------- */
+
+.organize-focus__quick-button {
+  min-height: 38px;
+  padding: 0 15px;
+
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+
+  background: #101d2d;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 650;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025);
+
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.organize-focus__quick-button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.30);
+
+  background: #162537;
+
+  color: #ffffff;
+}
+
+.organize-focus__quick-button:focus-visible {
+  outline: 2px solid rgba(0, 212, 179, 0.65);
+  outline-offset: 2px;
+}
+

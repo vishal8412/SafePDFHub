@@ -81,8 +81,20 @@ export class StudioPageThumbnail
   blank = false;
 
 
+  /** The current/active page used for navigation focus. */
   @Input()
   selected = false;
+
+  /** Independent multi-page selection state. */
+  @Input()
+  multiSelected = false;
+
+  /**
+   * Explicit selection mode exposes an empty selection indicator on every
+   * thumbnail so users can discover that ordinary clicks can select pages.
+   */
+  @Input()
+  selectionMode = false;
 
 
   /**
@@ -101,7 +113,10 @@ export class StudioPageThumbnail
 
   @Output()
   readonly pageSelected =
-    new EventEmitter<number>();
+    new EventEmitter<{
+      pageNumber: number;
+      originalEvent: MouseEvent;
+    }>();
 
 
   /**
@@ -230,11 +245,11 @@ export class StudioPageThumbnail
   }
 
 
-  onSelect(): void {
-
-    this.pageSelected.emit(
-      this.displayPageNumber
-    );
+  onSelect(event: MouseEvent): void {
+    this.pageSelected.emit({
+      pageNumber: this.displayPageNumber,
+      originalEvent: event
+    });
   }
 
 

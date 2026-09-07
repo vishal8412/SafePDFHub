@@ -270,3 +270,79 @@
   padding: 7px;
   font-size: 8px;
 }
+
+/* ==========================================================
+   F7.3 — MULTI-PAGE SELECTION STATE
+========================================================== */
+.page-thumbnail--multi-selected {
+  border-color: rgba(0, 212, 179, 0.72);
+  background: rgba(0, 212, 179, 0.075);
+  box-shadow:
+    0 0 0 1px rgba(0, 212, 179, 0.10),
+    0 8px 18px rgba(0, 0, 0, 0.08);
+}
+
+.page-thumbnail__selection-check {
+  position: absolute;
+  z-index: 3;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 2px solid #07111f;
+  border-radius: 999px;
+  background: #00d4b3;
+  color: #04231f;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.26);
+}
+
+.page-thumbnail--compact .page-thumbnail__selection-check,
+.page-thumbnail--grid .page-thumbnail__selection-check {
+  top: 5px;
+  right: 5px;
+  width: 17px;
+  height: 17px;
+  font-size: 11px;
+}
+
+.page-thumbnail--multi-selected .page-thumbnail__number {
+  color: #4ee1ca;
+}
+
+/* ==========================================================
+   F7.3 — DISCOVERABLE SELECTION MODE
+========================================================== */
+.page-thumbnail__selection-check {
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(7, 17, 31, 0.86);
+  color: transparent;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.30);
+}
+
+.page-thumbnail--selection-mode:not(.page-thumbnail--multi-selected) .page-thumbnail__selection-check {
+  opacity: 1;
+}
+
+.page-thumbnail__selection-check--selected {
+  border-color: #07111f;
+  background: #00d4b3;
+  color: #04231f;
+}
+
+.page-thumbnail--selection-mode {
+  cursor: pointer;
+}
+
+.page-thumbnail--selection-mode:hover .page-thumbnail__selection-check {
+  border-color: rgba(0, 212, 179, 0.82);
+  background: rgba(0, 212, 179, 0.12);
+}
+
+.page-thumbnail--selection-mode:hover .page-thumbnail__selection-check--selected {
+  background: #00d4b3;
+}

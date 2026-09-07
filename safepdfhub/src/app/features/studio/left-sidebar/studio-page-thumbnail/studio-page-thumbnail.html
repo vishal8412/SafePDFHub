@@ -2,15 +2,27 @@
   type="button"
   class="page-thumbnail"
   [class.page-thumbnail--selected]="selected"
+  [class.page-thumbnail--multi-selected]="multiSelected"
+  [class.page-thumbnail--selection-mode]="selectionMode"
   [class.page-thumbnail--comfortable]="viewMode === 'comfortable'"
   [class.page-thumbnail--compact]="viewMode === 'compact'"
   [class.page-thumbnail--grid]="viewMode === 'grid'"
   [class.page-thumbnail--blank]="blank"
   [attr.aria-current]="selected ? 'page' : null"
-  [attr.aria-label]="'Page ' + displayPageNumber"
-  (click)="onSelect()">
+  [attr.aria-pressed]="selectionMode ? multiSelected : null"
+  [attr.aria-label]="'Page ' + displayPageNumber + (multiSelected ? ', selected' : selectionMode ? ', available for selection' : '')"
+  (click)="onSelect($event)">
 
   <div class="page-thumbnail__preview">
+
+    @if (selectionMode || multiSelected) {
+      <span
+        class="page-thumbnail__selection-check"
+        [class.page-thumbnail__selection-check--selected]="multiSelected"
+        aria-hidden="true">
+        @if (multiSelected) { ✓ }
+      </span>
+    }
 
     @if (blank) {
 

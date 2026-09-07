@@ -139,17 +139,17 @@ export class StudioToolbar {
       kind: 'interaction'
     },
 
-    {
-      id: 'link',
-      label: 'Link',
-      kind: 'action'
-    },
+    // {
+    //   id: 'link',
+    //   label: 'Link',
+    //   kind: 'action'
+    // },
 
-    {
-      id: 'more',
-      label: 'More',
-      kind: 'action'
-    }
+    // {
+    //   id: 'more',
+    //   label: 'More',
+    //   kind: 'action'
+    // }
   ];
 
   /**
