@@ -1,34 +1,35 @@
-<header class="header">
-
-  <div class="container">
-
-    <a class="logo" routerLink="/">
-      SafePDFHub
+<header class="site-header">
+  <div class="header-inner">
+    <a class="logo" routerLink="/" aria-label="SafePDFHub home">
+      <img
+        src="assets/brand/safepdfhub-logo-primary.svg"
+        alt="SafePDFHub — Private PDF tools. Built for you."
+        width="390"
+        height="88"
+        decoding="async" />
     </a>
 
-    <!-- DESKTOP NAV -->
-    <nav class="desktop-nav">
-      <a routerLink="/features">Features</a>
-      <a routerLink="/pricing">Pricing</a>
-      <a routerLink="/faq">FAQ</a>
-      <a routerLink="/sponsors">Sponsors</a>
+    <nav class="desktop-nav" aria-label="Main navigation">
+      <a href="/#features" (click)="navigateToHomeSection($event, 'features')">Why SafePDFHub</a>
+      <a href="/#tools" (click)="navigateToHomeSection($event, 'tools')">Tools</a>
+      <a href="/#how-it-works" (click)="navigateToHomeSection($event, 'how-it-works')">How it works</a>
+      <a routerLink="/studio" class="nav-cta">Open Editor <b>→</b></a>
     </nav>
 
-    <!-- MOBILE MENU BUTTON -->
-    <button class="menu-btn" (click)="mobileMenuOpen = !mobileMenuOpen">
-      ☰
+    <button
+      class="menu-btn"
+      type="button"
+      [attr.aria-expanded]="mobileMenuOpen"
+      aria-label="Open menu"
+      (click)="mobileMenuOpen = !mobileMenuOpen">
+      <span></span><span></span>
     </button>
-
   </div>
 
-  <!-- MOBILE DRAWER -->
   <div class="mobile-menu" *ngIf="mobileMenuOpen">
-
-    <a routerLink="/features">Features</a>
-    <a routerLink="/pricing">Pricing</a>
-    <a routerLink="/faq">FAQ</a>
-    <a routerLink="/sponsors">Sponsors</a>
-
+    <a href="/#features" (click)="navigateToHomeSection($event, 'features')">Why SafePDFHub</a>
+    <a href="/#tools" (click)="navigateToHomeSection($event, 'tools')">Tools</a>
+    <a href="/#how-it-works" (click)="navigateToHomeSection($event, 'how-it-works')">How it works</a>
+    <a routerLink="/studio" class="mobile-cta" (click)="mobileMenuOpen = false">Open PDF Editor →</a>
   </div>
-
 </header>

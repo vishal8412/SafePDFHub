@@ -29,25 +29,13 @@
   z-index: 2;
 }
 
-/* 🔥 logo animation */
-.logo {
-  font-size: 34px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  background: linear-gradient(90deg, #4fd1c5, #f97316);
-  background-size: 200%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shimmer 3s linear infinite;
-}
-
-.logo span {
-  color: #f97316;
-}
-
-@keyframes shimmer {
-  0% { background-position: 0% }
-  100% { background-position: 200% }
+/* Final SafePDFHub brand lockup */
+.logo-image {
+  display: block;
+  width: min(390px, 82vw);
+  height: auto;
+  margin: 0 auto 22px;
+  filter: drop-shadow(0 12px 32px rgba(0, 190, 255, 0.10));
 }
 
 /* 🔥 progress wrapper for depth */
@@ -112,4 +100,9 @@
   33% { content: '.'; }
   66% { content: '..'; }
   100% { content: '...'; }
+}
+@media (max-width: 520px) {
+  .logo-image {
+    width: min(315px, 88vw);
+  }
 }

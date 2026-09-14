@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { TOOLS } from '../../config/tools.config';
+import { HomeSectionNavigationService } from '../services/home-section-navigation.service';
 
 @Component({
   selector: 'app-footer',
@@ -11,6 +12,12 @@ import { TOOLS } from '../../config/tools.config';
   styleUrls: ['./footer.component.scss']
 })
 export class FooterComponent {
+
+  private readonly homeSectionNavigation = inject(HomeSectionNavigationService);
+
+  navigateToHomeSection(event: Event, fragment: string): void {
+    this.homeSectionNavigation.navigateToSection(event, fragment);
+  }
 
   toolsSeo = TOOLS.map(tool => ({
   slug: tool.slug,

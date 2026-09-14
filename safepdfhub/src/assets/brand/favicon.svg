@@ -1,0 +1,14 @@
+<svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="SafePDFHub">
+  <defs>
+    <linearGradient id="shield" x1="9" y1="8" x2="64" y2="65" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#27E6D4"/>
+      <stop offset="0.52" stop-color="#12BFEA"/>
+      <stop offset="1" stop-color="#1675E8"/>
+    </linearGradient>
+  </defs>
+  <path d="M36 4 66 15v23.6C66 56.4 54.7 68.1 36 76 17.3 68.1 6 56.4 6 38.6V15L36 4Z" fill="url(#shield)"/>
+  <path d="M36 11.5 58 19.5v19c0 13.1-7.5 22.4-22 28.9-14.5-6.5-22-15.8-22-28.9v-19l22-8Z" fill="#071B2C"/>
+  <path d="M28 25.5h14l7 7v22H28v-29Z" fill="#071B2C" stroke="#24DCD4" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M42 25.5v7h7" stroke="#24DCD4" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M32 39h12M32 45.2h10M32 51.4h6.5" stroke="#24DCD4" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

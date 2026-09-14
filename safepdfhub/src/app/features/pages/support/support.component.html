@@ -1,0 +1,186 @@
+<div class="support-page">
+  <section class="support-hero">
+    <div class="support-glow support-glow-one"></div>
+    <div class="support-glow support-glow-two"></div>
+
+    <div class="support-shell support-hero-inner">
+      <div class="support-hero-copy">
+        <div class="support-eyebrow">
+          <span class="support-eyebrow-dot" aria-hidden="true"></span>
+          SUPPORT SAFEPDFHUB
+        </div>
+
+        <h1>Help us keep<br><span>PDFs private.</span></h1>
+
+        <p class="support-lead">
+          SafePDFHub is built around a simple idea: useful PDF tools should
+          respect your files and your privacy.
+        </p>
+
+        <p class="support-lead support-lead--secondary">
+          If SafePDFHub saves you time, you can support its continued
+          development. Every contribution helps us keep improving the
+          experience.
+        </p>
+
+        <div class="support-trust">
+          <span><b aria-hidden="true">✓</b> No pressure</span>
+          <span><b aria-hidden="true">✓</b> Privacy first</span>
+          <span><b aria-hidden="true">✓</b> Optional support</span>
+        </div>
+      </div>
+
+      <div class="support-card" aria-labelledby="support-card-title">
+        <div class="support-card-top">
+          <div>
+            <span class="support-card-kicker">CHOOSE YOUR SUPPORT</span>
+            <h2 id="support-card-title">Make a contribution.</h2>
+          </div>
+          <img
+            src="assets/brand/safepdfhub-mark.svg"
+            alt=""
+            width="64"
+            height="70"
+            aria-hidden="true" />
+        </div>
+
+        <label class="currency-picker">
+          <span>Currency</span>
+          <select
+            [ngModel]="selectedCurrencyCode"
+            (ngModelChange)="selectCurrency($event)"
+            aria-label="Support currency">
+            <option
+              *ngFor="let currency of currencies"
+              [value]="currency.code">
+              {{ currencyLabel(currency) }}
+            </option>
+          </select>
+        </label>
+
+        <div class="amount-grid">
+          <button
+            *ngFor="let amount of selectedCurrency.tiers; let i = index"
+            type="button"
+            class="amount-option"
+            [class.amount-option--selected]="selectedAmount === amount && !customAmount"
+            (click)="selectAmount(amount)">
+            <strong>{{ formatCurrency(amount) }}</strong>
+            <span>{{ i === 0 ? 'A small thank-you' : i === 1 ? 'Help us keep improving' : 'Support bigger improvements' }}</span>
+          </button>
+        </div>
+
+        <label class="custom-amount">
+          <span>Or choose your own amount</span>
+          <div class="custom-amount-field">
+            <span aria-hidden="true">{{ selectedCurrency.symbol }}</span>
+            <input
+              type="number"
+              min="1"
+              inputmode="decimal"
+              placeholder="Custom amount"
+              [(ngModel)]="customAmount"
+              (input)="selectCustom()"
+              [attr.aria-label]="'Custom support amount in ' + selectedCurrency.name" />
+          </div>
+        </label>
+
+        <div class="support-total">
+          <span>Selected support</span>
+          <strong>{{ displayAmount }}</strong>
+        </div>
+
+        <div class="payment-placeholder">
+          <div class="payment-placeholder-icon" aria-hidden="true">↗</div>
+          <div>
+            <strong>Payment setup coming next</strong>
+            <p>
+              The global currency selector is ready. A payment provider will
+              be connected after the merchant and compliance setup is finalized.
+            </p>
+          </div>
+        </div>
+
+        <button type="button" class="support-submit" disabled>
+          Continue to support
+          <span aria-hidden="true">→</span>
+        </button>
+
+        <p class="support-note">
+          Amounts are local contribution suggestions, not live exchange-rate
+          conversions. Supporting SafePDFHub is completely optional.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="support-help">
+    <div class="support-shell">
+      <div class="support-section-heading">
+        <span class="support-section-label">YOUR SUPPORT</span>
+        <h2>What it helps us build.</h2>
+        <p>
+          Contributions go toward the work behind a reliable, privacy-first
+          PDF experience.
+        </p>
+      </div>
+
+      <div class="support-help-grid">
+        <article>
+          <span class="support-number">01</span>
+          <div class="support-icon" aria-hidden="true">+</div>
+          <h3>Better PDF tools</h3>
+          <p>
+            More focused tools and improvements to the workflows people use
+            most.
+          </p>
+        </article>
+
+        <article>
+          <span class="support-number">02</span>
+          <div class="support-icon" aria-hidden="true">↯</div>
+          <h3>Reliability & compatibility</h3>
+          <p>
+            Testing and improvements across browsers, devices, and document
+            types.
+          </p>
+        </article>
+
+        <article>
+          <span class="support-number">03</span>
+          <div class="support-icon" aria-hidden="true">◇</div>
+          <h3>Privacy-first development</h3>
+          <p>
+            Continued work on local processing and an experience designed
+            around your files staying yours.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="support-principle">
+    <div class="support-shell support-principle-inner">
+      <img
+        src="assets/brand/safepdfhub-mark.svg"
+        alt=""
+        width="76"
+        height="83"
+        aria-hidden="true" />
+
+      <div>
+        <span class="support-section-label">ONE SIMPLE PRINCIPLE</span>
+        <h2>Your files are yours.</h2>
+        <p>
+          We want SafePDFHub to remain useful without turning privacy into an
+          afterthought.
+        </p>
+      </div>
+
+      <a routerLink="/studio" class="support-link">
+        Use SafePDFHub
+        <span aria-hidden="true">→</span>
+      </a>
+    </div>
+  </section>
+</div>

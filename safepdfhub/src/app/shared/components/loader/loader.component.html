@@ -4,22 +4,23 @@
 
   <div class="loader-content">
 
-    <!-- 🔥 LOGO -->
-    <h1 class="logo">
-      Safe<span>PDF</span>Hub
-    </h1>
+    <img
+      class="logo-image"
+      src="assets/brand/safepdfhub-logo-primary.svg"
+      alt="SafePDFHub — Private PDF tools. Built for you."
+      width="390"
+      height="88"
+      decoding="async" />
 
-    <!-- 🔥 PROGRESS -->
     <div class="progress-wrapper">
       <div class="progress-bar">
-        <div 
+        <div
           class="progress-fill"
           [style.width.%]="loader.progress()"
         ></div>
       </div>
     </div>
 
-    <!-- 🔥 STATUS -->
     <p class="status-text">
       {{ loader.text() }}
       <span class="typing"></span>

@@ -1,0 +1,76 @@
+<main class="contact-page">
+  <section class="contact-hero">
+    <div class="contact-shell">
+      <span class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>CONTACT SAFEPDFHUB</span>
+      <h1>Let's make PDF work <span>better.</span></h1>
+      <p>Have a question, found a problem, or want to talk about SafePDFHub? We'd like to hear from you.</p>
+    </div>
+  </section>
+
+  <section class="contact-body">
+    <div class="contact-shell contact-grid">
+      <aside class="contact-info">
+        <span class="section-label">GET IN TOUCH</span>
+        <h2>Tell us what you need.</h2>
+        <p>Choose the route that fits your message. For support issues, include the tool name and a short description of what happened.</p>
+
+        <div class="contact-cards">
+          <div>
+            <span class="contact-card-icon" aria-hidden="true">?</span>
+            <strong>General questions</strong>
+            <small>Product, tools, roadmap, or anything else.</small>
+          </div>
+          <div>
+            <span class="contact-card-icon" aria-hidden="true">!</span>
+            <strong>Report a problem</strong>
+            <small>Tell us what you expected and what happened instead.</small>
+          </div>
+          <div>
+            <span class="contact-card-icon" aria-hidden="true">◇</span>
+            <strong>Privacy questions</strong>
+            <small>Questions about how SafePDFHub handles information.</small>
+          </div>
+          <div>
+            <span class="contact-card-icon" aria-hidden="true">↗</span>
+            <strong>Business & partnerships</strong>
+            <small>Ideas, collaborations, and commercial enquiries.</small>
+          </div>
+        </div>
+      </aside>
+
+      <form class="contact-form" (ngSubmit)="sendEmail()">
+        <div class="form-heading">
+          <span class="section-label">SEND A MESSAGE</span>
+          <h2>We'll hear from you through your email app.</h2>
+          <p>This form prepares an email on your device; it does not upload your message to a SafePDFHub server.</p>
+        </div>
+
+        <div class="form-row">
+          <label>
+            <span>Name</span>
+            <input name="name" type="text" [(ngModel)]="name" autocomplete="name" placeholder="Your name" />
+          </label>
+          <label>
+            <span>Email</span>
+            <input name="email" type="email" [(ngModel)]="email" autocomplete="email" placeholder="you@example.com" />
+          </label>
+        </div>
+
+        <label>
+          <span>Subject</span>
+          <input name="subject" type="text" [(ngModel)]="subject" placeholder="How can we help?" />
+        </label>
+
+        <label>
+          <span>Message</span>
+          <textarea name="message" rows="7" [(ngModel)]="message" required placeholder="Tell us a little more..."></textarea>
+        </label>
+
+        <div class="form-bottom">
+          <p><strong>Privacy note:</strong> Please don't include passwords, payment details, or confidential documents in your message.</p>
+          <button type="submit">Open email <span aria-hidden="true">→</span></button>
+        </div>
+      </form>
+    </div>
+  </section>
+</main>

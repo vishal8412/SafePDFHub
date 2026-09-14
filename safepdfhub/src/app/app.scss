@@ -1,44 +1,11 @@
-:host {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
+ :host{display:flex;flex-direction:column;min-height:100dvh}html{scroll-behavior:smooth;overflow-anchor:none}body{margin:0;background:#061727;font-family:system-ui,sans-serif}.layout{width:100%;min-width:0;flex:1 1 auto;min-height:0}.layout:has(app-studio-shell),main.layout:has(app-studio-shell){width:100%;max-width:none;margin:0;padding:0;overflow:hidden}main.layout{box-sizing:border-box}
+
+[id] {
+  scroll-margin-top: 96px;
 }
 
-body {
-  margin: 0;
-  background: #071a2f;
-  font-family: system-ui;
-}
-
-.layout {
-  width: 100%;
-  min-width: 0;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-/* ==========================================================
-   STUDIO ROUTE
-   Studio owns its own application viewport and should not
-   inherit the website content padding.
-========================================================== */
-
-.layout:has(app-studio-shell) {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-main.layout {
-  box-sizing: border-box;
-}
-
-main.layout:has(app-studio-shell) {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
+@media (max-width: 760px) {
+  [id] {
+    scroll-margin-top: 78px;
+  }
 }

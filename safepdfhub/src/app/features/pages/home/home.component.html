@@ -1,111 +1,148 @@
-<!-- ================= HERO ================= -->
-<section class="hero">
+<div class="home-page">
+  <section class="hero" id="top">
+    <div class="hero-glow hero-glow-one"></div>
+    <div class="hero-glow hero-glow-two"></div>
 
-  <div class="hero-left">
-    <h1>
-      Edit PDFs <span>Privately</span>
-    </h1>
+    <div class="hero-content shell">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="eyebrow-dot"></span> Private PDF tools · built for the browser</div>
+        <h1>Your PDFs.<br><span>Your device.<br><em>Your control.</em></span></h1>
+        <p class="hero-lead">
+          Edit, merge, compress and transform PDFs without sending your documents to a server.
+          <strong>Fast processing happens right in your browser.</strong>
+        </p>
 
-    <p>
-      Powerful PDF tools that run 100% in your browser.
-      <b>No uploads. No tracking.</b>
-    </p>
+        <div class="hero-actions">
+          <a routerLink="/studio" class="button button-primary">
+            <span>Open PDF Editor</span><span class="button-arrow">→</span>
+          </a>
+          <a href="#tools" class="button button-ghost">Explore PDF tools</a>
+        </div>
 
-    <div class="actions">
-      <a routerLink="/merge-pdf" class="btn primary">Merge PDF</a>
-      <a routerLink="/compress-pdf" class="btn secondary">Compress PDF</a>
+        <div class="hero-proof">
+          <span><i>✓</i> No uploads</span>
+          <span><i>✓</i> No signup</span>
+          <span><i>✓</i> Browser processing</span>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-label="SafePDFHub PDF editor preview">
+        <div class="visual-orbit orbit-one"></div>
+        <div class="visual-orbit orbit-two"></div>
+        <div class="editor-window">
+          <div class="window-topbar">
+            <div class="window-dots"><b></b><b></b><b></b></div>
+            <div class="window-file"><span class="file-mark">▤</span> annual-report.pdf</div>
+            <span class="window-private">PRIVATE</span>
+          </div>
+          <div class="editor-body">
+            <aside class="editor-sidebar">
+              <div class="mini-page active"><span></span><span></span><span></span><span></span></div>
+              <div class="mini-page"><span></span><span></span><span></span></div>
+              <div class="mini-page"><span></span><span></span><span></span></div>
+            </aside>
+            <div class="editor-canvas">
+              <div class="fake-toolbar"><span></span><span></span><span class="tool-active"></span><span></span><span></span><span></span></div>
+              <div class="pdf-sheet">
+                <div class="pdf-kicker">QUARTERLY REPORT</div>
+                <div class="pdf-title">Business<br>overview</div>
+                <div class="pdf-line wide"></div><div class="pdf-line medium"></div>
+                <div class="pdf-chart"><i></i><i></i><i></i><i></i><i></i></div>
+                <div class="pdf-line full"></div><div class="pdf-line wide"></div>
+                <div class="selection-box"><span>Revenue grew 24% this quarter</span><b></b><b></b><b></b><b></b></div>
+                <div class="cursor"></div>
+              </div>
+            </div>
+          </div>
+          <div class="window-status"><span class="status-live"></span> Processing locally <span class="status-right">100% browser-based</span></div>
+        </div>
+        <div class="floating-card privacy-card"><span class="floating-icon">⌁</span><div><b>Nothing leaves</b><small>Your device</small></div></div>
+        <div class="floating-card speed-card"><span class="floating-icon">↯</span><div><b>Instant workflow</b><small>Local processing</small></div></div>
+      </div>
     </div>
 
-    <div class="trust-inline">
-      <span>⚡ Fast</span>
-      <span>🔒 Private</span>
-      <span>☁️ No Uploads</span>
+    <div class="hero-bottom shell">
+      <span>Designed for people who care where their files go.</span>
+      <div class="scroll-cue"><span></span> Scroll to explore</div>
     </div>
-  </div>
+  </section>
 
-  <!-- PRODUCT PREVIEW -->
-  <div class="hero-right">
-    <div class="preview-card">
-      <div class="fake-file">document1.pdf</div>
-      <div class="fake-file">document2.pdf</div>
-      <button class="merge-btn">Merge →</button>
+  <section class="principles shell" id="features">
+    <div class="section-intro centered">
+      <div class="section-label">THE SAFE PDF DIFFERENCE</div>
+      <h2>Privacy isn't a promise.<br><span>It's how we built it.</span></h2>
+      <p>Most PDF tools start by moving your file to their servers. SafePDFHub starts somewhere else: <strong>inside your browser.</strong></p>
     </div>
-  </div>
-
-</section>
-
-<!-- ================= TRUST ================= -->
-<section class="trust">
-  <div class="trust-grid">
-    <div>⚡ Lightning Fast</div>
-    <div>🔒 100% Private</div>
-    <div>☁️ No Uploads</div>
-    <div>🚀 Works in Browser</div>
-  </div>
-</section>
-
-<!-- ================= HOW IT WORKS ================= -->
-<section class="how">
-  <h2>How it works</h2>
-
-  <div class="steps">
-    <div class="step">
-      <div class="circle">1</div>
-      <p>Upload your PDF</p>
+    <div class="principle-grid">
+      <article class="principle-card featured">
+        <div class="card-number">01</div><div class="card-icon">◈</div>
+        <h3>Local by design</h3>
+        <p>Your document can be processed on your device instead of being uploaded to a remote server.</p>
+        <div class="card-line"></div><span class="card-tag">NO SERVER UPLOAD</span>
+      </article>
+      <article class="principle-card">
+        <div class="card-number">02</div><div class="card-icon">↯</div>
+        <h3>Fast where it matters</h3>
+        <p>Skip upload and download queues. Work directly with your files in a modern browser.</p>
+        <div class="card-line"></div><span class="card-tag">BROWSER POWERED</span>
+      </article>
+      <article class="principle-card">
+        <div class="card-number">03</div><div class="card-icon">○</div>
+        <h3>Simple by default</h3>
+        <p>No complicated workflow. Choose a tool, work on your PDF, and get back to your day.</p>
+        <div class="card-line"></div><span class="card-tag">NO ACCOUNT NEEDED</span>
+      </article>
     </div>
+  </section>
 
-    <div class="step">
-      <div class="circle">2</div>
-      <p>Choose tool</p>
+  <section class="tools-section shell" id="tools">
+    <div class="tools-heading">
+      <div><div class="section-label">THE TOOLBOX</div><h2>Everything you need.<br><span>Nothing you don't.</span></h2></div>
+      <p>One focused place for the PDF jobs you actually do — with a privacy-first workflow from start to finish.</p>
     </div>
-
-    <div class="step">
-      <div class="circle">3</div>
-      <p>Download instantly</p>
+    <div class="tool-grid">
+      <a class="tool-card" *ngFor="let tool of tools; let i = index" [routerLink]="tool.route">
+        <div class="tool-top"><span class="tool-index">{{ i + 1 < 10 ? '0' + (i + 1) : i + 1 }}</span><span class="tool-symbol">{{ tool.mark }}</span></div>
+        <h3>{{ tool.name }}</h3>
+        <span class="tool-open">Open tool <b>↗</b></span>
+      </a>
+      <div class="tool-card tool-card-coming">
+        <div class="tool-top"><span class="tool-index">NEXT</span><span class="tool-symbol">+</span></div>
+        <h3>More tools are coming</h3>
+        <span class="tool-open">Built with the same privacy-first approach</span>
+      </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ================= TOOLS ================= -->
-<section class="tools">
-  <h2>All PDF Tools</h2>
-
-  <div class="tool-grid">
-    <a
-      class="tool-card"
-      *ngFor="let tool of tools"
-      [routerLink]="tool.route"
-    >
-      <div class="icon">{{ tool.icon }}</div>
-      <h3>{{ tool.name }}</h3>
-    </a>
-  </div>
-</section>
-
-<!-- ================= WHY ================= -->
-<section class="why">
-  <h2>Why SafePDFHub?</h2>
-
-  <div class="why-grid">
-    <div class="why-card">
-      ⚡ <h3>Super Fast</h3>
-      <p>Instant processing in your browser</p>
+  <section class="workflow shell" id="how-it-works">
+    <div class="workflow-panel">
+      <div class="workflow-copy">
+        <div class="section-label">A BETTER PDF WORKFLOW</div>
+        <h2>Three steps.<br><span>Zero friction.</span></h2>
+        <p>From a blank screen to a finished document without making privacy an afterthought.</p>
+        <a routerLink="/studio" class="text-link">Start working <span>→</span></a>
+      </div>
+      <div class="steps-list">
+        <div class="workflow-step"><span>01</span><div><h3>Choose your PDF</h3><p>Bring a document into the browser from your device.</p></div><b>↗</b></div>
+        <div class="workflow-step"><span>02</span><div><h3>Make your changes</h3><p>Use the tool you need and keep your workflow focused.</p></div><b>↗</b></div>
+        <div class="workflow-step"><span>03</span><div><h3>Take the result with you</h3><p>Export your finished file directly back to your device.</p></div><b>↗</b></div>
+      </div>
     </div>
+  </section>
 
-    <div class="why-card">
-      🔒 <h3>Privacy First</h3>
-      <p>Your files never leave your device</p>
+  <section class="manifesto">
+    <div class="manifesto-inner shell">
+      <div class="manifesto-mark"><img src="assets/brand/safepdfhub-mark.svg" alt="" width="336" height="367" aria-hidden="true" /></div>
+      <div><div class="section-label">OUR MISSION</div><h2>PDF tools should work <span>for you.</span><br>Not collect your files.</h2></div>
+      <p>We are building a simpler generation of PDF utilities: useful, fast, and respectful of the documents people trust us to handle.</p>
     </div>
+  </section>
 
-    <div class="why-card">
-      🆓 <h3>Free Tools</h3>
-      <p>No signup required</p>
-    </div>
-  </div>
-</section>
-
-<!-- ================= CTA ================= -->
-<section class="cta">
-  <h2>Ready to edit your PDFs?</h2>
-  <a routerLink="/merge-pdf" class="btn primary">Start Now</a>
-</section>
+  <section class="final-cta shell" id="start">
+    <div class="cta-glow"></div>
+    <div class="section-label">READY WHEN YOU ARE</div>
+    <h2>Bring your PDF.<br><span>Keep your privacy.</span></h2>
+    <p>Start working in the browser. No upload queue. No account wall.</p>
+    <div class="hero-actions"><a routerLink="/studio" class="button button-primary">Open PDF Editor <span class="button-arrow">→</span></a><a href="#tools" class="button button-ghost">Browse all tools</a></div>
+  </section>
+</div>

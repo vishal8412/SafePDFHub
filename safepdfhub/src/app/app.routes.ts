@@ -7,6 +7,41 @@ export const routes: Routes = [
       import('./features/pages/home/home.component')
         .then(m => m.HomeComponent)
   },
+  {
+    path: 'support',
+    loadComponent: () =>
+      import('./features/pages/support/support.component')
+        .then(m => m.SupportComponent)
+  },
+  {
+    path: 'about',
+    loadComponent: () =>
+      import('./features/pages/about/about.component')
+        .then(m => m.AboutComponent)
+  },
+  {
+    path: 'contact',
+    loadComponent: () =>
+      import('./features/pages/contact/contact.component')
+        .then(m => m.ContactComponent)
+  },
+  {
+    path: 'privacy',
+    loadComponent: () =>
+      import('./features/pages/privacy/privacy.component')
+        .then(m => m.PrivacyComponent)
+  },
+  {
+    path: 'terms',
+    loadComponent: () =>
+      import('./features/pages/terms/terms.component')
+        .then(m => m.TermsComponent)
+  },
+  {
+    path: 'donate',
+    redirectTo: 'support',
+    pathMatch: 'full'
+  },
   // Studio routes
   {
     path: 'studio',

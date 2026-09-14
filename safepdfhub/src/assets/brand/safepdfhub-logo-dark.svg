@@ -1,0 +1,24 @@
+<svg width="390" height="88" viewBox="0 0 390 88" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">SafePDFHub</title>
+  <desc id="desc">SafePDFHub — private PDF tools, built for you.</desc>
+  <defs>
+    <linearGradient id="shield" x1="8" y1="7" x2="68" y2="72" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#27E6D4"/>
+      <stop offset="0.52" stop-color="#12BFEA"/>
+      <stop offset="1" stop-color="#6657F5"/>
+    </linearGradient>
+    <linearGradient id="hub" x1="278" y1="24" x2="350" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24E6D3"/>
+      <stop offset="1" stop-color="#7567FF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(3 5)">
+    <path d="M35 2.5 67 14v25.2C67 58.1 54.9 70.6 35 79 15.1 70.6 3 58.1 3 39.2V14L35 2.5Z" fill="url(#shield)"/>
+    <path d="M35 10 58.5 18.5v20.1c0 14.3-7.9 24.1-23.5 31.1-15.6-7-23.5-16.8-23.5-31.1V18.5L35 10Z" fill="#071B2C"/>
+    <path d="M27 24.5h14.5l8 8v24H27v-32Z" fill="#071B2C" stroke="#24DCD4" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M41.5 24.5v8h8" stroke="#24DCD4" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M31.5 39h13.2M31.5 45.5h11.2M31.5 52h7.4" stroke="#24DCD4" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
+  <text x="88" y="45" font-family="Inter, Arial, Helvetica, sans-serif" font-size="30" font-weight="700" letter-spacing="-1.1"><tspan fill="#F3F7FA">SafePDF</tspan><tspan fill="url(#hub)">Hub</tspan></text>
+  <text x="89" y="66.5" font-family="Inter, Arial, Helvetica, sans-serif" font-size="8.3" font-weight="600" letter-spacing="3.05" fill="#8DB6C9">PRIVATE PDF TOOLS · BUILT FOR YOU.</text>
+</svg>

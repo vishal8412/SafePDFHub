@@ -1,58 +1,53 @@
-<footer class="footer">
-
-  <div class="container">
-
-    <!-- BRAND -->
-    <div class="col brand">
-      <h3>SafePDFHub</h3>
-      <p>
-        Privacy-first PDF tools.<br>
-        No uploads. Everything runs in your browser.
-      </p>
-
-      <!-- CTA -->
-      <button class="cta">🚀 Explore All Tools</button>
-    </div>
-
-    <!-- SEO TOOLS -->
-    <div class="col">
-      <h4>Popular Tools</h4>
-      <a *ngFor="let tool of toolsSeo"
-         [routerLink]="['/', tool.slug]">
-        {{ tool.label }}
+<footer class="site-footer">
+  <div class="footer-main">
+    <div class="footer-brand">
+      <a class="footer-logo" routerLink="/" aria-label="SafePDFHub home">
+        <img
+          src="assets/brand/safepdfhub-logo-primary.svg"
+          alt="SafePDFHub — Private PDF tools. Built for you."
+          width="390"
+          height="88"
+          loading="lazy"
+          decoding="async" />
+      </a>
+      <p>Privacy-first PDF tools that respect the place your files already live: <strong>your device.</strong></p>
+      <a routerLink="/studio" class="footer-action">
+        <span>Open PDF Editor</span>
+        <span class="footer-action-arrow" aria-hidden="true">→</span>
       </a>
     </div>
-
-    <!-- PRODUCT -->
-    <div class="col">
-      <h4>Product</h4>
-      <a routerLink="/tools">All PDF Tools</a>
-      <a routerLink="/features">Features</a>
-      <a routerLink="/pricing">Pricing</a>
-      <a routerLink="/faq">FAQ</a>
-    </div>
-
-    <!-- LEGAL -->
-    <div class="col">
-      <h4>Legal</h4>
-      <a routerLink="/contact">Contact</a>
-      <a routerLink="/privacy">Privacy Policy</a>
-      <a routerLink="/terms">Terms</a>
-    </div>
-
+    <div class="footer-col"><h4>Popular tools</h4><a *ngFor="let tool of toolsSeo" [routerLink]="['/', tool.slug]">{{ tool.label }}</a></div>
+    <div class="footer-col"><h4>Product</h4><a href="/#features" (click)="navigateToHomeSection($event, 'features')">Why SafePDFHub</a><a href="/#tools" (click)="navigateToHomeSection($event, 'tools')">All PDF tools</a><a href="/#how-it-works" (click)="navigateToHomeSection($event, 'how-it-works')">How it works</a><a routerLink="/studio">PDF Editor</a><a routerLink="/support">Support SafePDFHub</a></div>
+    <div class="footer-col"><h4>Company</h4><a routerLink="/about">About us</a><a routerLink="/contact">Contact</a><h4 class="footer-subheading">Legal</h4><a routerLink="/privacy">Privacy Policy</a><a routerLink="/terms">Terms of Service</a></div>
+    <div class="footer-col footer-principles"><h4>Principles</h4><span>No uploads</span><span>Browser processing</span><span>No signup required</span><span>Privacy first</span></div>
   </div>
-
-  <!-- TRUST STRIP (IMPROVED) -->
-  <div class="trust">
-    <div>⚡ Lightning Fast</div>
-    <div>🔒 100% Private</div>
-    <div>☁️ No Uploads</div>
-    <div>🇪🇺 Privacy Friendly</div>
+  <div class="footer-strip" aria-label="SafePDFHub product principles">
+    <span class="footer-proof footer-proof--primary">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M10 2.2 12.1 7l5.2.5-3.9 3.4 1.2 5.1L10 13.3 5.4 16l1.2-5.1L2.7 7.5 7.9 7 10 2.2Z"/>
+      </svg>
+      <span>Local-first</span>
+    </span>
+    <span class="footer-proof">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="m11.5 1.8-6 9h4l-1 7.4 6-9h-4l1-7.4Z"/>
+      </svg>
+      <span>Fast</span>
+    </span>
+    <span class="footer-proof">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M10 2.4 16 4.7v4.8c0 3.5-2.3 6.5-6 8.1-3.7-1.6-6-4.6-6-8.1V4.7l6-2.3Z"/>
+        <path d="m7.2 10 1.8 1.8 3.8-4"/>
+      </svg>
+      <span>Private</span>
+    </span>
+    <span class="footer-proof">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="3" y="4" width="14" height="10" rx="1.7"/>
+        <path d="M7 17h6M10 14v3"/>
+      </svg>
+      <span>Browser-based</span>
+    </span>
   </div>
-
-  <!-- BOTTOM -->
-  <div class="bottom">
-    © 2026 SafePDFHub • Privacy-first PDF tools
-  </div>
-
+  <div class="footer-bottom"><span>© 2026 SafePDFHub</span><span>Built around a simple idea: your files are yours.</span></div>
 </footer>
