@@ -11,15 +11,28 @@ import {
   StandardFonts,
   degrees,
   rgb,
+  PDFArray,
+  PDFName,
+  PDFString,
+  pushGraphicsState,
+  popGraphicsState,
+  rectangle,
+  clip,
+  endPath,
 } from 'pdf-lib';
 import { saveAs } from 'file-saver';
+import fontkit from '@pdf-lib/fontkit';
+
+import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 
 import type { StudioPage } from '../models/studio-page.model';
 import type {
   StudioObject,
+  StudioPdfTextSource,
   StudioTextAlign,
   StudioTextFontStyle,
   StudioTextFontWeight,
+  StudioTextFontFamily,
   StudioPoint,
 } from '../models/studio-selection.model';
 
@@ -61,6 +74,13 @@ export class StudioPdfExportService {
     const sourcePdf = await PDFDocument.load(sourceBytes);
     const sourcePages = sourcePdf.getPages();
     const pdfDocument = await PDFDocument.create();
+
+    /*
+     * Existing PDF text must be allowed to reuse the actual source font.
+     * StandardFonts are only a fallback; substituting Helvetica/Times/Courier
+     * changes glyph shape, metrics and therefore the visual result.
+     */
+    pdfDocument.registerFontkit(fontkit);
     const manifest = logicalPages && logicalPages.length ? logicalPages : sourcePages.map((_, index) => ({ id: `source-${index + 1}`, kind: 'source' as const, sourcePageNumber: index + 1, rotation: 0 as const }));
     for (const logicalPage of manifest) {
       if (logicalPage.kind === 'blank') {
@@ -88,15 +108,33 @@ export class StudioPdfExportService {
         object =>
           (
             object.type === 'text' &&
-            (object.text ?? '').trim().length > 0
+            (object.pdfText
+              ? object.pdfText.edited
+              : (object.text ?? '').trim().length > 0)
           ) ||
           (
             object.type === 'image' &&
-            Boolean(object.image?.dataUrl)
+            Boolean(object.image?.dataUrl) &&
+            (
+              // Existing PDF images already live on the copied source page.
+              // They must NOT be flattened again merely because the analyser
+              // created an editable image object for hit-testing. Repainting
+              // an unchanged source image from normalized Studio bounds can
+              // resize/reposition it and can reveal PDF content that was
+              // originally underneath it (for example the paragraphs behind
+              // the chart in the test document). Only a deliberate replacement
+              // should cause us to cover and repaint an existing PDF image.
+              object.pdfImage?.replaced === true ||
+              !object.pdfImage
+            )
           ) ||
           (
             object.type === 'shape' &&
             Boolean(object.shape)
+          ) ||
+          (
+            object.type === 'link' &&
+            Boolean(object.link)
           ) ||
           (
             (
@@ -107,6 +145,20 @@ export class StudioPdfExportService {
               object.drawing?.points?.length
             )
           ),
+      );
+
+    /*
+     * Resolve embedded PDF font programs only for edited existing-PDF text.
+     * The normal PDF.js viewer instance intentionally does not retain raw font
+     * bytes forever. Export creates a short-lived PDF.js document with
+     * fontExtraProperties enabled, extracts only the font programs actually
+     * needed by edited text, and immediately destroys that helper document.
+     */
+    const sourceFontBytes =
+      await this.collectSourceFontBytes(
+        sourceBytes,
+        editableObjects,
+        manifest,
       );
 
     /**
@@ -152,6 +204,19 @@ export class StudioPdfExportService {
         rotation === 90 || rotation === 270
           ? pageWidth
           : pageHeight;
+
+      if (object.type === 'link' && object.link) {
+        this.addLinkAnnotation(
+          pdfDocument,
+          page,
+          object,
+          displayWidth,
+          displayHeight,
+          rotation,
+          pages
+        );
+        continue;
+      }
 
       if (
         object.type === 'shape' &&
@@ -204,69 +269,145 @@ export class StudioPdfExportService {
                 )
               );
 
-        this.drawImageObject(
-          page,
-          object,
-          embeddedImage,
-          displayWidth,
-          displayHeight,
-          rotation
-        );
+        if (object.pdfImage?.replaced) {
+          await this.coverExistingPdfImage(
+            pdfDocument, page, object, displayWidth, displayHeight, rotation
+          );
+        }
+
+        // Phase 5C.4 — every existing-image replacement is clipped to the exact
+        // detected source region. This protects neighbouring original PDF artwork
+        // for fit, fill and stretch modes, not only fill mode.
+        const requiresClip = object.pdfImage?.replaced === true;
+
+        if (requiresClip) {
+          this.pushImageReplacementClip(
+            page,
+            object,
+            displayWidth,
+            displayHeight,
+            rotation
+          );
+        }
+
+        try {
+          this.drawImageObject(
+            page,
+            object,
+            embeddedImage,
+            displayWidth,
+            displayHeight,
+            rotation
+          );
+          // Phase 5C.6 — the second reconstruction layer is transparent and is
+          // painted only after the replacement, softening the interior seam while
+          // remaining inside the same protected source clip.
+          await this.drawPdfImageSeamBlend(
+            pdfDocument, page, object, displayWidth, displayHeight, rotation
+          );
+        } finally {
+          if (requiresClip) {
+            page.pushOperators(popGraphicsState());
+          }
+        }
 
         continue;
       }
 
       const style = object.textStyle;
+      const sourceText = object.pdfText;
 
+      // Phase 2: existing PDF text uses the captured PDF-space font size directly.
+      // Never derive source typography from Studio normalized size or displayed
+      // page height; both can change with zoom and page rotation.
       const fontSize =
-        this.resolveFontSize(
+        this.resolveSourceFontSize(
+          sourceText,
           style?.fontSize ?? 0.018,
           displayHeight,
         );
 
+      const sourceFontKey =
+        object.type === 'text' && sourceText?.edited
+          ? this.getSourceFontKey(object, manifest)
+          : null;
+
+      const sourceFontBytesForObject =
+        sourceFontKey
+          ? sourceFontBytes.get(sourceFontKey) ?? null
+          : null;
+
       const font =
         await this.getFont(
           pdfDocument,
-          style?.fontWeight ?? 400,
-          style?.fontStyle ?? 'normal',
+          sourceText?.sourceFontWeight ?? style?.fontWeight ?? 400,
+          sourceText?.sourceFontStyle ?? style?.fontStyle ?? 'normal',
+          this.resolvePdfTextExportFamily(sourceText?.sourceFontFamily ?? sourceText?.fontName, style?.fontFamily ?? 'Helvetica'),
           fontCache,
+          sourceFontBytesForObject,
+          object.text ?? '',
         );
 
+        const sourceBoxWidth =
+        object.type === 'text' && object.pdfText?.edited &&
+        typeof object.pdfText.textWidthPdf === 'number' &&
+        Number.isFinite(object.pdfText.textWidthPdf) &&
+        object.pdfText.textWidthPdf > 0
+          ? object.pdfText.textWidthPdf
+          : null;
       const boxWidth = Math.max(
         1,
-        object.bounds.width * displayWidth,
+        sourceBoxWidth ?? object.bounds.width * displayWidth,
       );
 
-      const lines = this.wrapText(
-        object.text ?? '',
-        font,
-        fontSize,
-        boxWidth,
+      const sourceBoxHeight =
+        object.type === 'text' && object.pdfText?.edited &&
+        typeof object.pdfText.textHeightPdf === 'number' &&
+        Number.isFinite(object.pdfText.textHeightPdf) &&
+        object.pdfText.textHeightPdf > 0
+          ? object.pdfText.textHeightPdf
+          : null;
+      const boxHeight = Math.max(1, sourceBoxHeight ?? object.bounds.height * displayHeight);
+      const fit = this.resolveTextFit(
+        object, font, fontSize, boxWidth, boxHeight, displayHeight
       );
 
-      const lineHeight =
-        fontSize * 1.2;
-
-      const boxHeight = Math.max(
-        1,
-        object.bounds.height * displayHeight,
-      );
-
-      const maxLines = Math.max(
-        1,
-        Math.floor(
-          (boxHeight + fontSize * 0.15) /
-            lineHeight,
-        ),
-      );
+      if (object.type === 'text' && object.pdfText?.edited) {
+        /*
+         * Existing PDF text already lives on the copied page. For a normal
+         * single-line edit, cover only the original glyph range that changed
+         * and draw only the replacement. Untouched source glyphs therefore
+         * remain byte-for-byte on the copied page instead of being painted a
+         * second time with pdf-lib.
+         */
+        if (
+          fit.lines.length === 1 &&
+          this.canUsePartialSourceTextReplacement(object)
+        ) {
+          this.coverEditedPdfTextChange(
+            page,
+            object,
+            font,
+            fit.fontSize,
+          );
+        } else {
+          this.coverExistingPdfText(
+            page,
+            object,
+            displayWidth,
+            displayHeight,
+            rotation
+          );
+        }
+      }
 
       this.drawObject(
         page,
         object,
-        lines.slice(0, maxLines),
+        fit.lines,
         font,
-        fontSize,
-        lineHeight,
+        fit.fontSize,
+        fit.lineHeight,
         displayWidth,
         displayHeight,
         rotation,
@@ -377,6 +518,151 @@ export class StudioPdfExportService {
       outputObjects,
       [ logicalPage ],
       outputFileName
+    );
+  }
+
+  /**
+   * Phase 5B — cover the original extracted text region before drawing the
+   * replacement. This keeps the exported PDF from showing old and new text
+   * together while preserving the rest of the original page artwork.
+   */
+  private coverExistingPdfText(
+    page: PDFPage,
+    object: StudioObject,
+    displayWidth: number,
+    displayHeight: number,
+    rotation: 0 | 90 | 180 | 270
+  ): void {
+    const source = object.pdfText;
+    if (!source) return;
+
+    // Existing PDF text must be covered in the same PDF-space geometry in
+    // which PDF.js found it. Normalized Studio bounds are presentation state
+    // and can be affected by zoom, page rotation, or later editor changes.
+    const [a, b, c, d, e, f] = source.transform;
+    const axisX = Math.hypot(a, b) || 1;
+    const axisY = Math.hypot(c, d) || 1;
+    const ux = a / axisX;
+    const uy = b / axisX;
+    const vx = c / axisY;
+    const vy = d / axisY;
+    const width = Math.max(0, source.textWidthPdf ?? 0);
+    // fontSizePdf is optional for backward-compatible StudioPdfTextSource
+    // objects. Resolve it once before using it in fallback metric calculations
+    // so strict TypeScript does not treat the property as possibly undefined.
+    const fontSizePdf = typeof source.fontSizePdf === 'number' && Number.isFinite(source.fontSizePdf)
+      ? source.fontSizePdf
+      : 0;
+    const ascent = typeof source.ascentPdf === 'number' && Number.isFinite(source.ascentPdf)
+      ? source.ascentPdf
+      : Math.max(0, fontSizePdf * 0.9);
+    const descent = typeof source.descentPdf === 'number' && Number.isFinite(source.descentPdf)
+      ? source.descentPdf
+      : -Math.max(0, fontSizePdf * 0.2);
+    // Existing PDF text must be covered exactly at its source run boundary.
+    // Horizontal padding creates the visible left/right drift reported in the
+    // editor. Keep a tiny vertical safety only for rasterization/descenders.
+    const padX = 0;
+    const padY = 0.25;
+
+    const corners = [
+      { x: e - vx * descent, y: f - vy * descent },
+      { x: e + ux * width - vx * descent, y: f + uy * width - vy * descent },
+      { x: e - vx * ascent, y: f - vy * ascent },
+      { x: e + ux * width - vx * ascent, y: f + uy * width - vy * ascent },
+    ];
+
+    // The source transform is already in unrotated PDF page coordinates.
+    // Page rotation is metadata applied to the page itself, so the cover must
+    // remain in those same coordinates rather than applying display rotation
+    // a second time. Keep the arguments for API compatibility with the other
+    // geometry helpers and explicitly consume them to document the boundary.
+    void displayWidth;
+    void displayHeight;
+    void rotation;
+
+    const xs = corners.map(point => point.x);
+    const ys = corners.map(point => point.y);
+    page.drawRectangle({
+      x: Math.max(0, Math.min(...xs) - padX),
+      y: Math.max(0, Math.min(...ys) - padY),
+      width: Math.max(1, Math.max(...xs) - Math.min(...xs) + padX * 2),
+      height: Math.max(1, Math.max(...ys) - Math.min(...ys) + padY * 2),
+      color: this.hexToPdfRgb(source.backgroundColor ?? '#ffffff'),
+      borderWidth: 0
+    });
+  }
+
+  /** Persist Studio links as native PDF link annotations, not flattened artwork. */
+  private addLinkAnnotation(
+    pdfDocument: PDFDocument,
+    page: PDFPage,
+    object: StudioObject,
+    displayWidth: number,
+    displayHeight: number,
+    rotation: 0 | 90 | 180 | 270,
+    outputPages: readonly PDFPage[]
+  ): void {
+    const link = object.link;
+    if (!link) return;
+
+    const x1 = object.bounds.x * displayWidth;
+    const y1 = object.bounds.y * displayHeight;
+    const x2 = (object.bounds.x + object.bounds.width) * displayWidth;
+    const y2 = (object.bounds.y + object.bounds.height) * displayHeight;
+    const corners = [
+      this.displayToPdfPoint(x1, y1, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x2, y1, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x1, y2, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x2, y2, displayWidth, displayHeight, rotation)
+    ];
+    const xs = corners.map(point => point.x);
+    const ys = corners.map(point => point.y);
+    const rect = pdfDocument.context.obj([
+      Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)
+    ]);
+
+    const annotation = pdfDocument.context.obj({
+      Type: 'Annot',
+      Subtype: 'Link',
+      Rect: rect,
+      Border: [0, 0, 0],
+      H: 'I'
+    });
+
+    if (link.kind === 'page') {
+      const targetIndex = Math.max(0, Math.min(outputPages.length - 1, Math.floor(link.targetPage) - 1));
+      const targetRef = outputPages[targetIndex]?.ref;
+      if (!targetRef) return;
+      annotation.set(PDFName.of('Dest'), pdfDocument.context.obj([targetRef, PDFName.of('Fit')]));
+    } else {
+      const url = link.url.trim();
+      if (!url) return;
+      const safeUrl = /^https?:\/\//i.test(url) || /^mailto:/i.test(url) ? url : `https://${url}`;
+      annotation.set(PDFName.of('A'), pdfDocument.context.obj({
+        Type: 'Action',
+        S: 'URI',
+        URI: PDFString.of(safeUrl)
+      }));
+    }
+
+    const annotationRef = pdfDocument.context.register(annotation);
+    const annotsKey = PDFName.of('Annots');
+    const existing = page.node.lookupMaybe(annotsKey, PDFArray);
+    if (existing) {
+      existing.push(annotationRef);
+    } else {
+      page.node.set(annotsKey, pdfDocument.context.obj([annotationRef]));
+    }
+  }
+
+  private hexToPdfRgb(value: string): ReturnType<typeof rgb> {
+    const match = /^#?([0-9a-f]{6})$/i.exec(value.trim());
+    const hex = match?.[1] ?? 'ffffff';
+    return rgb(
+      parseInt(hex.slice(0, 2), 16) / 255,
+      parseInt(hex.slice(2, 4), 16) / 255,
+      parseInt(hex.slice(4, 6), 16) / 255
     );
   }
 
@@ -828,6 +1114,153 @@ export class StudioPdfExportService {
     }
   }
 
+  /** Cover a detected source image before drawing its replacement. */
+  private async coverExistingPdfImage(
+    pdfDocument: PDFDocument,
+    page: PDFPage,
+    object: StudioObject,
+    displayWidth: number,
+    displayHeight: number,
+    rotation: 0 | 90 | 180 | 270
+  ): Promise<void> {
+    const pixelRaster = object.pdfImage?.backgroundMode === 'layered'
+      ? object.pdfImage.layeredReconstructionDataUrl
+      : object.pdfImage?.backgroundMode === 'pixel'
+        ? object.pdfImage.pixelReconstructionDataUrl
+        : undefined;
+
+    // Phase 5C.5 — when available, paint the generated pixel-level extension
+    // across the original image bounds before the replacement artwork. This is
+    // still bounded by the exact source region and falls back safely to the
+    // Phase 5C.4 solid/edge-aware colour if the raster cannot be embedded.
+    if (pixelRaster) {
+      try {
+        const reconstruction = await pdfDocument.embedPng(
+          this.dataUrlToUint8Array(pixelRaster)
+        );
+        this.drawImageAcrossObjectBounds(
+          page, object, reconstruction, displayWidth, displayHeight, rotation
+        );
+        return;
+      } catch {
+        // Keep export resilient: malformed/generated canvas data falls back to
+        // the deterministic colour reconstruction below.
+      }
+    }
+
+    const x1 = object.bounds.x * displayWidth;
+    const y1 = object.bounds.y * displayHeight;
+    const x2 = (object.bounds.x + object.bounds.width) * displayWidth;
+    const y2 = (object.bounds.y + object.bounds.height) * displayHeight;
+    const corners = [
+      this.displayToPdfPoint(x1, y1, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x2, y1, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x1, y2, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x2, y2, displayWidth, displayHeight, rotation)
+    ];
+    const xs = corners.map(point => point.x);
+    const ys = corners.map(point => point.y);
+    page.drawRectangle({
+      x: Math.min(...xs), y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+      color: this.pdfImageBackgroundColor(object),
+      borderWidth: 0
+    });
+  }
+
+  /** Paint the transparent Phase 5C.6 seam layer after replacement artwork. */
+  private async drawPdfImageSeamBlend(
+    pdfDocument: PDFDocument,
+    page: PDFPage,
+    object: StudioObject,
+    displayWidth: number,
+    displayHeight: number,
+    rotation: 0 | 90 | 180 | 270
+  ): Promise<void> {
+    if (object.pdfImage?.backgroundMode !== 'layered' || !object.pdfImage.seamBlendDataUrl) return;
+    try {
+      const seam = await pdfDocument.embedPng(
+        this.dataUrlToUint8Array(object.pdfImage.seamBlendDataUrl)
+      );
+      this.drawImageAcrossObjectBounds(page, object, seam, displayWidth, displayHeight, rotation);
+    } catch {
+      // Export remains deterministic if a browser-generated seam raster is malformed.
+    }
+  }
+
+  /** Draw reconstruction artwork across the exact displayed source box. */
+  private drawImageAcrossObjectBounds(
+    page: PDFPage,
+    object: StudioObject,
+    image: any,
+    displayWidth: number,
+    displayHeight: number,
+    rotation: 0 | 90 | 180 | 270
+  ): void {
+    const boxX = object.bounds.x * displayWidth;
+    const boxY = object.bounds.y * displayHeight;
+    const boxWidth = object.bounds.width * displayWidth;
+    const boxHeight = object.bounds.height * displayHeight;
+    const displayBottom = displayHeight - boxY - boxHeight;
+    switch (rotation) {
+      case 90:
+        page.drawImage(image, { x: boxX, y: displayBottom + boxHeight, width: boxHeight, height: boxWidth, rotate: degrees(-90) });
+        return;
+      case 180:
+        page.drawImage(image, { x: displayWidth - (boxX + boxWidth), y: boxY + boxHeight, width: boxWidth, height: boxHeight, rotate: degrees(-180) });
+        return;
+      case 270:
+        page.drawImage(image, { x: boxX + boxWidth, y: displayBottom, width: boxHeight, height: boxWidth, rotate: degrees(90) });
+        return;
+      default:
+        page.drawImage(image, { x: boxX, y: displayBottom, width: boxWidth, height: boxHeight });
+    }
+  }
+
+  /** Resolve the Phase 5C.4 reconstruction colour used behind replacement artwork. */
+  private pdfImageBackgroundColor(object: StudioObject) {
+    const source = object.pdfImage;
+    const mode = source?.backgroundMode ?? 'auto';
+    const value = mode === 'white' ? '#ffffff' : (source?.backgroundColor ?? '#ffffff');
+    return this.hexToPdfRgb(value);
+  }
+
+  /**
+   * Phase 5C.3 — Fill mode intentionally draws beyond the replacement box.
+   * Clip that overdraw to the exact detected PDF-image region so it cannot
+   * paint over neighbouring source content in the exported PDF.
+   */
+  private pushImageReplacementClip(
+    page: PDFPage,
+    object: StudioObject,
+    displayWidth: number,
+    displayHeight: number,
+    rotation: 0 | 90 | 180 | 270
+  ): void {
+    const x1 = object.bounds.x * displayWidth;
+    const y1 = object.bounds.y * displayHeight;
+    const x2 = (object.bounds.x + object.bounds.width) * displayWidth;
+    const y2 = (object.bounds.y + object.bounds.height) * displayHeight;
+    const corners = [
+      this.displayToPdfPoint(x1, y1, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x2, y1, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x1, y2, displayWidth, displayHeight, rotation),
+      this.displayToPdfPoint(x2, y2, displayWidth, displayHeight, rotation)
+    ];
+    const minX = Math.min(...corners.map(point => point.x));
+    const minY = Math.min(...corners.map(point => point.y));
+    const maxX = Math.max(...corners.map(point => point.x));
+    const maxY = Math.max(...corners.map(point => point.y));
+
+    page.pushOperators(
+      pushGraphicsState(),
+      rectangle(minX, minY, Math.max(0.01, maxX - minX), Math.max(0.01, maxY - minY)),
+      clip(),
+      endPath()
+    );
+  }
+
   private drawImageObject(
     page: PDFPage,
     object: StudioObject,
@@ -853,10 +1286,23 @@ export class StudioPdfExportService {
       object.bounds.height *
       displayHeight;
 
+    const fitMode = object.pdfImage?.fitMode ?? 'stretch';
+    const sourceRatio = Math.max(0.0001, image.width / image.height);
+    const boxRatio = Math.max(0.0001, boxWidth / boxHeight);
+    let drawWidth = boxWidth;
+    let drawHeight = boxHeight;
+    if (fitMode !== 'stretch') {
+      const useWidth = fitMode === 'fit' ? sourceRatio > boxRatio : sourceRatio < boxRatio;
+      if (useWidth) { drawWidth = boxWidth; drawHeight = boxWidth / sourceRatio; }
+      else { drawHeight = boxHeight; drawWidth = boxHeight * sourceRatio; }
+    }
+    const drawX = boxX + (boxWidth - drawWidth) / 2;
+    const drawY = boxY + (boxHeight - drawHeight) / 2;
+
     const displayBottom =
       displayHeight -
-      boxY -
-      boxHeight;
+      drawY -
+      drawHeight;
 
     switch (rotation) {
 
@@ -864,10 +1310,10 @@ export class StudioPdfExportService {
         page.drawImage(
           image,
           {
-            x: boxX,
-            y: displayBottom + boxHeight,
-            width: boxHeight,
-            height: boxWidth,
+            x: drawX,
+            y: displayBottom + drawHeight,
+            width: drawHeight,
+            height: drawWidth,
             rotate: degrees(-90)
           }
         );
@@ -879,11 +1325,11 @@ export class StudioPdfExportService {
           {
             x:
               displayWidth -
-              (boxX + boxWidth),
+              (drawX + drawWidth),
             y:
-              boxY + boxHeight,
-            width: boxWidth,
-            height: boxHeight,
+              drawY + drawHeight,
+            width: drawWidth,
+            height: drawHeight,
             rotate: degrees(-180)
           }
         );
@@ -894,11 +1340,11 @@ export class StudioPdfExportService {
           image,
           {
             x:
-              boxX + boxWidth,
+              drawX + drawWidth,
             y:
               displayBottom,
-            width: boxHeight,
-            height: boxWidth,
+            width: drawHeight,
+            height: drawWidth,
             rotate: degrees(90)
           }
         );
@@ -909,23 +1355,46 @@ export class StudioPdfExportService {
         page.drawImage(
           image,
           {
-            x: boxX,
+            x: drawX,
             y: displayBottom,
-            width: boxWidth,
-            height: boxHeight
+            width: drawWidth,
+            height: drawHeight
           }
         );
     }
+  }
+
+  /** Map the detected PDF family to the closest exportable standard family. */
+  private resolvePdfTextExportFamily(
+    sourceName: string | null | undefined,
+    fallback: StudioTextFontFamily
+  ): StudioTextFontFamily {
+    const value = String(sourceName ?? '')
+      .replace(/^\/?[A-Z]{6}\+/, '')
+      .toLowerCase();
+    if (/times|serif|georgia|garamond|cambria|baskerville|palatino|roman|bookman/.test(value)) return 'Times Roman';
+    if (/courier|mono|consolas|monospace|menlo|code|fixed/.test(value)) return 'Courier';
+    if (/helvetica|arial|sans|verdana|tahoma|calibri|frutiger|univers|futura/.test(value)) return 'Helvetica';
+    return fallback;
   }
 
   private async getFont(
     pdfDocument: PDFDocument,
     fontWeight: StudioTextFontWeight,
     fontStyle: StudioTextFontStyle,
+    fontFamily: StudioTextFontFamily,
     cache: Map<string, PDFFont>,
+    sourceFontBytes: Uint8Array | null = null,
+    requiredText = '',
   ): Promise<PDFFont> {
+    const sourceKey =
+      sourceFontBytes && sourceFontBytes.byteLength > 0
+        ? `source-${this.stableBytesFingerprint(sourceFontBytes)}-${fontWeight}-${fontStyle}`
+        : null;
+
     const key =
-      `${fontWeight}-${fontStyle}`;
+      sourceKey ??
+      `${fontFamily}-${fontWeight}-${fontStyle}`;
 
     const cached = cache.get(key);
 
@@ -933,21 +1402,53 @@ export class StudioPdfExportService {
       return cached;
     }
 
-    let standardFont =
-      StandardFonts.Helvetica;
+    if (sourceFontBytes && sourceFontBytes.byteLength > 0) {
+      try {
+        const embeddedSourceFont =
+          await pdfDocument.embedFont(
+            sourceFontBytes,
+            { subset: true },
+          );
 
-    if (
-      fontWeight === 700 &&
-      fontStyle === 'italic'
-    ) {
-      standardFont =
-        StandardFonts.HelveticaBoldOblique;
-    } else if (fontWeight === 700) {
-      standardFont =
-        StandardFonts.HelveticaBold;
-    } else if (fontStyle === 'italic') {
-      standardFont =
-        StandardFonts.HelveticaOblique;
+        /*
+         * PDF.js may expose a subset containing only the glyphs present in the
+         * original document. If the replacement introduces a character that
+         * the source subset does not contain, do not let export fail halfway
+         * through the document; fall back to the mapped standard font below.
+         */
+        if (
+          this.fontSupportsText(
+            embeddedSourceFont,
+            requiredText,
+          )
+        ) {
+          cache.set(key, embeddedSourceFont);
+          return embeddedSourceFont;
+        }
+      } catch {
+        /*
+         * Some PDF.js-converted font programs are not accepted by fontkit.
+         * The standard-font path below remains the controlled fallback.
+         */
+      }
+    }
+
+    let standardFont = StandardFonts.Helvetica;
+    if (fontFamily === 'Times Roman') {
+      standardFont = fontWeight >= 700 && fontStyle === 'italic' ? StandardFonts.TimesRomanBoldItalic
+        : fontWeight >= 700 ? StandardFonts.TimesRomanBold
+        : fontStyle === 'italic' ? StandardFonts.TimesRomanItalic
+        : StandardFonts.TimesRoman;
+    } else if (fontFamily === 'Courier') {
+      standardFont = fontWeight >= 700 && fontStyle === 'italic' ? StandardFonts.CourierBoldOblique
+        : fontWeight >= 700 ? StandardFonts.CourierBold
+        : fontStyle === 'italic' ? StandardFonts.CourierOblique
+        : StandardFonts.Courier;
+    } else {
+      standardFont = fontWeight >= 700 && fontStyle === 'italic' ? StandardFonts.HelveticaBoldOblique
+        : fontWeight >= 700 ? StandardFonts.HelveticaBold
+        : fontStyle === 'italic' ? StandardFonts.HelveticaOblique
+        : StandardFonts.Helvetica;
     }
 
     const embedded =
@@ -958,6 +1459,266 @@ export class StudioPdfExportService {
     cache.set(key, embedded);
 
     return embedded;
+  }
+
+  private fontSupportsText(
+    font: PDFFont,
+    text: string,
+  ): boolean {
+    if (!text) return true;
+
+    try {
+      const supported = new Set(
+        font.getCharacterSet(),
+      );
+
+      for (const character of Array.from(text)) {
+        if (!supported.has(character.codePointAt(0) ?? -1)) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  private getSourceFontKey(
+    object: StudioObject,
+    manifest: readonly StudioPage[],
+  ): string | null {
+    const source = object.pdfText;
+    if (!source?.fontName) return null;
+
+    const logicalPage =
+      manifest[object.pageNumber - 1];
+
+    const sourcePageNumber =
+      logicalPage?.kind === 'source' &&
+      typeof logicalPage.sourcePageNumber === 'number'
+        ? logicalPage.sourcePageNumber
+        : object.pageNumber;
+
+    return `${sourcePageNumber}:${source.fontName}`;
+  }
+
+  private async collectSourceFontBytes(
+    sourceBytes: Uint8Array,
+    objects: readonly StudioObject[],
+    manifest: readonly StudioPage[],
+  ): Promise<Map<string, Uint8Array>> {
+    const requests = new Map<
+      string,
+      { pageNumber: number; fontName: string }
+    >();
+
+    for (const object of objects) {
+      if (
+        object.type !== 'text' ||
+        !object.pdfText?.edited ||
+        !object.pdfText.fontName
+      ) {
+        continue;
+      }
+
+      const key =
+        this.getSourceFontKey(
+          object,
+          manifest,
+        );
+
+      if (!key || requests.has(key)) continue;
+
+      const separator =
+        key.indexOf(':');
+
+      const pageNumber =
+        Number(key.slice(0, separator));
+
+      const fontName =
+        key.slice(separator + 1);
+
+      if (
+        Number.isInteger(pageNumber) &&
+        pageNumber > 0 &&
+        fontName
+      ) {
+        requests.set(
+          key,
+          { pageNumber, fontName },
+        );
+      }
+    }
+
+    if (requests.size === 0) {
+      return new Map();
+    }
+
+    const pdfjs =
+      await import('pdfjs-dist');
+
+    if (
+      typeof document !== 'undefined'
+    ) {
+      pdfjs.GlobalWorkerOptions.workerSrc =
+        new URL(
+          '/assets/pdfjs/pdf.worker.min.mjs',
+          document.baseURI,
+        ).toString();
+    }
+
+    const loadingTask =
+      pdfjs.getDocument({
+        data: sourceBytes,
+        /*
+         * PDF.js normally releases FontFaceObject.data after attaching the
+         * browser font. Export explicitly asks it to retain the parsed font
+         * program so the exact source font can be embedded by pdf-lib.
+         */
+        fontExtraProperties: true,
+      });
+
+    const sourcePdfJs: PDFDocumentProxy =
+      await loadingTask.promise;
+
+    const result =
+      new Map<string, Uint8Array>();
+
+    try {
+      for (const [
+        key,
+        request,
+      ] of requests) {
+        try {
+          const page =
+            await sourcePdfJs.getPage(
+              request.pageNumber,
+            );
+
+          /*
+           * getOperatorList materializes shared font objects in commonObjs.
+           * We do not render the page; only the source font resources are read.
+           */
+          await page.getOperatorList();
+
+          const commonObjs =
+            page.commonObjs as unknown as {
+              get?: (id: string) => unknown;
+            };
+
+          const font =
+            commonObjs.get?.(
+              request.fontName,
+            ) as {
+              data?: unknown;
+            } | undefined;
+
+          const data =
+            this.toUint8Array(
+              font?.data,
+            );
+
+          if (data) {
+            result.set(key, data);
+          }
+        } catch {
+          /*
+           * Missing/non-embeddable fonts are allowed to fall through to the
+           * existing standard-font mapping. One bad font must not abort export.
+           */
+        }
+      }
+    } finally {
+      await sourcePdfJs.destroy();
+    }
+
+    return result;
+  }
+
+  private toUint8Array(
+    value: unknown,
+  ): Uint8Array | null {
+    if (value instanceof Uint8Array) {
+      return new Uint8Array(
+        value,
+      );
+    }
+
+    if (value instanceof ArrayBuffer) {
+      return new Uint8Array(
+        value,
+      );
+    }
+
+    if (
+      ArrayBuffer.isView(value)
+    ) {
+      return new Uint8Array(
+        value.buffer.slice(
+          value.byteOffset,
+          value.byteOffset + value.byteLength,
+        ),
+      );
+    }
+
+    return null;
+  }
+
+  private stableBytesFingerprint(
+    bytes: Uint8Array,
+  ): string {
+    /*
+     * Cache identity only; this is not cryptographic. A short rolling hash
+     * avoids embedding the same source font more than once in the output PDF.
+     */
+    let hash = 2166136261;
+    for (
+      let index = 0;
+      index < bytes.length;
+      index += Math.max(1, Math.floor(bytes.length / 4096))
+    ) {
+      hash ^= bytes[index];
+      hash = Math.imul(hash, 16777619);
+    }
+
+    hash ^= bytes.length;
+    return (
+      hash >>> 0
+    ).toString(16);
+  }
+
+  private textWidthWithTracking(text: string, font: PDFFont, fontSize: number, tracking: number): number {
+    if (!text.length) return 0;
+    return font.widthOfTextAtSize(text, fontSize) + Math.max(0, text.length - 1) * tracking * fontSize;
+  }
+
+  /** Phase 2 — preserve the source text matrix's effective horizontal scale. */
+  private resolveSourceScaleX(object: StudioObject): number {
+    const source = object.pdfText;
+    const transformScaleX = source?.transformScaleX;
+    const transformScaleY = source?.transformScaleY;
+    const matrixScaleX =
+      typeof transformScaleX === 'number' && Number.isFinite(transformScaleX) && transformScaleX > 0 &&
+      typeof transformScaleY === 'number' && Number.isFinite(transformScaleY) && transformScaleY > 0
+        ? transformScaleX / transformScaleY
+        : 1;
+    const calibration = source?.metricScaleX ?? 1;
+    return Math.max(0.25, Math.min(4, matrixScaleX * calibration));
+  }
+
+  private drawTrackedText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, fontSize: number, tracking: number, color: ReturnType<typeof rgb>, rotate: ReturnType<typeof degrees>, metricScaleX = 1): void {
+    if (!text.length) return;
+    const safeScaleX = Number.isFinite(metricScaleX) ? Math.max(0.25, Math.min(4, metricScaleX)) : 1;
+    if (tracking === 0 && Math.abs(safeScaleX - 1) < 0.002) {
+      page.drawText(text, { x, y, size: fontSize, font, color, rotate });
+      return;
+    }
+    let cursor = x;
+    for (const glyph of Array.from(text)) {
+      page.drawText(glyph, { x: cursor, y, size: fontSize, font, color, rotate });
+      cursor += (font.widthOfTextAtSize(glyph, fontSize) + tracking * fontSize) * safeScaleX;
+    }
   }
 
   private drawObject(
@@ -971,6 +1732,10 @@ export class StudioPdfExportService {
     displayHeight: number,
     rotation: number,
   ): void {
+    if (object.type === 'text' && object.pdfText?.edited) {
+      this.drawEditedPdfTextFromSourceGeometry(page, object, lines, font, fontSize, lineHeight);
+      return;
+    }
     const boxX =
       object.bounds.x * displayWidth;
 
@@ -987,11 +1752,10 @@ export class StudioPdfExportService {
     ) {
       const line = lines[index];
 
-      const lineWidth =
-        font.widthOfTextAtSize(
-          line,
-          fontSize,
-        );
+      const metricScaleX = object.pdfText?.metricScaleX ?? 1;
+      const lineWidth = this.textWidthWithTracking(
+        line, font, fontSize, object.textStyle?.letterSpacing ?? 0,
+      ) * metricScaleX;
 
       const alignedX =
         this.alignX(
@@ -1011,9 +1775,16 @@ export class StudioPdfExportService {
        * The previous implementation inverted Y twice, which caused
        * exported text to appear vertically mirrored near the bottom.
        */
+      const sourceAscentPdf = object.pdfText?.ascentPdf;
+      const legacySourceAscent = object.pdfText?.ascent;
+      const ascentOffset = typeof sourceAscentPdf === 'number' && Number.isFinite(sourceAscentPdf)
+        ? sourceAscentPdf
+        : typeof legacySourceAscent === 'number'
+          ? Math.max(fontSize * 0.62, Math.min(fontSize * 1.08, legacySourceAscent * fontSize))
+          : fontSize;
       const displayBaselineY =
         boxY +
-        fontSize +
+        ascentOffset +
         index * lineHeight;
 
       const point =
@@ -1025,22 +1796,247 @@ export class StudioPdfExportService {
           rotation,
         );
 
-      page.drawText(
-        line,
-        {
-          x: point.x,
-          y: point.y,
-          size: fontSize,
-          font,
-          color: rgb(0, 0, 0),
-          rotate: degrees(
-            this.textCompensationRotation(
-              rotation,
-            ),
-          ),
-        },
+      this.drawTrackedText(
+        page, line, point.x, point.y, font, fontSize,
+        object.textStyle?.letterSpacing ?? 0,
+        this.hexToPdfRgb(object.pdfText?.textColor ?? object.textStyle?.color ?? '#000000'),
+        degrees(this.textCompensationRotation(rotation) - (object.pdfText?.rotation ?? 0)),
+        this.resolveSourceScaleX(object),
       );
     }
+  }
+
+  /**
+   * Phase 3 — draw an edited existing-PDF text object from the captured source
+   * baseline/transform instead of rebuilding its position from normalized UI
+   * bounds. The source PDF transform remains authoritative; only the glyph
+   * content is replaced.
+   */
+  private drawEditedPdfTextFromSourceGeometry(
+    page: PDFPage,
+    object: StudioObject,
+    lines: readonly string[],
+    font: PDFFont,
+    fontSize: number,
+    lineHeight: number,
+  ): void {
+    const source = object.pdfText;
+    if (!source) return;
+
+    const [a, b, c, d, e, f] = source.transform;
+    const sourceRotation = Math.atan2(b, a) * 180 / Math.PI;
+    const scaleX = this.resolveSourceScaleX(object);
+    const tracking = object.textStyle?.letterSpacing ?? 0;
+    const color = this.hexToPdfRgb(source.textColor ?? object.textStyle?.color ?? '#000000');
+    const ux = a / (Math.hypot(a, b) || 1);
+    const uy = b / (Math.hypot(a, b) || 1);
+    const vx = c / (Math.hypot(c, d) || 1);
+    const vy = d / (Math.hypot(c, d) || 1);
+    const sourceLineHeight = Math.max(0.01, source.lineHeightPdf ?? lineHeight ?? fontSize);
+
+    const runs = source.sourceRuns;
+    if (runs && runs.length > 0 && lines.length === 1) {
+      const originalText = source.originalText;
+      const editedText = lines[0];
+      const change = this.resolveSingleTextChange(originalText, editedText);
+
+      if (!change) return;
+
+      /*
+       * The copied page still contains every untouched source glyph. Only the
+       * replacement string is painted here. Its start is derived from the
+       * original run baseline plus the exact width of the unchanged prefix.
+       */
+      const firstIndex = this.firstAffectedRunIndex(runs, change.originalStart);
+      const firstRun = runs[firstIndex];
+      if (!firstRun) return;
+
+      const localStart = Math.max(
+        0,
+        Math.min(firstRun.text.length, change.originalStart - firstRun.startIndex),
+      );
+      const prefix = firstRun.text.slice(0, localStart);
+      const prefixWidth = this.textWidthWithTracking(prefix, font, fontSize, tracking) * scaleX;
+      const runWidth = Math.max(0, firstRun.widthPdf);
+      const calibratedPrefixWidth = runWidth > 0
+        ? Math.min(prefixWidth, runWidth)
+        : prefixWidth;
+
+      const x = firstRun.baselineXPdf + ux * calibratedPrefixWidth;
+      const y = f + uy * (firstRun.baselineXPdf - e + calibratedPrefixWidth);
+
+      this.drawTrackedText(
+        page,
+        change.replacementText,
+        x,
+        y,
+        font,
+        fontSize,
+        tracking,
+        color,
+        degrees(sourceRotation),
+        scaleX,
+      );
+      return;
+    }
+
+    /*
+     * Fallback for multiline/legacy objects without run metadata. The caller
+     * has already covered the source box, so reconstruct the edited content
+     * from the authoritative source transform.
+     */
+    const sourceWidth = Math.max(0, source.textWidthPdf ?? 0);
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      const lineWidth = this.textWidthWithTracking(line, font, fontSize, tracking) * scaleX;
+      let x = e;
+      let y = f;
+      const alignment = object.textStyle?.textAlign ?? 'left';
+      if (alignment === 'center') {
+        const offset = (sourceWidth - lineWidth) / 2;
+        x += ux * offset;
+        y += uy * offset;
+      } else if (alignment === 'right') {
+        const offset = sourceWidth - lineWidth;
+        x += ux * offset;
+        y += uy * offset;
+      }
+      x += vx * sourceLineHeight * index;
+      y += vy * sourceLineHeight * index;
+      this.drawTrackedText(
+        page, line, x, y, font, fontSize, tracking, color, degrees(sourceRotation), scaleX,
+      );
+    }
+  }
+
+  private canUsePartialSourceTextReplacement(object: StudioObject): boolean {
+    const source = object.pdfText;
+    if (!source?.edited || !source.sourceRuns?.length) return false;
+    const change = this.resolveSingleTextChange(source.originalText, object.text ?? '');
+    return Boolean(change);
+  }
+
+  /**
+   * Cover only the old glyph interval affected by a single-line replacement.
+   * This deliberately does not cover the whole source text object.
+   */
+  private coverEditedPdfTextChange(
+    page: PDFPage,
+    object: StudioObject,
+    font: PDFFont,
+    fontSize: number,
+  ): void {
+    const source = object.pdfText;
+    const runs = source?.sourceRuns;
+    if (!source || !runs?.length) return;
+
+    const change = this.resolveSingleTextChange(source.originalText, object.text ?? '');
+    if (!change) return;
+
+    const firstIndex = this.firstAffectedRunIndex(runs, change.originalStart);
+    const lastIndex = this.lastAffectedRunIndex(runs, change.originalEnd);
+    const firstRun = runs[firstIndex];
+    const lastRun = runs[lastIndex];
+    if (!firstRun || !lastRun) return;
+
+    const [a, b, c, d] = source.transform;
+    const axisX = Math.hypot(a, b) || 1;
+    const axisY = Math.hypot(c, d) || 1;
+    const ux = a / axisX;
+    const uy = b / axisX;
+    const vx = c / axisY;
+    const vy = d / axisY;
+    const e = source.transform[4];
+    const f = source.transform[5];
+    const scaleX = this.resolveSourceScaleX(object);
+    const tracking = object.textStyle?.letterSpacing ?? 0;
+
+    const localStart = Math.max(
+      0,
+      Math.min(firstRun.text.length, change.originalStart - firstRun.startIndex),
+    );
+    const prefix = firstRun.text.slice(0, localStart);
+    const prefixWidth = this.textWidthWithTracking(prefix, font, fontSize, tracking) * scaleX;
+    const firstRunWidth = Math.max(0, firstRun.widthPdf);
+    const startOffset = Math.min(prefixWidth, firstRunWidth);
+
+    const localEnd = Math.max(
+      0,
+      Math.min(lastRun.text.length, change.originalEnd - lastRun.startIndex),
+    );
+    const suffix = lastRun.text.slice(localEnd);
+    const suffixWidth = this.textWidthWithTracking(suffix, font, fontSize, tracking) * scaleX;
+    const lastRunEnd = lastRun.baselineXPdf + Math.max(0, lastRun.widthPdf);
+    const endOffsetFromLastRunEnd = Math.min(suffixWidth, Math.max(0, lastRun.widthPdf));
+    const endPdf = Math.max(
+      firstRun.baselineXPdf + startOffset,
+      lastRunEnd - endOffsetFromLastRunEnd,
+    );
+    const startPdf = Math.min(
+      firstRun.baselineXPdf + startOffset,
+      endPdf,
+    );
+
+    const ascent = typeof source.ascentPdf === 'number' && Number.isFinite(source.ascentPdf)
+      ? Math.max(0, source.ascentPdf)
+      : fontSize * 0.9;
+    const descent = typeof source.descentPdf === 'number' && Number.isFinite(source.descentPdf)
+      ? Math.min(0, source.descentPdf)
+      : -fontSize * 0.2;
+
+    const startOffsetFromBaseline = startPdf - e;
+    const endOffsetFromBaseline = endPdf - e;
+    const corners = [
+      { x: e + ux * startOffsetFromBaseline - vx * ascent, y: f + uy * startOffsetFromBaseline - vy * ascent },
+      { x: e + ux * endOffsetFromBaseline - vx * ascent, y: f + uy * endOffsetFromBaseline - vy * ascent },
+      { x: e + ux * startOffsetFromBaseline - vx * descent, y: f + uy * startOffsetFromBaseline - vy * descent },
+      { x: e + ux * endOffsetFromBaseline - vx * descent, y: f + uy * endOffsetFromBaseline - vy * descent },
+    ];
+
+    const xs = corners.map(point => point.x);
+    const ys = corners.map(point => point.y);
+    page.drawRectangle({
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(0.5, Math.max(...xs) - Math.min(...xs)),
+      height: Math.max(0.5, Math.max(...ys) - Math.min(...ys)),
+      color: this.hexToPdfRgb(source.backgroundColor ?? '#ffffff'),
+      borderWidth: 0,
+    });
+  }
+
+  private resolveSingleTextChange(
+    originalText: string,
+    editedText: string,
+  ): { originalStart: number; originalEnd: number; replacementText: string } | null {
+    if (originalText === editedText) return null;
+    let prefix = 0;
+    const maxPrefix = Math.min(originalText.length, editedText.length);
+    while (prefix < maxPrefix && originalText[prefix] === editedText[prefix]) prefix++;
+    let suffix = 0;
+    const maxSuffix = Math.min(originalText.length - prefix, editedText.length - prefix);
+    while (suffix < maxSuffix && originalText[originalText.length - 1 - suffix] === editedText[editedText.length - 1 - suffix]) suffix++;
+    return {
+      originalStart: prefix,
+      originalEnd: originalText.length - suffix,
+      replacementText: editedText.slice(prefix, editedText.length - suffix),
+    };
+  }
+
+  private firstAffectedRunIndex(
+    runs: readonly { startIndex: number; endIndex: number }[],
+    originalStart: number,
+  ): number {
+    const index = runs.findIndex(run => originalStart < run.endIndex);
+    return index >= 0 ? index : Math.max(0, runs.length - 1);
+  }
+
+  private lastAffectedRunIndex(
+    runs: readonly { startIndex: number; endIndex: number }[],
+    originalEnd: number,
+  ): number {
+    const index = runs.findIndex(run => originalEnd <= run.endIndex);
+    return index >= 0 ? index : Math.max(0, runs.length - 1);
   }
 
   /**
@@ -1135,11 +2131,47 @@ export class StudioPdfExportService {
    * Wrap long text to the Studio object's width while preserving explicit
    * newlines entered by the user.
    */
+  /**
+   * Phase 5B.4 — choose a stable replacement size. Existing PDF text defaults
+   * to auto-fit so longer replacement paragraphs do not silently clip.
+   */
+  private resolveTextFit(
+    object: StudioObject, font: PDFFont, requestedSize: number, boxWidth: number, boxHeight: number, displayHeight: number
+  ): { fontSize: number; lineHeight: number; lines: string[] } {
+    const style = object.textStyle;
+    const tracking = style?.letterSpacing ?? 0;
+    const sourceLineHeight = object.pdfText?.lineHeightPdf
+      ? Math.max(0.9, object.pdfText.lineHeightPdf / Math.max(requestedSize, 0.1))
+      : object.pdfText?.lineHeight
+        ? Math.max(0.9, (object.pdfText.lineHeight * displayHeight) / Math.max(requestedSize, 0.1))
+        : (style?.lineHeight ?? 1.2);
+    const mode = object.pdfText?.fitMode ?? 'original';
+    const fits = (size: number) => {
+      const lines = this.wrapText(object.text ?? '', font, size, boxWidth, tracking);
+      const lineHeight = size * sourceLineHeight;
+      return { lines, lineHeight, fits: lines.length * lineHeight <= boxHeight + size * 0.15 };
+    };
+    if (mode !== 'auto') {
+      const current = fits(requestedSize);
+      return { fontSize: requestedSize, lineHeight: current.lineHeight, lines: current.lines };
+    }
+    let low = Math.max(3, requestedSize * 0.35);
+    let high = requestedSize;
+    let best = low;
+    for (let i = 0; i < 12; i++) {
+      const mid = (low + high) / 2;
+      if (fits(mid).fits) { best = mid; low = mid; } else high = mid;
+    }
+    const current = fits(best);
+    return { fontSize: best, lineHeight: current.lineHeight, lines: current.lines };
+  }
+
   private wrapText(
     text: string,
     font: PDFFont,
     fontSize: number,
     maxWidth: number,
+    tracking = 0,
   ): string[] {
     const sourceLines =
       text
@@ -1164,10 +2196,7 @@ export class StudioPdfExportService {
 
         if (
           current &&
-          font.widthOfTextAtSize(
-            candidate,
-            fontSize,
-          ) > maxWidth
+          this.textWidthWithTracking(candidate, font, fontSize, tracking) > maxWidth
         ) {
           result.push(current);
           current = word;
@@ -1176,10 +2205,7 @@ export class StudioPdfExportService {
 
         if (
           !current &&
-          font.widthOfTextAtSize(
-            word,
-            fontSize,
-          ) > maxWidth
+          this.textWidthWithTracking(word, font, fontSize, tracking) > maxWidth
         ) {
           const chunks =
             this.breakLongWord(
@@ -1187,6 +2213,7 @@ export class StudioPdfExportService {
               font,
               fontSize,
               maxWidth,
+              tracking,
             );
 
           if (chunks.length > 1) {
@@ -1218,6 +2245,7 @@ export class StudioPdfExportService {
     font: PDFFont,
     fontSize: number,
     maxWidth: number,
+    tracking = 0,
   ): string[] {
     const parts: string[] = [];
     let current = '';
@@ -1226,13 +2254,7 @@ export class StudioPdfExportService {
       const candidate =
         `${current}${character}`;
 
-      if (
-        current &&
-        font.widthOfTextAtSize(
-          candidate,
-          fontSize,
-        ) > maxWidth
-      ) {
+      if (current && this.textWidthWithTracking(candidate, font, fontSize, tracking) > maxWidth) {
         parts.push(current);
         current = character;
       } else {
@@ -1249,10 +2271,19 @@ export class StudioPdfExportService {
       : [''];
   }
 
-  /**
-   * Studio stores text size as a fraction of the displayed page height.
-   * Convert that ratio back to PDF points during export.
-   */
+  /** Phase 2 — authoritative source font size in PDF points. */
+  private resolveSourceFontSize(
+    sourceText: StudioPdfTextSource | undefined,
+    fallbackNormalizedRatio: number,
+    displayPageHeight: number,
+  ): number {
+    const sourceSize = sourceText?.fontSizePdf;
+    if (typeof sourceSize === 'number' && Number.isFinite(sourceSize) && sourceSize > 0) {
+      return Math.max(0.01, Math.min(500, sourceSize));
+    }
+    return this.resolveFontSize(fallbackNormalizedRatio, displayPageHeight);
+  }
+
   private resolveFontSize(
     normalizedRatio: number,
     displayPageHeight: number,

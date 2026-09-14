@@ -98,6 +98,18 @@
               </svg>
             }
 
+            @case ('edit-pdf-text') {
+              <!-- Separate icon: text glyph with an edit pencil distinguishes existing-PDF editing from Add Text. -->
+              <svg viewBox="0 0 24 24">
+                <path d="M4 5h11M9.5 5v11M6.5 16h6" />
+                <path d="m14.5 16.8 4.8-4.8a1.6 1.6 0 0 1 2.3 2.3l-4.8 4.8-3.2.9z" />
+              </svg>
+            }
+
+            @case ('edit-pdf-image') {
+              <svg viewBox="0 0 24 24"><rect x="4" y="4" width="13" height="13" rx="2"/><circle cx="8.5" cy="8.5" r="1.2"/><path d="m5.5 15 3.3-3.3 2.5 2.5"/><path d="m15.5 14.5 4.3-4.3a1.5 1.5 0 0 1 2.1 2.1l-4.3 4.3-3 .9z"/></svg>
+            }
+
             @case ('image') {
               <svg viewBox="0 0 24 24">
                 <rect x="4" y="4" width="16" height="16" rx="2" />
@@ -156,7 +168,7 @@
               </svg>
             }
 
-            <!-- @case ('link') {
+            @case ('link') {
               <svg viewBox="0 0 24 24">
                 <path d="m9.5 14.5 5-5" />
                 <path d="M7.2 17.8 5.8 19.2a3.2 3.2 0 0 1-4.5-4.5l3.5-3.5a3.2 3.2 0 0 1 4.5 0" />
@@ -164,7 +176,7 @@
               </svg>
             }
 
-            @case ('more') {
+            <!-- @case ('more') {
               <svg viewBox="0 0 24 24">
                 <circle cx="5" cy="12" r="1.4" />
                 <circle cx="12" cy="12" r="1.4" />

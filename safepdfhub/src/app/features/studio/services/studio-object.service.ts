@@ -9,6 +9,7 @@ import type {
   StudioTextAlign,
   StudioTextFontStyle,
   StudioTextFontWeight,
+  StudioTextFontFamily,
   StudioTextStyle,
   StudioImageData,
   StudioShapeKind,
@@ -16,14 +17,27 @@ import type {
   StudioDrawingData,
   StudioDrawingStyle,
   StudioPoint,
-  StudioCommentData
+  StudioCommentData,
+  StudioLinkData,
+  StudioPdfTextSource,
+  StudioPdfImageSource,
+  StudioTextObject,
+  StudioPdfTextObject,
+  StudioImageObject,
+  StudioPdfImageObject,
+  StudioLinkObject
 } from '../models/studio-selection.model';
+import type { PdfExistingTextBlock, PdfExistingImageBlock } from '../models/pdf-content-analysis.model';
 
 const DEFAULT_TEXT_STYLE: StudioTextStyle = {
   fontSize: 0.018,
   fontWeight: 400,
   fontStyle: 'normal',
-  textAlign: 'left'
+  textAlign: 'left',
+  fontFamily: 'Helvetica',
+  lineHeight: 1.2,
+  letterSpacing: 0,
+  color: '#101820'
 };
 
 @Injectable({
@@ -124,6 +138,356 @@ export class StudioObjectService {
     this.touch();
   }
 
+  /**
+   * Phase 5B — materialize extracted PDF text as transparent, selectable
+   * Studio objects. Existing objects are never overwritten so edits survive
+   * page navigation and repeated analysis.
+   */
+  syncPdfTextBlocks(blocks: readonly PdfExistingTextBlock[]): void {
+    let changed = false;
+    for (const block of blocks) {
+      const existing = this.objects.get(block.id);
+      if (existing) {
+        // Re-analysis can discover more authoritative source metrics (for
+        // example the real baseline spacing or embedded font face). Refresh
+        // those fields without discarding a user's already committed edit.
+        if (existing.type === 'text' && existing.pdfText) {
+          const currentSource = existing.pdfText;
+          const refreshedSource: StudioPdfTextSource = {
+            ...currentSource,
+            fontName: block.fontName,
+            transform: [...block.transform],
+            detectedFontSize: block.detectedFontSize,
+            rotation: block.rotation,
+            lineHeight: block.lineHeight,
+            sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
+            sourceFontCssFamily: block.sourceFontCssFamily,
+            sourceFontWeight: block.fontWeight as StudioTextFontWeight,
+            sourceFontStyle: block.fontStyle,
+            textColor: block.textColor ?? currentSource.textColor ?? '#000000',
+            ascent: block.ascent,
+            descent: block.descent,
+            ascentPdf: block.ascentPdf,
+            descentPdf: block.descentPdf,
+            pageWidthPdf: block.pageWidthPdf,
+            pageHeightPdf: block.pageHeightPdf,
+            fontSizePdf: block.fontSizePdf,
+            textWidthPdf: block.textWidthPdf,
+            textHeightPdf: block.textHeightPdf,
+            lineHeightPdf: block.lineHeightPdf,
+            transformScaleX: block.transformScaleX,
+            transformScaleY: block.transformScaleY,
+            baselineXPdf: block.baselineXPdf,
+            baselineYPdf: block.baselineYPdf,
+            sourceRuns: block.sourceRuns
+          };
+          const sourceBounds = this.resolvePdfSourceTextBounds(block);
+          const refreshed: StudioObject = {
+            ...existing,
+            // Only move an unedited source overlay to newly detected geometry.
+            // Once the user edits the text, preserve any intentional Studio
+            // bounds changes.
+            bounds: currentSource.edited ? existing.bounds : this.normalizeBounds(sourceBounds),
+            pdfText: refreshedSource,
+            textStyle: existing.textStyle
+              ? {
+                  ...existing.textStyle,
+                  fontWeight: currentSource.typographyLocked
+                    ? (block.fontWeight >= 600 ? 700 : 400)
+                    : existing.textStyle.fontWeight,
+                  fontStyle: currentSource.typographyLocked
+                    ? block.fontStyle
+                    : existing.textStyle.fontStyle
+                }
+              : existing.textStyle
+          };
+          this.objects.set(block.id, refreshed);
+          changed = true;
+        }
+        continue;
+      }
+
+      const estimatedFontSize = this.clamp(
+        Math.max(0.006, block.detectedFontSize || block.height * 0.82),
+        0.006,
+        0.08
+      );
+
+      const source: StudioPdfTextSource = {
+        originalText: block.text,
+        fontName: block.fontName,
+        transform: [...block.transform],
+        edited: false,
+        detectedFontSize: block.detectedFontSize,
+        rotation: block.rotation,
+        lineHeight: block.lineHeight,
+        sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
+        sourceFontCssFamily: block.sourceFontCssFamily,
+        sourceFontWeight: block.fontWeight as StudioTextFontWeight,
+        sourceFontStyle: block.fontStyle,
+        textColor: block.textColor ?? '#000000',
+        ascent: block.ascent,
+        descent: block.descent,
+        ascentPdf: block.ascentPdf,
+        descentPdf: block.descentPdf,
+        pageWidthPdf: block.pageWidthPdf,
+        pageHeightPdf: block.pageHeightPdf,
+        fontSizePdf: block.fontSizePdf,
+        textWidthPdf: block.textWidthPdf,
+        textHeightPdf: block.textHeightPdf,
+        lineHeightPdf: block.lineHeightPdf,
+        transformScaleX: block.transformScaleX,
+        transformScaleY: block.transformScaleY,
+        baselineXPdf: block.baselineXPdf,
+        baselineYPdf: block.baselineYPdf,
+        sourceRuns: block.sourceRuns,
+        // Source-PDF covers never use horizontal padding. The legacy field is
+        // retained for backwards compatibility but is normalized to zero.
+        coverPadding: 0,
+        // Source PDF typography must never silently shrink when text is edited.
+        fitMode: 'original',
+        metricScaleX: 1,
+        typographyLocked: true,
+        backgroundColor: '#ffffff'
+      };
+
+      const sourceBounds = this.resolvePdfSourceTextBounds(block);
+
+      const object: StudioPdfTextObject = {
+        id: block.id,
+        pageNumber: block.pageNumber,
+        type: 'text',
+        bounds: this.normalizeBounds(sourceBounds),
+        text: block.text,
+        textStyle: {
+          ...DEFAULT_TEXT_STYLE,
+          fontSize: estimatedFontSize,
+          fontWeight: block.fontWeight >= 600 ? 700 : 400,
+          fontStyle: block.fontStyle,
+          fontFamily: this.mapPdfFontFamily(block.sourceFontFamily || block.fontFamily || block.fontName)
+        },
+        pdfText: source
+      };
+
+      this.objects.set(object.id, object);
+      changed = true;
+    }
+
+    if (changed) this.touch();
+  }
+
+  /**
+   * Resolve the DOM hit/edit rectangle for an existing PDF text run.
+   *
+   * Horizontal source text uses PDF.js's original text-item rectangle exactly.
+   * The preserved transform/baseline/font metrics remain available on pdfText
+   * for export and high-fidelity reconstruction.
+   */
+  private resolvePdfSourceTextBounds(block: PdfExistingTextBlock): {
+    x: number; y: number; width: number; height: number;
+  } {
+    /*
+     * LIVE EDITOR GEOMETRY
+     * --------------------
+     * PDF.js already gives us the exact text-item width/height in device
+     * space. Those values are the geometry used by PDF.js's own text layer
+     * and are a much safer overlay/cover rectangle than reconstructing a new
+     * box from ascent/descent. Reconstructing that box can make the cover
+     * taller than the actual source run and can cover the line below.
+     *
+     * Keep the original transform/baseline separately in pdfText for export;
+     * this method is only responsible for the DOM hit/edit rectangle.
+     */
+    const rotation = Number.isFinite(block.rotation)
+      ? Math.abs(block.rotation)
+      : 0;
+
+    const rawBounds = {
+      x: Math.min(1, Math.max(0, block.x)),
+      y: Math.min(1, Math.max(0, block.y)),
+      width: Math.max(0.002, Math.min(1, block.width)),
+      height: Math.max(0.012, Math.min(1, block.height))
+    };
+
+    /*
+     * Horizontal/near-horizontal PDF text is the common case and should use
+     * the exact PDF.js item rectangle without any extra padding.
+     */
+    if (rotation < 0.5) {
+      return rawBounds;
+    }
+
+    /*
+     * Rotated source runs still need an axis-aligned DOM rectangle. Rebuild
+     * that rectangle from the preserved PDF transform and font metrics.
+     * Export never relies on this fallback rectangle.
+     */
+    const pageWidth = Math.max(1, block.pageWidthPdf);
+    const pageHeight = Math.max(1, block.pageHeightPdf);
+    const [a, b, c, d, e, f] = block.transform;
+    const uxLength = Math.hypot(a, b) || 1;
+    const vyLength = Math.hypot(c, d) || 1;
+    const ux = a / uxLength;
+    const uy = b / uxLength;
+    const vx = c / vyLength;
+    const vy = d / vyLength;
+    const ascent = Math.max(
+      0.01,
+      block.ascentPdf ?? block.fontSizePdf * 0.9
+    );
+    const descent = Math.min(
+      -0.001,
+      block.descentPdf ?? -block.fontSizePdf * 0.2
+    );
+    const width = Math.max(
+      0.01,
+      block.textWidthPdf
+    );
+
+    const corners = [
+      [e, f],
+      [e + ux * width, f + uy * width],
+      [e + vx * ascent, f + vy * ascent],
+      [e + vx * descent, f + vy * descent],
+      [e + ux * width + vx * ascent, f + uy * width + vy * ascent],
+      [e + ux * width + vx * descent, f + uy * width + vy * descent],
+    ];
+
+    const xs = corners.map(point => point[0]);
+    const ys = corners.map(point => point[1]);
+
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    return {
+      x: minX / pageWidth,
+      y: (pageHeight - maxY) / pageHeight,
+      width: Math.max(0.002, (maxX - minX) / pageWidth),
+      height: Math.max(0.012, (maxY - minY) / pageHeight),
+    };
+  }
+
+  /** Phase 5C.1 — create transparent selectable overlays for detected original PDF images. */
+  syncPdfImageBlocks(blocks: readonly PdfExistingImageBlock[]): void {
+    let changed = false;
+    for (const block of blocks) {
+      const existing = this.objects.get(block.id);
+      if (existing) continue;
+      const object: StudioPdfImageObject = {
+        id: block.id,
+        pageNumber: block.pageNumber,
+        type: 'image',
+        bounds: this.normalizeBounds({ x: block.x, y: block.y, width: Math.max(block.width, 0.01), height: Math.max(block.height, 0.01) }),
+        pdfImage: { sourceName: block.sourceName, confidence: block.confidence, rotation: block.rotation, replaced: false, fitMode: 'fit', backgroundMode: 'auto', backgroundColor: '#ffffff', backgroundConfidence: 'low' }
+      };
+      this.objects.set(object.id, object);
+      changed = true;
+    }
+    if (changed) this.touch();
+  }
+
+  /** Update source appearance without changing text semantics. Used by 5B.2 sampling and inspector controls. */
+  updatePdfTextAppearance(
+    objectId: string,
+    patch: Partial<Pick<StudioPdfTextSource, 'backgroundColor' | 'textColor' | 'rotation' | 'detectedFontSize' | 'lineHeight' | 'sourceFontFamily' | 'sourceFontWeight' | 'sourceFontStyle' | 'ascent' | 'descent' | 'coverPadding' | 'fitMode' | 'metricScaleX' | 'typographyLocked'>>
+  ): StudioObject | null {
+    const object = this.objects.get(objectId);
+    if (!object || object.type !== 'text' || !object.pdfText) return null;
+    const updated: StudioObject = {
+      ...object,
+      pdfText: { ...object.pdfText, ...patch }
+    };
+    this.objects.set(objectId, updated);
+    this.touch();
+    return this.cloneObject(updated);
+  }
+
+  restorePdfText(objectId: string): StudioObject | null {
+    const object = this.objects.get(objectId);
+    if (!object || object.type !== 'text' || !object.pdfText) return null;
+    const updated: StudioObject = {
+      ...object,
+      text: object.pdfText.originalText,
+      pdfText: { ...object.pdfText, edited: false }
+    };
+    this.objects.set(objectId, updated);
+    this.touch();
+    return this.cloneObject(updated);
+  }
+
+
+
+  private mapPdfFontFamily(name: string): StudioTextFontFamily {
+    const value = this.normalizePdfFontName(name);
+    if (/times|serif|georgia|garamond|cambria|baskerville|palatino|roman|bookman/.test(value)) return 'Times Roman';
+    if (/courier|mono|consolas|monospace|menlo|code|fixed/.test(value)) return 'Courier';
+    return 'Helvetica';
+  }
+
+  /** Remove common PDF subset/resource prefixes before family classification. */
+  private normalizePdfFontName(name: string): string {
+    return String(name ?? '')
+      .replace(/^\/?[A-Z]{6}\+/, '')
+      .replace(/^g_[a-z0-9_]+_f\d+$/i, '')
+      .replace(/["']/g, '')
+      .toLowerCase();
+  }
+
+  /** Create a clickable link region. The destination is edited in the inspector. */
+  createLinkObject(
+    pageNumber: number,
+    normalizedX: number,
+    normalizedY: number
+  ): StudioObject {
+    const width = 0.22;
+    const height = 0.055;
+    const object: StudioObject = {
+      id: this.createObjectId(),
+      pageNumber,
+      type: 'link',
+      bounds: {
+        x: this.clamp(normalizedX, 0, 1 - width),
+        y: this.clamp(normalizedY, 0, 1 - height),
+        width,
+        height
+      },
+      link: {
+        kind: 'url',
+        url: '',
+        targetPage: Math.max(1, pageNumber)
+      }
+    };
+    this.objects.set(object.id, object);
+    this.touch();
+    return this.cloneObject(object);
+  }
+
+  updateLink(
+    objectId: string,
+    patch: Partial<StudioLinkData>
+  ): StudioObject | null {
+    const object = this.objects.get(objectId);
+    if (!object || object.type !== 'link' || !object.link) {
+      return null;
+    }
+    const kind = patch.kind ?? object.link.kind;
+    const url = patch.url !== undefined
+      ? patch.url.trim().slice(0, 2048)
+      : object.link.url;
+    const targetPageRaw = patch.targetPage ?? object.link.targetPage;
+    const targetPage = Number.isFinite(targetPageRaw)
+      ? Math.max(1, Math.floor(targetPageRaw))
+      : object.link.targetPage;
+    const updated: StudioObject = {
+      ...object,
+      link: { kind, url, targetPage }
+    };
+    this.objects.set(objectId, updated);
+    this.touch();
+    return this.cloneObject(updated);
+  }
 
   /** F7.2 — Create a page-anchored comment marker. */
   createCommentObject(
@@ -251,7 +615,7 @@ export class StudioObjectService {
       height
     };
 
-    const object: StudioObject = {
+    const object: StudioTextObject = {
       id: this.createObjectId(),
       pageNumber,
       type: 'text',
@@ -310,7 +674,7 @@ export class StudioObjectService {
       height
     };
 
-    const object: StudioObject = {
+    const object: StudioImageObject = {
       id: this.createObjectId(),
       pageNumber,
       type: 'image',
@@ -581,18 +945,59 @@ export class StudioObjectService {
       return null;
     }
 
-    const updated: StudioObject = {
+    if (object.pdfImage) {
+      const updated: StudioPdfImageObject = {
+        ...object,
+        image,
+        pdfImage: {
+          ...object.pdfImage,
+          replaced: true
+        }
+      };
+
+      this.objects.set(objectId, updated);
+      this.touch();
+      return this.cloneObject(updated);
+    }
+
+    const updated: StudioImageObject = {
       ...object,
       image
     };
 
-    this.objects.set(
-      objectId,
-      updated
-    );
-
+    this.objects.set(objectId, updated);
     this.touch();
 
+    return this.cloneObject(updated);
+  }
+
+  clearImageData(objectId: string): StudioPdfImageObject | null {
+    const object = this.objects.get(objectId);
+    if (!object || object.type !== 'image' || !object.pdfImage) return null;
+
+    const { image: _image, ...rest } = object;
+    const updated: StudioPdfImageObject = {
+      ...rest,
+      pdfImage: { ...object.pdfImage, replaced: false }
+    };
+
+    this.objects.set(objectId, updated);
+    this.touch();
+    return this.cloneObject(updated);
+  }
+
+  updatePdfImage(
+    objectId: string,
+    patch: Partial<StudioPdfImageSource>
+  ): StudioObject | null {
+    const object = this.objects.get(objectId);
+    if (!object || object.type !== 'image' || !object.pdfImage) return null;
+    const updated: StudioObject = {
+      ...object,
+      pdfImage: { ...object.pdfImage, ...patch }
+    };
+    this.objects.set(objectId, updated);
+    this.touch();
     return this.cloneObject(updated);
   }
 
@@ -679,15 +1084,27 @@ export class StudioObjectService {
       return null;
     }
 
-    const updated: StudioObject = {
+    if (object.pdfText) {
+      const updated: StudioPdfTextObject = {
+        ...object,
+        text,
+        pdfText: {
+          ...object.pdfText,
+          edited: text !== object.pdfText.originalText
+        }
+      };
+
+      this.objects.set(objectId, updated);
+      this.touch();
+      return this.cloneObject(updated);
+    }
+
+    const updated: StudioTextObject = {
       ...object,
       text
     };
 
-    this.objects.set(
-      objectId,
-      updated
-    );
+    this.objects.set(objectId, updated);
     this.touch();
 
     return this.cloneObject(updated);
@@ -712,40 +1129,74 @@ export class StudioObjectService {
       object.textStyle ??
       DEFAULT_TEXT_STYLE;
 
+    // Existing PDF text owns immutable source typography. Generic Studio style
+    // controls must not remap its font or size and destroy PDF fidelity.
+    const sourceLocked =
+      !!object.pdfText &&
+      object.pdfText.typographyLocked !== false;
+
     const nextStyle: StudioTextStyle = {
-      fontSize: this.clamp(
-        style.fontSize ??
-          currentStyle.fontSize,
-        0.006,
-        0.12
-      ),
-      fontWeight:
-        this.normalizeFontWeight(
-          style.fontWeight ??
-            currentStyle.fontWeight
-        ),
-      fontStyle:
-        this.normalizeFontStyle(
-          style.fontStyle ??
-            currentStyle.fontStyle
-        ),
+      fontSize: sourceLocked
+        ? currentStyle.fontSize
+        : this.clamp(
+            style.fontSize ??
+              currentStyle.fontSize,
+            0.006,
+            0.12
+          ),
+      fontWeight: sourceLocked
+        ? currentStyle.fontWeight
+        : this.normalizeFontWeight(
+            style.fontWeight ??
+              currentStyle.fontWeight
+          ),
+      fontStyle: sourceLocked
+        ? currentStyle.fontStyle
+        : this.normalizeFontStyle(
+            style.fontStyle ??
+              currentStyle.fontStyle
+          ),
       textAlign:
         this.normalizeTextAlign(
           style.textAlign ??
             currentStyle.textAlign
-        )
+        ),
+      fontFamily: sourceLocked
+        ? currentStyle.fontFamily
+        : this.normalizeFontFamily(
+            style.fontFamily ?? currentStyle.fontFamily
+          ),
+      lineHeight: sourceLocked
+        ? currentStyle.lineHeight
+        : this.clamp(
+            style.lineHeight ?? currentStyle.lineHeight,
+            0.8,
+            3
+          ),
+      letterSpacing: sourceLocked
+        ? currentStyle.letterSpacing
+        : this.clamp(
+            style.letterSpacing ?? currentStyle.letterSpacing,
+            -0.1,
+            0.3
+          ),
+      color: this.normalizeHexColor(
+        style.color ?? currentStyle.color
+      )
     };
 
     const minimumHeightForFont =
       Math.min(1, nextStyle.fontSize * 1.6);
 
     const adjustedBounds: StudioObjectBounds =
-      object.bounds.height < minimumHeightForFont
-        ? this.normalizeBounds({
-            ...object.bounds,
-            height: minimumHeightForFont
-          })
-        : object.bounds;
+      sourceLocked
+        ? object.bounds
+        : object.bounds.height < minimumHeightForFont
+          ? this.normalizeBounds({
+              ...object.bounds,
+              height: minimumHeightForFont
+            })
+          : object.bounds;
 
     const updated: StudioObject = {
       ...object,
@@ -805,13 +1256,42 @@ export class StudioObjectService {
 
   remapPageNumbers(mapping: ReadonlyMap<number, number>): void {
     let changed = false;
+
     for (const [id, object] of this.objects) {
       const pageNumber = mapping.get(object.pageNumber);
-      if (pageNumber !== undefined && pageNumber !== object.pageNumber) {
-        this.objects.set(id, { ...object, pageNumber });
+      const nextPageNumber = pageNumber ?? object.pageNumber;
+
+      if (object.type === 'link') {
+        const nextTargetPage =
+          mapping.get(object.link.targetPage) ?? object.link.targetPage;
+
+        if (
+          nextPageNumber !== object.pageNumber ||
+          nextTargetPage !== object.link.targetPage
+        ) {
+          const updated: StudioLinkObject = {
+            ...object,
+            pageNumber: nextPageNumber,
+            link: {
+              ...object.link,
+              targetPage: nextTargetPage
+            }
+          };
+          this.objects.set(id, updated);
+          changed = true;
+        }
+        continue;
+      }
+
+      if (nextPageNumber !== object.pageNumber) {
+        this.objects.set(id, {
+          ...object,
+          pageNumber: nextPageNumber
+        });
         changed = true;
       }
     }
+
     if (changed) this.touch();
   }
 
@@ -836,13 +1316,48 @@ export class StudioObjectService {
 
   shiftPageNumbers(startPageNumber: number, delta: number): void {
     if (!delta) return;
+
     let changed = false;
+
     for (const [id, object] of this.objects) {
-      if (object.pageNumber >= startPageNumber) {
-        this.objects.set(id, { ...object, pageNumber: object.pageNumber + delta });
+      const nextPageNumber =
+        object.pageNumber >= startPageNumber
+          ? object.pageNumber + delta
+          : object.pageNumber;
+
+      if (object.type === 'link') {
+        const nextTargetPage =
+          object.link.targetPage >= startPageNumber
+            ? Math.max(1, object.link.targetPage + delta)
+            : object.link.targetPage;
+
+        if (
+          nextPageNumber !== object.pageNumber ||
+          nextTargetPage !== object.link.targetPage
+        ) {
+          const updated: StudioLinkObject = {
+            ...object,
+            pageNumber: nextPageNumber,
+            link: {
+              ...object.link,
+              targetPage: nextTargetPage
+            }
+          };
+          this.objects.set(id, updated);
+          changed = true;
+        }
+        continue;
+      }
+
+      if (nextPageNumber !== object.pageNumber) {
+        this.objects.set(id, {
+          ...object,
+          pageNumber: nextPageNumber
+        });
         changed = true;
       }
     }
+
     if (changed) this.touch();
   }
 
@@ -1055,13 +1570,13 @@ export class StudioObjectService {
     };
   }
 
-  private cloneObject(
-    object: StudioObject
-  ): StudioObject {
+  private cloneObject<T extends StudioObject>(
+    object: T
+  ): T {
 
     return JSON.parse(
       JSON.stringify(object)
-    ) as StudioObject;
+    ) as T;
   }
 
   private normalizeColor(
@@ -1119,6 +1634,17 @@ export class StudioObjectService {
     };
   }
 
+
+  private normalizeFontFamily(
+    value: StudioTextFontFamily | undefined
+  ): StudioTextFontFamily {
+    return value === 'Times Roman' || value === 'Courier' ? value : 'Helvetica';
+  }
+
+  private normalizeHexColor(value: string): string {
+    return /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#101820';
+  }
+
   private normalizeTextAlign(
     value: StudioTextAlign
   ): StudioTextAlign {
@@ -1173,7 +1699,7 @@ export class StudioObjectService {
   }
 
   private touch(): void {
-    this.revision.update(value => value + 1);
+    this.revision.update((value: number) => value + 1);
   }
 
   private createObjectId(): string {

@@ -509,9 +509,27 @@ private activeRenderVersion: number | null = null;
 
       this.lastActiveTool = activeTool;
 
+      /*
+       * Keep the dedicated PDF text tool warm across page navigation.
+       * Navigation itself also calls ensurePageContent(), but this additional
+       * tool-scoped request closes the timing window where the page canvas is
+       * already visible while its source text objects are still being indexed.
+       */
+      if (activeTool === 'edit-pdf-text') {
+        void this.facade.ensureCurrentPageContent();
+      }
+
+      /**
+       * Existing PDF text editing is a persistent editing mode too.
+       * Do not immediately commit the editor merely because the dedicated
+       * `edit-pdf-text` tool is active; doing so made the toolbar look as if
+       * clicks were ignored because the editor opened and closed in the same
+       * reactive turn.
+       */
       if (
         this.editingObjectId &&
-        activeTool !== 'text'
+        activeTool !== 'text' &&
+        activeTool !== 'edit-pdf-text'
       ) {
         this.commitTextEdit();
       }
@@ -609,6 +627,8 @@ ngAfterViewInit(): void {
 
       case 'comment':
         return 'studio-canvas__stage--comment';
+      case 'link':
+        return 'studio-canvas__stage--link';
   
       default:
         return 'studio-canvas__stage--select';
@@ -2535,13 +2555,49 @@ private async render(
    */
   if (
     this.editingObjectId &&
-    activeTool === 'text' &&
+    (activeTool === 'text' || activeTool === 'edit-pdf-text') &&
     event.button === 0 &&
     !this.spacePressed
   ) {
+    const editorElement =
+      (event.target as HTMLElement | null)?.closest(
+        '.studio-editor-object'
+      );
+
+    const editingElementId =
+      editorElement?.getAttribute('data-object-id');
+
+    /*
+     * Clicking inside the currently edited object (including its textarea)
+     * belongs to the active edit session. Do not treat that click as an
+     * outside-click commit.
+     */
+    if (
+      editingElementId === this.editingObjectId
+    ) {
+      return;
+    }
+
+    /*
+     * Clicking outside the edited line finishes the edit AND removes its
+     * selection chrome. For edit-pdf-text we then continue through the normal
+     * pointer routing so the same click can start editing another PDF line.
+     */
     this.commitTextEdit();
+    this.facade.clearSelection();
+  }
+
+  /** EDIT EXISTING PDF IMAGE TOOL */
+  if (activeTool === 'edit-pdf-image' && event.button === 0 && !this.spacePressed) {
+    this.handlePdfImageEditPointerDown(event);
+    return;
+  }
+
+  /** EDIT EXISTING PDF TEXT TOOL */
+  if (activeTool === 'edit-pdf-text' && event.button === 0 && !this.spacePressed) {
     event.preventDefault();
     event.stopPropagation();
+    void this.handlePdfTextEditPointerDown(event);
     return;
   }
 
@@ -2554,6 +2610,12 @@ private async render(
     !this.spacePressed
   ) {
     this.handleTextToolPointerDown(event);
+    return;
+  }
+
+  /** LINK TOOL */
+  if (activeTool === 'link' && event.button === 0 && !this.spacePressed) {
+    this.handleLinkToolPointerDown(event);
     return;
   }
 
@@ -2722,6 +2784,28 @@ onEditorObjectPointerDown(
     return;
   }
 
+  if (activeTool === 'edit-pdf-text') {
+    if (object.type === 'text' && object.pdfText) {
+      this.capturePdfTextAppearance(object);
+      this.beginTextEditing(object.id);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return;
+  }
+
+  /** Dedicated existing-PDF image editing must also work when the pointer starts
+   * on the transparent source overlay or an already-replaced image object. */
+  if (activeTool === 'edit-pdf-image') {
+    if (object.type === 'image' && object.pdfImage) {
+      this.facade.selectObject(this.selectionEngine.toSelection(object));
+      this.requestImageReplacement(object.id);
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return;
+  }
+
   if (activeTool !== 'select') {
     return;
   }
@@ -2749,6 +2833,18 @@ onEditorObjectPointerDown(
     return;
   }
 
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+private handleLinkToolPointerDown(event: PointerEvent): void {
+  const page = this.pageRef?.nativeElement;
+  if (!page) return;
+  const rect = page.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const point = this.clientToPagePoint(event.clientX, event.clientY, rect);
+  const selection = this.facade.createLinkObject(point.x, point.y);
+  if (selection) this.facade.setActiveTool('select');
   event.preventDefault();
   event.stopPropagation();
 }
@@ -3385,7 +3481,7 @@ private beginTextEditing(
       : null;
 
   this.editingFontSizeInput =
-    String(this.getObjectFontSizePx(object));
+    String(Number(this.getObjectFontSizePx(object).toFixed(3)));
 
   this.facade.selectObject(
     this.selectionEngine.toSelection(
@@ -3407,6 +3503,7 @@ private beginTextEditing(
 
       editor.focus();
       editor.select();
+      this.syncTextEditorLayout();
     });
   }
 }
@@ -3428,6 +3525,22 @@ onTextEditorInput(
 
   this.editingText =
     target.value;
+
+  this.syncTextEditorLayout();
+}
+
+/**
+ * Resize the native textarea to its actual wrapped content height. This keeps
+ * the caret and every replacement glyph visible while editing a source run.
+ */
+private syncTextEditorLayout(): void {
+  const editor = this.textEditorRef?.nativeElement;
+  const object = this.editingTextObject;
+  if (!editor || !object) return;
+
+  editor.style.height = '0px';
+  const minimum = this.getPdfTextEditorHeightPx(object);
+  editor.style.height = `${Math.max(minimum, editor.scrollHeight)}px`;
 }
 
 /**
@@ -3528,6 +3641,11 @@ commitTextEdit(): void {
       objectId
     );
 
+    // update/discard operations may refresh the shared selection state.
+    // A completed edit must never leave the old source-text selection chrome
+    // visible after the editor session has ended.
+    this.facade.clearSelection();
+
     this.editingObjectId = null;
     this.editingText = '';
     this.editingOriginalText = '';
@@ -3536,10 +3654,22 @@ commitTextEdit(): void {
     return;
   }
 
+  this.autoGrowExistingTextBox(objectId);
+
   this.facade.updateTextObject(
     objectId,
     text
   );
+
+  /*
+   * updateTextObject() intentionally re-selects the edited object so the
+   * normal Select tool can show the updated bounds. That is correct for a
+   * generic object mutation, but it is wrong when a text-edit session ends:
+   * the editor must not leave the old line selected after Done or an
+   * outside-click commit. Clear the shared selection AFTER the mutation so
+   * the mutation cannot immediately recreate the selection chrome.
+   */
+  this.facade.clearSelection();
 
   this.editingObjectId = null;
   this.editingText = '';
@@ -3574,23 +3704,15 @@ cancelTextEdit(): void {
     );
   }
 
-  const object =
-    this.objectService.get(
-      objectId
-    );
-
   this.editingObjectId = null;
   this.editingText = '';
   this.editingOriginalText = '';
   this.editingOriginalStyle = null;
 
-  if (object) {
-    this.facade.selectObject(
-      this.selectionEngine.toSelection(
-        object
-      )
-    );
-  }
+  // Cancel also ends the edit session, so do not leave the cancelled source
+  // line selected. The object itself remains intact and can be selected again
+  // explicitly with the Select tool.
+  this.facade.clearSelection();
 }
 
 get isTextEditing(): boolean {
@@ -3622,24 +3744,91 @@ getObjectFontSizePx(
   const pageHeight =
     page?.getBoundingClientRect().height ?? 0;
 
-  const ratio =
-    object.textStyle?.fontSize ?? 0.018;
+  /* Existing PDF text must keep the exact PDF-derived size. */
+  const sourceSize = object.pdfText?.fontSizePdf;
+  const sourcePageHeight = object.pdfText?.pageHeightPdf;
+  const sourceRatio =
+    typeof sourceSize === 'number' && Number.isFinite(sourceSize) && sourceSize > 0 &&
+    typeof sourcePageHeight === 'number' && Number.isFinite(sourcePageHeight) && sourcePageHeight > 0
+      ? sourceSize / sourcePageHeight
+      : object.pdfText?.detectedFontSize ??
+        object.textStyle?.fontSize ??
+        0.018;
 
-  if (
-    pageHeight <= 0
-  ) {
-    return 16;
+  if (pageHeight <= 0) {
+    return typeof sourceSize === 'number' && Number.isFinite(sourceSize) && sourceSize > 0
+      ? Math.max(0.1, sourceSize * (96 / 72))
+      : Math.max(0.1, sourceRatio * 1000);
   }
 
-  return Math.max(
-    8,
-    Math.min(
-      72,
-      Math.round(
-        pageHeight * ratio
-      )
-    )
-  );
+  return Math.max(0.1, pageHeight * sourceRatio);
+}
+
+/**
+ * Resolve the authoritative weight for an existing PDF text run.
+ *
+ * The generic Studio text style only supports the user-created 400/700
+ * controls. Existing PDF text is different: PDF.js distinguishes regular,
+ * bold and black faces, and collapsing black into 700 visibly changes glyph
+ * shape. Keep the source weight separate from the generic Studio style.
+ */
+getObjectFontWeightCss(
+  object: StudioObject
+): 400 | 700 | 900 {
+  const sourceWeight = object.pdfText?.sourceFontWeight;
+  if (sourceWeight === 900) return 900;
+  if (sourceWeight === 700) return 700;
+  if (object.pdfText) return 400;
+
+  return object.textStyle?.fontWeight === 900
+    ? 900
+    : object.textStyle?.fontWeight === 700
+      ? 700
+      : 400;
+}
+
+/**
+ * Prefer the PDF.js-discovered source family for the live browser editor.
+ * The normalized Studio family remains the export fallback.
+ */
+getObjectFontFamilyCss(
+  object: StudioObject
+): string {
+
+  const sourceCssFamily =
+    object.pdfText?.sourceFontCssFamily?.trim();
+
+  if (sourceCssFamily) {
+    /*
+     * This is PDF.js's actual loaded font face. Keep it quoted so internal
+     * names such as g_d0_f12 can never be interpreted as a fallback list.
+     */
+    const escapedFamily =
+      sourceCssFamily
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\\"');
+
+    return `"${escapedFamily}"`;
+  }
+
+  const sourceFamily =
+    object.pdfText?.sourceFontFamily?.trim();
+
+  if (sourceFamily) {
+    return sourceFamily;
+  }
+
+  switch (object.textStyle?.fontFamily) {
+    case 'Times Roman':
+      return '"Times New Roman", Times, serif';
+
+    case 'Courier':
+      return '"Courier New", Courier, monospace';
+
+    case 'Helvetica':
+    default:
+      return 'Arial, Helvetica, sans-serif';
+  }
 }
 
 get editingFontSizePx(): number {
@@ -3647,7 +3836,7 @@ get editingFontSizePx(): number {
   const parsed = Number(this.editingFontSizeInput);
 
   if (Number.isFinite(parsed)) {
-    return Math.max(8, Math.min(72, Math.round(parsed)));
+    return Math.max(0.1, parsed);
   }
 
   const object = this.editingTextObject;
@@ -3724,10 +3913,10 @@ private commitFontSizeValue(valueText: string): void {
   const parsed = Number(valueText);
   const fallback = this.editingFontSizePx;
   const px = Number.isFinite(parsed)
-    ? Math.max(8, Math.min(72, Math.round(parsed)))
+    ? Math.max(1, Math.min(512, parsed))
     : fallback;
 
-  this.editingFontSizeInput = String(px);
+  this.editingFontSizeInput = String(Number(px.toFixed(3)));
   this.applyFontSizePx(px);
 }
 
@@ -3744,7 +3933,7 @@ private applyFontSizePx(px: number): void {
   }
 
   const clampedPx =
-    Math.max(8, Math.min(72, Math.round(px)));
+    Math.max(1, Math.min(512, px));
 
   this.updateEditingTextStyle({
     fontSize: clampedPx / pageHeight
@@ -5454,6 +5643,391 @@ onWindowKeyDown(
     return;
   }
 }
+
+  /** 5C.2: Select a detected source image and open the replacement picker. */
+  private handlePdfImageEditPointerDown(event: PointerEvent): void {
+    const page = this.pageRef?.nativeElement;
+    if (!page) return;
+
+    const rect = page.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const point = this.clientToPagePoint(
+      event.clientX,
+      event.clientY,
+      rect
+    );
+
+    const object = this.selectObjectAtPoint(point.x, point.y);
+
+    if (object?.type === 'image' && object.pdfImage) {
+      this.requestImageReplacement(object.id);
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  /** 5B.2: Edit only detected source text with the dedicated tool. */
+  private async handlePdfTextEditPointerDown(event: PointerEvent): Promise<void> {
+    const page = this.pageRef?.nativeElement;
+    if (!page) return;
+
+    const rect = page.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    /*
+     * Page navigation and PDF.js source analysis are asynchronous. The edit
+     * tool must never depend on the user toggling the tool off/on to give
+     * analysis time to finish. Ensure the currently visible page has its
+     * source text objects before hit-testing this click.
+     */
+    await this.facade.ensureCurrentPageContent();
+
+    /*
+     * The user may have navigated while the analysis promise was pending.
+     * Re-read the live page element and coordinates after the await rather
+     * than using stale geometry.
+     */
+    const currentPage = this.pageRef?.nativeElement;
+    if (!currentPage) return;
+
+    const currentRect = currentPage.getBoundingClientRect();
+    if (currentRect.width <= 0 || currentRect.height <= 0) return;
+
+    const point = this.clientToPagePoint(
+      event.clientX,
+      event.clientY,
+      currentRect
+    );
+
+    const object = this.selectObjectAtPoint(point.x, point.y);
+
+    if (object?.type === 'text' && object.pdfText) {
+      this.capturePdfTextAppearance(object);
+      this.beginTextEditing(object.id);
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  /**
+   * Give the native textarea enough vertical room for the source line box.
+   * PDF glyph height and CSS line-height are not the same thing; a textarea
+   * locked to the glyph bounding box clips Calibri descenders and makes the
+   * edited line look visibly cut off. The height is allowed to extend outside
+   * the source glyph rectangle because the source cover remains anchored to the
+   * original PDF run bounds.
+   */
+  /**
+   * Public template-facing editor height calculator.
+   *
+   * Keep this as an initialized class field so Angular template type-checking
+   * sees the member directly on the component instance during incremental
+   * compilation. This avoids the false `Property ... does not exist on type
+   * StudioCanvas` diagnostic that can occur after adding a late method to this
+   * large component.
+   */
+  readonly getPdfTextEditorHeightPx = (object: StudioObject): number => {
+    const page = this.pageRef?.nativeElement;
+    const pageHeight = page?.getBoundingClientRect().height ?? 0;
+    const source = object.pdfText;
+
+    if (!source || pageHeight <= 0) {
+      return Math.max(18, pageHeight * Math.max(object.bounds.height, 0.01));
+    }
+
+    const fontSizePx = this.getObjectFontSizePx(object);
+    const lineHeightRatio = this.getPdfTextLineHeight(object);
+    const sourceLineHeightPx = Math.max(
+      fontSizePx,
+      fontSizePx * lineHeightRatio,
+    );
+    const sourceBoxHeightPx = Math.max(
+      1,
+      object.bounds.height * pageHeight,
+    );
+
+    /*
+     * The PDF source rectangle is intentionally tight. Give the native
+     * textarea a small amount of vertical breathing room so the browser's
+     * font ascent/descent and caret never get clipped at the bottom edge.
+     * This does not change the persisted PDF/source bounds.
+     */
+    return Math.max(
+      sourceBoxHeightPx + 4,
+      sourceLineHeightPx + 4,
+    );
+  }
+
+  /** Match source line spacing in the live editor and committed preview. */
+  getPdfTextLineHeight(object: StudioObject): number {
+    const source = object.pdfText;
+    if (!source) return object.textStyle?.lineHeight ?? 1.2;
+
+    if (
+      typeof source.lineHeightPdf === 'number' && Number.isFinite(source.lineHeightPdf) && source.lineHeightPdf > 0 &&
+      typeof source.fontSizePdf === 'number' && Number.isFinite(source.fontSizePdf) && source.fontSizePdf > 0
+    ) {
+      return Math.max(0.9, Math.min(2.4, source.lineHeightPdf / source.fontSizePdf));
+    }
+
+    if (typeof source.lineHeight === 'number' && source.lineHeight > 0) {
+      const size = Math.max(0.0001, source.detectedFontSize ?? object.textStyle?.fontSize ?? 0.018);
+      return Math.max(0.9, Math.min(2.4, source.lineHeight / size));
+    }
+
+    return object.textStyle?.lineHeight ?? 1.2;
+  }
+
+  /** Preview reconstruction layer used to cover the old PDF image before the new image is painted. */
+  getPdfImagePreviewBackground(object: StudioObject): string | null {
+    if (object.type !== 'image' || !object.pdfImage?.replaced) return null;
+    if (object.pdfImage.backgroundMode === 'layered') return object.pdfImage.layeredReconstructionDataUrl ?? null;
+    if (object.pdfImage.backgroundMode === 'pixel') return object.pdfImage.pixelReconstructionDataUrl ?? null;
+    return null;
+  }
+
+  getPdfImagePreviewBackgroundColor(object: StudioObject): string {
+    if (object.type !== 'image' || !object.pdfImage?.replaced) return 'transparent';
+    return object.pdfImage.backgroundMode === 'white'
+      ? '#ffffff'
+      : (object.pdfImage.backgroundColor ?? '#ffffff');
+  }
+
+  getPdfImagePreviewFit(object: StudioObject): 'contain' | 'cover' | 'fill' {
+    const mode = object.pdfImage?.fitMode ?? 'stretch';
+    return mode === 'fit' ? 'contain' : mode === 'fill' ? 'cover' : 'fill';
+  }
+
+  getPdfTextTransform(object: StudioObject): string | null {
+    if (!object.pdfText?.edited) return null;
+    const rotation = object.pdfText.rotation ?? 0;
+    return Math.abs(rotation) > 0.1 ? `rotate(${-rotation}deg)` : null;
+  }
+
+  /**
+   * Render only the changed portion of an existing PDF text line. Untouched
+   * glyphs stay on the original PDF canvas, so source word spacing and glyph
+   * placement are not reconstructed by browser HTML.
+   */
+  getPdfEditedSourceOverlaySegments(object: StudioObject): readonly {
+    id: string;
+    text: string;
+    leftPercent: number;
+    topPercent: number;
+    widthPercent: number;
+    heightPercent: number;
+  }[] {
+    const source = object.pdfText;
+    if (!source?.edited) return [];
+
+    const original = source.originalText;
+    const edited = object.text ?? '';
+    const change = this.resolveSingleTextChangeForPreview(original, edited);
+    const sourceWidth = Math.max(0.01, source.textWidthPdf ?? 0);
+    const runs = source.sourceRuns;
+
+    if (!change || !runs?.length || !sourceWidth) {
+      return [{
+        id: `${object.id}-full`,
+        text: edited,
+        leftPercent: 0,
+        topPercent: 0,
+        widthPercent: 100,
+        heightPercent: 100,
+      }];
+    }
+
+    const first = runs.findIndex(run => change.originalStart < run.endIndex);
+    const firstIndex = first >= 0 ? first : runs.length - 1;
+    const last = runs.findIndex(run => change.originalEnd <= run.endIndex);
+    const lastIndex = last >= 0 ? last : runs.length - 1;
+    const firstRun = runs[firstIndex];
+    const lastRun = runs[lastIndex];
+
+    const localStart = Math.max(0, change.originalStart - firstRun.startIndex);
+    const prefix = firstRun.text.slice(0, localStart);
+    const prefixWidthPdf = this.measurePdfSourceTextWidth(object, prefix);
+    const startPdf = Math.max(0, firstRun.baselineXPdf - (source.baselineXPdf ?? firstRun.baselineXPdf) + prefixWidthPdf);
+
+    let oldWidthPdf: number;
+    if (firstIndex === lastIndex) {
+      const localEnd = Math.max(localStart, Math.min(firstRun.text.length, change.originalEnd - firstRun.startIndex));
+      oldWidthPdf = this.measurePdfSourceTextWidth(object, firstRun.text.slice(localStart, localEnd));
+    } else {
+      oldWidthPdf = Math.max(0, (lastRun.baselineXPdf + lastRun.widthPdf) - (firstRun.baselineXPdf + prefixWidthPdf));
+    }
+
+    const replacementWidthPdf = this.measurePdfSourceTextWidth(object, change.replacementText);
+    const coverWidthPdf = Math.max(0.01, oldWidthPdf, replacementWidthPdf);
+
+    return [{
+      id: `${object.id}-changed`,
+      text: change.replacementText,
+      leftPercent: Math.max(0, Math.min(100, startPdf / sourceWidth * 100)),
+      topPercent: 0,
+      widthPercent: Math.max(0.1, Math.min(200, coverWidthPdf / sourceWidth * 100)),
+      heightPercent: 118,
+    }];
+  }
+
+  private resolveSingleTextChangeForPreview(originalText: string, editedText: string): {
+    originalStart: number;
+    originalEnd: number;
+    replacementText: string;
+  } | null {
+    if (originalText === editedText) return null;
+    let prefix = 0;
+    const maxPrefix = Math.min(originalText.length, editedText.length);
+    while (prefix < maxPrefix && originalText[prefix] === editedText[prefix]) prefix++;
+    let suffix = 0;
+    const maxSuffix = Math.min(originalText.length - prefix, editedText.length - prefix);
+    while (suffix < maxSuffix && originalText[originalText.length - 1 - suffix] === editedText[editedText.length - 1 - suffix]) suffix++;
+    return {
+      originalStart: prefix,
+      originalEnd: originalText.length - suffix,
+      replacementText: editedText.slice(prefix, editedText.length - suffix),
+    };
+  }
+
+  private measurePdfSourceTextWidth(object: StudioObject, text: string): number {
+    if (!text) return 0;
+    const source = object.pdfText;
+    const page = this.pageRef?.nativeElement;
+    if (!source || !page) return 0;
+    const fontSizePx = this.getObjectFontSizePx(object);
+    if (!(fontSizePx > 0)) return 0;
+    try {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) return 0;
+      const weight = source.sourceFontWeight ?? 400;
+      const style = source.sourceFontStyle ?? 'normal';
+      context.font = `${style} ${weight} ${fontSizePx}px ${this.getObjectFontFamilyCss(object)}`;
+      const measured = context.measureText(text).width;
+      const scaleX = source.metricScaleX ?? 1;
+      const pageHeight = page.getBoundingClientRect().height;
+      const pdfScale = pageHeight > 0 && source.pageHeightPdf ? source.pageHeightPdf / pageHeight : 1;
+      return Math.max(0, measured * pdfScale * scaleX);
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Apply only the stable source-font metric calibration to the glyph layer. */
+  getPdfTextMetricTransform(object: StudioObject): string | null {
+    if (!object.pdfText) return null;
+    const scaleX = object.pdfText.metricScaleX ?? 1;
+    if (!Number.isFinite(scaleX) || Math.abs(scaleX - 1) < 0.002) return null;
+    return `scaleX(${scaleX})`;
+  }
+
+  /** Estimate the cover background and calibrate fallback glyph width against the source PDF. Source text colour comes from PDF graphics-state analysis. */
+  private capturePdfTextAppearance(object: StudioObject): void {
+    if (!object.pdfText || !this.canvasRef) return;
+    const canvas = this.canvasRef.nativeElement;
+    const page = this.pageRef?.nativeElement;
+    if (!canvas.width || !canvas.height || !page) return;
+    const rect = page.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const sx = canvas.width / rect.width;
+    const sy = canvas.height / rect.height;
+    const x = Math.max(0, Math.floor(object.bounds.x * rect.width * sx));
+    const y = Math.max(0, Math.floor(object.bounds.y * rect.height * sy));
+    const w = Math.max(1, Math.min(canvas.width - x, Math.ceil(object.bounds.width * rect.width * sx)));
+    const h = Math.max(1, Math.min(canvas.height - y, Math.ceil(object.bounds.height * rect.height * sy)));
+    try {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      const data = ctx.getImageData(x, y, w, h).data;
+      const edge: number[][] = [];
+      const edgeInset = Math.max(1, Math.min(3, Math.floor(Math.min(w, h) / 8)));
+      const stride = Math.max(1, Math.floor(Math.min(w, h) / 24));
+      for (let yy = 0; yy < h; yy += stride) {
+        for (let xx = 0; xx < w; xx += stride) {
+          const i = (yy * w + xx) * 4;
+          if (data[i + 3] <= 20) continue;
+          const c = [data[i], data[i + 1], data[i + 2]];
+          const brightness = (c[0] + c[1] + c[2]) / 3;
+          const onBorder = xx < edgeInset || yy < edgeInset || xx >= w - edgeInset || yy >= h - edgeInset;
+          if (onBorder && brightness > 32) edge.push(c);
+        }
+      }
+      const robust = (list: number[][], fallback: string) => {
+        if (!list.length) return fallback;
+        const rgb = [0, 1, 2].map(channel => {
+          const values = list.map(c => c[channel]).sort((a, b) => a - b);
+          return values[Math.floor(values.length / 2)];
+        });
+        return '#' + rgb.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+      };
+      const metricScaleX = this.calibratePdfTextMetricScaleX(object, rect.width);
+      this.objectService.updatePdfTextAppearance(object.id, {
+        // Sampling only the source box perimeter prevents old glyph pixels from
+        // contaminating the cover colour used to hide the original PDF text.
+        backgroundColor: robust(edge, object.pdfText.backgroundColor ?? '#ffffff'),
+        metricScaleX
+      });
+    } catch {
+      // Sampling is best-effort; export falls back to persisted defaults.
+    }
+  }
+
+  /**
+   * Calibrate the browser font against the original PDF glyph width once, using
+   * the unedited source string. This corrects PDF.js fallback-family metric
+   * differences without shrinking each edited replacement independently.
+   */
+  private calibratePdfTextMetricScaleX(
+    object: StudioObject,
+    pageWidth: number
+  ): number {
+    if (!object.pdfText || !object.text) return 1;
+    const sourceWidth = object.pdfText.textWidthPdf;
+    const targetWidth =
+      typeof sourceWidth === 'number' && Number.isFinite(sourceWidth) && sourceWidth > 0
+        ? sourceWidth * (pageWidth / Math.max(1, object.pdfText.pageWidthPdf ?? pageWidth))
+        : object.bounds.width * pageWidth;
+    const fontSize = this.getObjectFontSizePx(object);
+    if (!(targetWidth > 0) || !(fontSize > 0)) return 1;
+    try {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) return 1;
+      const weight = object.pdfText.sourceFontWeight ?? object.textStyle?.fontWeight ?? 400;
+      const style = object.pdfText.sourceFontStyle ?? object.textStyle?.fontStyle ?? 'normal';
+      context.font = `${style} ${weight} ${fontSize}px ${this.getObjectFontFamilyCss(object)}`;
+      const measured = context.measureText(object.pdfText.originalText).width;
+      if (!(measured > 0)) return 1;
+      const scale = targetWidth / measured;
+      // Guard against corrupt extraction geometry while allowing meaningful PDF
+      // metric correction for embedded/substituted fonts.
+      return Math.max(0.5, Math.min(2, scale));
+    } catch {
+      return 1;
+    }
+  }
+
+  /** Grow multi-line existing text to avoid clipping the replacement on export. */
+  private autoGrowExistingTextBox(objectId: string): void {
+    const object = this.objectService.get(objectId);
+    const editor = this.textEditorRef?.nativeElement;
+    const page = this.pageRef?.nativeElement;
+    if (!object?.pdfText || !editor || !page) return;
+    // Source-locked replacement keeps original geometry. Only explicit auto-fit
+    // may expand the source box for a multi-line replacement.
+    if (object.pdfText.fitMode !== 'auto') return;
+    const pageHeight = page.getBoundingClientRect().height;
+    if (pageHeight <= 0) return;
+    const required = Math.max(object.bounds.height, (editor.scrollHeight + 4) / pageHeight);
+    if (required <= object.bounds.height + 0.001) return;
+    this.facade.updateObjectBounds(object.id, {
+      ...object.bounds,
+      height: Math.min(required, 1 - object.bounds.y)
+    });
+  }
 
   /**
    * ----------------------------------------------------------

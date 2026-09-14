@@ -2,6 +2,8 @@ export type StudioToolId =
   | 'select'
   | 'hand'
   | 'text'
+  | 'edit-pdf-text'
+  | 'edit-pdf-image'
   | 'image'
   | 'draw'
   | 'highlight'
@@ -29,20 +31,25 @@ export type StudioInteractionTool =
   | 'select'
   | 'hand'
   | 'text'
+  | 'edit-pdf-text'
+  | 'edit-pdf-image'
   | 'image'
   | 'draw'
   | 'highlight'
   | 'shape'
-  | 'comment';
+  | 'comment'
+  | 'link';
 
 export const STUDIO_INTERACTION_TOOLS:
   readonly StudioInteractionTool[] = [
     'select',
     'hand',
     'text',
+    'edit-pdf-text',
     'image',
     'draw',
     'highlight',
     'shape',
-    'comment'
+    'comment',
+    'link'
   ];

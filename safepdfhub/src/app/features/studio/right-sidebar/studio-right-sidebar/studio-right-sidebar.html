@@ -1,1 +1,506 @@
-<p>studio-right-sidebar works!</p>
+<aside class="properties" aria-label="Document properties">
+  <nav class="properties__tabs" aria-label="Properties tabs">
+    <button type="button" class="properties__tab"
+      [class.properties__tab--active]="activeTab() === 'document'"
+      [attr.aria-selected]="activeTab() === 'document'"
+      (click)="setTab('document')">Document</button>
+
+    <button type="button" class="properties__tab"
+      [class.properties__tab--active]="activeTab() === 'page'"
+      [attr.aria-selected]="activeTab() === 'page'"
+      (click)="setTab('page')">Page</button>
+
+    <button type="button" class="properties__tab"
+      [class.properties__tab--active]="activeTab() === 'selection'"
+      [attr.aria-selected]="activeTab() === 'selection'"
+      (click)="setTab('selection')">
+      Selection
+      @if (selectedObject()) {
+        <span class="properties__tab-dot" aria-hidden="true"></span>
+      }
+    </button>
+  </nav>
+
+  <div class="properties__body">
+
+    @if (!hasDocument()) {
+      <div class="properties__empty">
+        <div class="properties__empty-icon" aria-hidden="true">—</div>
+        <p class="properties__empty-title">No document open</p>
+        <p class="properties__empty-description">
+          Open a PDF to view document, page and selection properties.
+        </p>
+      </div>
+    } @else if (activeTab() === 'document') {
+      <section class="properties__scroll">
+        <div class="properties__section-heading">
+          <span>Document</span>
+          <span class="properties__status">Ready</span>
+        </div>
+
+        <div class="properties__document-card">
+          <div class="properties__file-icon" aria-hidden="true">PDF</div>
+          <div class="properties__file-copy">
+            <strong [title]="document()?.name">{{ document()?.name }}</strong>
+            <span>{{ pageCount() }} {{ pageCount() === 1 ? 'page' : 'pages' }} · {{ formatFileSize(document()?.size) }}</span>
+          </div>
+        </div>
+
+        <div class="properties__section">
+          <h3>Document details</h3>
+          <dl class="properties__details">
+            <div><dt>File name</dt><dd [title]="document()?.name">{{ document()?.name }}</dd></div>
+            <div><dt>File type</dt><dd>PDF document</dd></div>
+            <div><dt>Pages</dt><dd>{{ pageCount() }}</dd></div>
+            <div><dt>File size</dt><dd>{{ formatFileSize(document()?.size) }}</dd></div>
+          </dl>
+        </div>
+
+        <div class="properties__section">
+          <h3>Existing PDF content</h3>
+          @if (currentPageContentAnalysis()) {
+            <dl class="properties__details">
+              <div><dt>Text blocks</dt><dd>{{ currentPageTextBlockCount() }}</dd></div>
+              <div><dt>Image candidates</dt><dd>{{ currentPageImagePaintCount() }}</dd></div>
+            </dl>
+            <div class="properties__info-card">
+              <span class="properties__info-dot" aria-hidden="true"></span>
+              <p>Existing content is mapped for future direct editing. Analysis is performed locally in your browser.</p>
+            </div>
+          } @else if (contentAnalysisState()?.status === 'analyzing') {
+            <div class="properties__info-card">
+              <span class="properties__info-dot" aria-hidden="true"></span>
+              <p>Analyzing page {{ currentPage() }}…</p>
+            </div>
+          } @else if (contentAnalysisState()?.status === 'error') {
+            <div class="properties__info-card">
+              <span class="properties__info-dot" aria-hidden="true"></span>
+              <p>Some existing content could not be mapped on this page.</p>
+            </div>
+          } @else {
+            <div class="properties__info-card">
+              <span class="properties__info-dot" aria-hidden="true"></span>
+              <p>Content analysis will start when this page is opened.</p>
+            </div>
+          }
+        </div>
+
+        <div class="properties__section">
+          <h3>Workspace</h3>
+          <div class="properties__info-card">
+            <span class="properties__info-dot" aria-hidden="true"></span>
+            <p>Your edits stay in this Studio session until you export the PDF.</p>
+          </div>
+        </div>
+      </section>
+
+    } @else if (activeTab() === 'page') {
+      <section class="properties__scroll">
+        <div class="properties__section-heading">
+          <span>Page {{ currentPage() }}</span>
+          <span class="properties__status">of {{ pageCount() }}</span>
+        </div>
+
+        <div class="properties__page-hero">
+          <div class="properties__page-number">{{ currentPage() }}</div>
+          <div>
+            <strong>Current page</strong>
+            <span>Rotation {{ currentPageRotation() }}°</span>
+          </div>
+        </div>
+
+        <!--
+          Page mutations intentionally live in the Pages panel. Keeping them
+          there gives the editor one authoritative place for page management
+          and avoids duplicate Rotate / Duplicate / Delete controls.
+        -->
+        <div class="properties__section">
+          <h3>Page management</h3>
+          <div class="properties__info-card">
+            <span class="properties__info-dot" aria-hidden="true"></span>
+            <p>Rotate, duplicate, reorder, insert or delete pages from the Pages panel on the left. This inspector shows properties for the current page.</p>
+          </div>
+        </div>
+
+        <div class="properties__section">
+          <h3>Page details</h3>
+          <dl class="properties__details">
+            <div><dt>Page number</dt><dd>{{ currentPage() }}</dd></div>
+            <div><dt>Rotation</dt><dd>{{ currentPageRotation() }}°</dd></div>
+            <div><dt>Source</dt><dd>{{ currentPageSource() }}</dd></div>
+          </dl>
+        </div>
+      </section>
+
+    } @else {
+      @if (!selectedObject()) {
+        <div class="properties__empty">
+          <div class="properties__empty-icon" aria-hidden="true">—</div>
+          <p class="properties__empty-title">Nothing selected</p>
+          <p class="properties__empty-description">
+            Select text, an image, drawing or shape to edit its properties here.
+          </p>
+        </div>
+      } @else {
+        <section class="properties__scroll">
+          <div class="properties__section-heading">
+            <span>{{ selectionLabel() }}</span>
+            <button type="button" class="properties__clear-selection" (click)="clearSelection()">Clear</button>
+          </div>
+
+          @if (selectedObject()?.type === 'text') {
+            <div class="properties__section">
+              <h3>{{ selectedObject()?.pdfText ? 'Existing PDF text' : 'Text' }}</h3>
+              @if (selectedObject()?.pdfText) {
+                <div class="properties__info-card">
+                  <span class="properties__info-dot" aria-hidden="true"></span>
+                  <p>Original PDF text · {{ selectedObject()?.pdfText?.sourceFontFamily || selectedObject()?.pdfText?.fontName || 'Unknown font' }}. Replacement uses the embedded source font program, exact PDF point size, weight, baseline and source geometry.</p>
+                </div>
+              }
+              @if (selectedObject()?.pdfText) {
+                <div class="properties__source-metrics">
+                  <span>Detected {{ (selectedObject()?.pdfText?.detectedFontSize ?? 0) * 100 }}%</span>
+                  <span>Rotation {{ selectedObject()?.pdfText?.rotation ?? 0 }}°</span>
+                  @if (selectedObject()?.pdfText?.sourceFontFamily) { <span>Source {{ selectedObject()?.pdfText?.sourceFontFamily }}</span> }
+                </div>
+                <label class="properties__field">
+                  <span>Replacement fit</span>
+                  <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
+                    <option value="auto">Auto-fit replacement</option>
+                    <option value="original">Keep original size</option>
+                  </select>
+                </label>
+                <label class="properties__field">
+                  <span>Cover padding <b>{{ (selectedObject()?.pdfText?.coverPadding ?? 1.5).toFixed(1) }} pt</b></span>
+                  <input type="range" min="0" max="8" step="0.25" [value]="selectedObject()?.pdfText?.coverPadding ?? 1.5" (input)="updatePdfTextFidelity({ coverPadding: +$any($event.target).value })">
+                </label>
+                <div class="properties__color-row">
+                  <label><span>Replacement text</span><input type="color" [value]="selectedObject()?.pdfText?.textColor ?? '#000000'" (change)="updatePdfTextReplacementColor('textColor', $any($event.target).value)"></label>
+                  <label><span>Cover background</span><input type="color" [value]="selectedObject()?.pdfText?.backgroundColor ?? '#ffffff'" (change)="updatePdfTextReplacementColor('backgroundColor', $any($event.target).value)"></label>
+                </div>
+              }
+              <textarea class="properties__textarea"
+                [value]="selectedObject()?.text ?? ''"
+                aria-label="Text content"
+                (change)="updateTextContent($any($event.target).value)"></textarea>
+              @if (selectedObject()?.pdfText?.edited) {
+                <button type="button" class="properties__secondary-button properties__full-width-button" (click)="restoreOriginalPdfText()">Restore original PDF text</button>
+              }
+            </div>
+
+            <div class="properties__section">
+              <h3>Typography</h3>
+              @if (selectedObject()?.pdfText) {
+                <label class="properties__field">
+                  <span>Source font family</span>
+                  <input
+                    type="text"
+                    readonly
+                    [value]="selectedObject()?.pdfText?.sourceFontFamily ?? 'Embedded PDF font'"
+                    title="Human-readable family recovered from the embedded PDF font program."
+                  >
+                </label>
+                <div class="properties__field-grid">
+                  <label class="properties__field">
+                    <span>Source size</span>
+                    <input type="text" readonly [value]="pdfSourceFontSizePt(selectedObject()) + ' pt'">
+                  </label>
+                  <label class="properties__field">
+                    <span>Source weight</span>
+                    <input type="text" readonly [value]="pdfSourceFontWeightLabel(selectedObject())">
+                  </label>
+                </div>
+                <div class="properties__field-grid">
+                  <label class="properties__field">
+                    <span>Source style</span>
+                    <input type="text" readonly [value]="pdfSourceFontStyleLabel(selectedObject())">
+                  </label>
+                  <label class="properties__field">
+                    <span>Line height</span>
+                    <input type="text" readonly [value]="pdfSourceLineHeight(selectedObject())">
+                  </label>
+                </div>
+              } @else {
+                <label class="properties__field">
+                  <span>Font family</span>
+                  <select [value]="selectedTextStyle()?.fontFamily ?? 'Helvetica'" (change)="updateTextStyle({ fontFamily: $any($event.target).value })">
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Times Roman">Times Roman</option>
+                    <option value="Courier">Courier</option>
+                  </select>
+                </label>
+              }
+
+              @if (!selectedObject()?.pdfText) {
+                <label class="properties__field">
+                  <span>Font size</span>
+                  <input type="number" min="0.5" max="200" step="0.1"
+                    [value]="(selectedTextStyle()?.fontSize ?? 0) * 100"
+                    (change)="updateTextStyle({ fontSize: +$any($event.target).value / 100 })">
+                </label>
+              }
+
+              <div class="properties__color-row properties__color-row--single">
+                <label><span>Text color</span><input type="color" [value]="selectedObject()?.pdfText?.textColor ?? selectedTextStyle()?.color ?? '#000000'" (change)="selectedObject()?.pdfText ? updatePdfTextReplacementColor('textColor', $any($event.target).value) : updateTextStyle({ color: $any($event.target).value })"></label>
+              </div>
+
+              <div class="properties__segmented" aria-label="Text style">
+                <button type="button" [disabled]="!!selectedObject()?.pdfText" [class.is-active]="selectedTextStyle()?.fontWeight === 700"
+                  (click)="updateTextStyle({ fontWeight: selectedTextStyle()?.fontWeight === 700 ? 400 : 700 })">B</button>
+                <button type="button" class="properties__italic" [disabled]="!!selectedObject()?.pdfText" [class.is-active]="selectedTextStyle()?.fontStyle === 'italic'"
+                  (click)="updateTextStyle({ fontStyle: selectedTextStyle()?.fontStyle === 'italic' ? 'normal' : 'italic' })">I</button>
+              </div>
+
+              <div class="properties__segmented properties__segmented--three" aria-label="Text alignment">
+                <button type="button" [class.is-active]="selectedTextStyle()?.textAlign === 'left'" (click)="updateTextStyle({ textAlign: 'left' })">Left</button>
+                <button type="button" [class.is-active]="selectedTextStyle()?.textAlign === 'center'" (click)="updateTextStyle({ textAlign: 'center' })">Center</button>
+                <button type="button" [class.is-active]="selectedTextStyle()?.textAlign === 'right'" (click)="updateTextStyle({ textAlign: 'right' })">Right</button>
+              </div>
+
+              <div class="properties__field-grid">
+                <label class="properties__field">
+                  <span>Line spacing <b>{{ (selectedTextStyle()?.lineHeight ?? 1.2).toFixed(2) }}</b></span>
+                  <input type="range" min="0.8" max="3" step="0.05" [disabled]="!!selectedObject()?.pdfText" [value]="selectedTextStyle()?.lineHeight ?? 1.2" (input)="updateTextStyle({ lineHeight: +$any($event.target).value })">
+                </label>
+                <label class="properties__field">
+                  <span>Character spacing <b>{{ ((selectedTextStyle()?.letterSpacing ?? 0) * 100).toFixed(0) }}%</b></span>
+                  <input type="range" min="-0.1" max="0.3" step="0.01" [disabled]="!!selectedObject()?.pdfText" [value]="selectedTextStyle()?.letterSpacing ?? 0" (input)="updateTextStyle({ letterSpacing: +$any($event.target).value })">
+                </label>
+              </div>
+            </div>
+          }
+
+          @if (selectedObject()?.type === 'shape') {
+            <div class="properties__section">
+              <h3>Appearance</h3>
+              <div class="properties__color-row">
+                <label><span>Stroke</span><input type="color" [value]="selectedObject()?.shape?.style?.strokeColor ?? '#00d4b3'" (change)="updateShapeColor('stroke', $any($event.target).value)"></label>
+                <label [class.is-disabled]="!selectedObject()?.shape?.style?.fillColor"><span>Fill</span><input type="color" [disabled]="!selectedObject()?.shape?.style?.fillColor" [value]="selectedObject()?.shape?.style?.fillColor ?? '#00d4b3'" (change)="updateShapeColor('fill', $any($event.target).value)"></label>
+              </div>
+              <label class="properties__toggle-row">
+                <span><strong>Fill</strong><small>Add a solid interior color</small></span>
+                <input type="checkbox" [checked]="!!selectedObject()?.shape?.style?.fillColor" (change)="updateShapeFillEnabled($any($event.target).checked)">
+              </label>
+              <label class="properties__field">
+                <span>Stroke thickness</span>
+                <input type="range" min="1" max="48" step="1" [value]="styleWidthToUi(selectedObject()?.shape?.style?.strokeWidth, 0.03)" (input)="updateShapeStrokeWidth($any($event.target).value)">
+              </label>
+              <label class="properties__field">
+                <span>Opacity <b>{{ percent((selectedObject()?.shape?.style?.opacity ?? 1) * 100) }}%</b></span>
+                <input type="range" min="5" max="100" step="1" [value]="(selectedObject()?.shape?.style?.opacity ?? 1) * 100" (input)="updateShapeOpacity($any($event.target).value)">
+              </label>
+            </div>
+          }
+
+          @if (selectedObject()?.type === 'draw' || selectedObject()?.type === 'highlight') {
+            <div class="properties__section">
+              <h3>{{ selectedObject()?.type === 'highlight' ? 'Highlight appearance' : 'Drawing appearance' }}</h3>
+              <div class="properties__color-row properties__color-row--single">
+                <label><span>Color</span><input type="color" [value]="selectedObject()?.drawing?.style?.strokeColor ?? '#00d4b3'" (change)="updateDrawingColor($any($event.target).value)"></label>
+              </div>
+              <label class="properties__field">
+                <span>Thickness</span>
+                <input type="range" min="1" max="48" step="1" [value]="styleWidthToUi(selectedObject()?.drawing?.style?.strokeWidth, 0.05)" (input)="updateDrawingWidth($any($event.target).value)">
+              </label>
+              <label class="properties__field">
+                <span>Opacity <b>{{ percent((selectedObject()?.drawing?.style?.opacity ?? 1) * 100) }}%</b></span>
+                <input type="range" min="5" max="100" step="1" [value]="(selectedObject()?.drawing?.style?.opacity ?? 1) * 100" (input)="updateDrawingOpacity($any($event.target).value)">
+              </label>
+            </div>
+          }
+
+          @if (selectedObject()?.type === 'image') {
+            <div class="properties__section">
+              <h3>Image</h3>
+              <div class="properties__image-summary">
+                @if (selectedObject()?.pdfImage && !selectedObject()?.image) {
+                  <span>Original PDF image</span><span>Detection {{ selectedObject()?.pdfImage?.confidence ?? 'medium' }}</span>
+                  <span>{{ ((selectedObject()?.bounds?.width ?? 0) * 100).toFixed(1) }}% × {{ ((selectedObject()?.bounds?.height ?? 0) * 100).toFixed(1) }}%</span>
+                } @else {
+                  <span>{{ selectedObject()?.image?.naturalWidth ?? 0 }} × {{ selectedObject()?.image?.naturalHeight ?? 0 }} px</span>
+                  <span>Aspect ratio {{ (selectedObject()?.image?.aspectRatio ?? 0).toFixed(2) }}</span>
+                }
+              </div>
+              <input #imageReplacementInput class="properties__visually-hidden" type="file" accept="image/png,image/jpeg" (change)="onImageReplacementSelected($event)">
+              <button type="button" class="properties__secondary-button properties__full-width-button" (click)="imageReplacementInput.click()">Replace image</button>
+              @if (selectedObject()?.pdfImage) {
+                <label class="properties__field">
+                  <span>Replacement fit</span>
+                  <select [value]="selectedObject()?.pdfImage?.fitMode ?? 'fit'" (change)="updatePdfImageFitMode($any($event.target).value)">
+                    <option value="fit">Fit</option>
+                    <option value="fill">Fill</option>
+                    <option value="stretch">Stretch</option>
+                  </select>
+                </label>
+                @if (selectedObject()?.pdfImage?.replaced) {
+                  <div class="properties__reconstruction-card">
+                    <div class="properties__reconstruction-heading">
+                      <strong>Background reconstruction</strong>
+                      <span>Original bounds protected</span>
+                    </div>
+                    <label class="properties__field">
+                      <span>Reconstruction mode</span>
+                      <select [value]="selectedObject()?.pdfImage?.backgroundMode ?? 'auto'" (change)="updatePdfImageBackgroundMode($any($event.target).value)">
+                        <option value="layered">Source-aware multi-layer + seam blend</option>
+                        <option value="pixel">Pixel-level edge extension</option>
+                        <option value="auto">Edge-aware auto</option>
+                        <option value="solid">Custom solid</option>
+                        <option value="white">White</option>
+                      </select>
+                    </label>
+                    <label class="properties__field properties__color-field">
+                      <span>Background colour</span>
+                      <input type="color" [value]="selectedObject()?.pdfImage?.backgroundColor ?? '#ffffff'" (change)="updatePdfImageBackgroundColor($any($event.target).value)">
+                    </label>
+                    @if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'layered') {
+                      <p class="properties__field-help">Two export layers are used: directional edge reconstruction below the replacement and a transparent seam blend above it · {{ selectedObject()?.pdfImage?.seamBlendConfidence ?? 'low' }} confidence.</p>
+                      <label class="properties__field"><span>Seam blend width</span><input type="range" min="2" max="24" step="1" [value]="selectedObject()?.pdfImage?.seamBlendWidth ?? 8" (input)="updatePdfImageSeamBlendWidth(+$any($event.target).value)"></label>
+                      <button type="button" class="properties__secondary-button properties__full-width-button properties__compact-button" (click)="regeneratePdfImageLayeredReconstruction()">Regenerate multi-layer reconstruction</button>
+                    } @else if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'pixel') {
+                      <p class="properties__field-help">Pixel-level edge extension preserves gradients and border texture along uncovered fit margins · {{ selectedObject()?.pdfImage?.pixelReconstructionConfidence ?? 'low' }} confidence.</p>
+                      <button type="button" class="properties__secondary-button properties__full-width-button properties__compact-button" (click)="regeneratePdfImagePixelReconstruction()">Regenerate pixel reconstruction</button>
+                    } @else if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'auto') {
+                      <p class="properties__field-help">Sampled from the replacement image edge · {{ selectedObject()?.pdfImage?.backgroundConfidence ?? 'low' }} confidence.</p>
+                    }
+                  </div>
+                  <button type="button" class="properties__secondary-button properties__full-width-button" (click)="restoreOriginalPdfImage()">Restore original PDF image</button>
+                }
+              }
+              @if (selectedPdfImageAudit(); as audit) {
+  <div class="properties__qa-card">
+    <div class="properties__qa-score-row">
+      <div class="properties__qa-score">
+        <span>Replacement quality</span>
+        <strong>{{ audit.score }}/100</strong>
+      </div>
+
+      <span
+        class="properties__qa-status"
+        [class.is-ready]="audit.score === 100"
+        [class.is-review]="audit.score !== 100 && audit.score > 0"
+        [class.is-blocked]="audit.score === 0"
+      >
+        {{ audit.status }}
+      </span>
+    </div>
+
+    <div class="properties__qa-list">
+      @for (issue of audit.issues; track issue.message) {
+        <div
+          class="properties__qa-item"
+          [class.is-pass]="issue.level === 'pass'"
+          [class.is-warn]="issue.level === 'warn'"
+          [class.is-error]="issue.level === 'error'"
+        >
+          {{ issue.message }}
+        </div>
+      }
+    </div>
+  </div>
+}
+              @if (selectedPdfImageFidelityValidation(); as validation) {
+                <div class="properties__fidelity-card">
+                  <div class="properties__fidelity-heading">
+                    <div><strong>Content-aware fidelity validation</strong><span>Pixel continuity audit</span></div>
+                    <strong class="properties__fidelity-score" [class.is-good]="validation.score >= 85" [class.is-review]="validation.score >= 60 && validation.score < 85" [class.is-risk]="validation.score < 60">{{ validation.score }}/100</strong>
+                  </div>
+                  <div class="properties__fidelity-metrics">
+                    <span>Seam <b>{{ validation.metrics.seamDiscontinuity.toFixed(1) }}</b></span>
+                    <span>Texture <b>{{ validation.metrics.textureMismatch.toFixed(1) }}</b></span>
+                    <span>Gradient <b>{{ validation.metrics.gradientMismatch.toFixed(1) }}</b></span>
+                    @if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'layered') { <span>Coverage <b>{{ validation.metrics.seamCoverage.toFixed(0) }}%</b></span> }
+                  </div>
+                  <div class="properties__qa-list">
+                    @for (finding of validation.findings; track finding.message) {
+                      <div class="properties__qa-item" [class.is-pass]="finding.level === 'pass'" [class.is-warn]="finding.level === 'warn'" [class.is-error]="finding.level === 'error'">{{ finding.message }}</div>
+                    }
+                  </div>
+                  <button type="button" class="properties__secondary-button properties__full-width-button properties__compact-button" (click)="refreshPdfImageFidelityValidation()">Run fidelity validation again</button>
+                </div>
+              }
+              <p class="properties__field-help">PNG or JPEG · up to 25 MB</p>
+            </div>
+          }
+
+          @if (selectedObject()?.type === 'comment') {
+            <div class="properties__section">
+              <h3>Comment</h3>
+              @if (selectedObject()?.pdfText) {
+                <div class="properties__source-metrics">
+                  <span>Detected {{ (selectedObject()?.pdfText?.detectedFontSize ?? 0) * 100 }}%</span>
+                  <span>Rotation {{ selectedObject()?.pdfText?.rotation ?? 0 }}°</span>
+                  @if (selectedObject()?.pdfText?.sourceFontFamily) { <span>Source {{ selectedObject()?.pdfText?.sourceFontFamily }}</span> }
+                </div>
+                <label class="properties__field">
+                  <span>Replacement fit</span>
+                  <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
+                    <option value="auto">Auto-fit replacement</option>
+                    <option value="original">Keep original size</option>
+                  </select>
+                </label>
+                <label class="properties__field">
+                  <span>Cover padding <b>{{ (selectedObject()?.pdfText?.coverPadding ?? 1.5).toFixed(1) }} pt</b></span>
+                  <input type="range" min="0" max="8" step="0.25" [value]="selectedObject()?.pdfText?.coverPadding ?? 1.5" (input)="updatePdfTextFidelity({ coverPadding: +$any($event.target).value })">
+                </label>
+                <div class="properties__color-row">
+                  <label><span>Replacement text</span><input type="color" [value]="selectedObject()?.pdfText?.textColor ?? '#000000'" (change)="updatePdfTextReplacementColor('textColor', $any($event.target).value)"></label>
+                  <label><span>Cover background</span><input type="color" [value]="selectedObject()?.pdfText?.backgroundColor ?? '#ffffff'" (change)="updatePdfTextReplacementColor('backgroundColor', $any($event.target).value)"></label>
+                </div>
+              }
+              <textarea class="properties__textarea"
+                [value]="selectedObject()?.comment?.content ?? ''"
+                aria-label="Comment content"
+                placeholder="Write a comment"
+                (change)="updateCommentContent($any($event.target).value)"></textarea>
+              <div class="properties__comment-status">
+                <span [class.is-resolved]="selectedObject()?.comment?.resolved">{{ selectedObject()?.comment?.resolved ? 'Resolved' : 'Open' }}</span>
+                <button type="button" class="properties__secondary-button" (click)="setSelectedCommentResolved(!(selectedObject()?.comment?.resolved ?? false))">{{ selectedObject()?.comment?.resolved ? 'Reopen' : 'Resolve' }}</button>
+              </div>
+            </div>
+          }
+
+          @if (selectedObject()?.type === 'link') {
+            <div class="properties__section">
+              <h3>Link destination</h3>
+              <label class="properties__field">
+                <span>Type</span>
+                <select [value]="selectedObject()?.link?.kind ?? 'url'" (change)="updateLinkKind($any($event.target).value)">
+                  <option value="url">Web address</option>
+                  <option value="page">PDF page</option>
+                </select>
+              </label>
+              @if ((selectedObject()?.link?.kind ?? 'url') === 'url') {
+                <label class="properties__field">
+                  <span>URL</span>
+                  <input type="url" placeholder="https://example.com" [value]="selectedObject()?.link?.url ?? ''" (change)="updateLinkUrl($any($event.target).value)">
+                </label>
+                <p class="properties__field-help">The link is exported as a clickable PDF hyperlink.</p>
+              } @else {
+                <label class="properties__field">
+                  <span>Target page</span>
+                  <input type="number" min="1" [max]="pageCount()" [value]="selectedObject()?.link?.targetPage ?? 1" (change)="updateLinkTargetPage($any($event.target).value)">
+                </label>
+                <p class="properties__field-help">Opens the selected page inside the exported PDF.</p>
+              }
+            </div>
+          }
+
+          <div class="properties__section">
+            <h3>Position & size</h3>
+            <div class="properties__bounds-grid">
+              <label><span>X</span><input type="number" min="0" max="100" step="0.1" [value]="percent(selectedObject()!.bounds.x)" (change)="updateBoundsValue('x', $any($event.target).value)"></label>
+              <label><span>Y</span><input type="number" min="0" max="100" step="0.1" [value]="percent(selectedObject()!.bounds.y)" (change)="updateBoundsValue('y', $any($event.target).value)"></label>
+              <label><span>W</span><input type="number" min="0" max="100" step="0.1" [value]="percent(selectedObject()!.bounds.width)" (change)="updateBoundsValue('width', $any($event.target).value)"></label>
+              <label><span>H</span><input type="number" min="0" max="100" step="0.1" [value]="percent(selectedObject()!.bounds.height)" (change)="updateBoundsValue('height', $any($event.target).value)"></label>
+            </div>
+          </div>
+
+          <div class="properties__footer-actions">
+            <button type="button" (click)="duplicateSelectedObject()">Duplicate</button>
+            <button type="button" class="properties__delete-button" (click)="deleteSelectedObject()">{{ selectedObject()?.pdfText ? 'Restore original' : 'Delete' }}</button>
+          </div>
+        </section>
+      }
+    }
+  </div>
+</aside>

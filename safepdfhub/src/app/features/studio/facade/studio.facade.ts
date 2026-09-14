@@ -8,6 +8,7 @@ import { LoaderService } from '../../../shared/services/loader.service';
 import { ToastService } from '../../../shared/services/toast.service';
 
 import { PdfEngineService } from '../services/pdf-engine.service';
+import { PdfContentAnalysisService } from '../services/pdf-content-analysis.service';
 import { StudioStateService, StudioViewMode } from '../state/studio-state.service';
 import { ThumbnailService } from '../services/thumbnail.service';
 
@@ -24,7 +25,8 @@ import type {
   StudioShapeKind,
   StudioShapeStyle,
   StudioDrawingStyle,
-  StudioPoint
+  StudioPoint,
+  StudioLinkData
 } from '../models/studio-selection.model';
 import { StudioPdfExportService } from '../services/studio-pdf-export.service';
 import { StudioPageService } from '../services/studio-page.service';
@@ -33,6 +35,7 @@ import {
   StudioHistorySnapshot
 } from '../services/studio-history.service';
 import type { StudioPage } from '../models/studio-page.model';
+import type { StudioPdfDocument } from '../models/pdf-document.model';
 
 @Injectable({
   providedIn: 'root'
@@ -44,6 +47,9 @@ export class StudioFacade {
 
   private readonly state =
     inject(StudioStateService);
+
+  private readonly contentAnalysis =
+    inject(PdfContentAnalysisService);
 
   private readonly loader =
     inject(LoaderService);
@@ -132,6 +138,9 @@ export class StudioFacade {
 
   readonly error = this.state.error;
 
+  /** Phase 5A — extracted map of content already present in the uploaded PDF. */
+  readonly contentAnalysisState = this.contentAnalysis.analysis;
+
   /**
    * F5 — Header and keyboard bindings consume these reactive signals.
    */
@@ -217,12 +226,29 @@ export class StudioFacade {
       this.pageService.initialize(newDocument.pageCount);
 
       /**
-       * A successfully opened document starts a new Studio
-       * editing session, so objects belonging to the previous
-       * document must never leak into the new document.
+       * A successfully opened document starts a new Studio editing session, so
+       * old objects must be cleared BEFORE content analysis is allowed to sync
+       * new page overlays. The previous order started page-1 analysis and then
+       * cleared the object store, creating a timing race that could erase the
+       * detected overlays (especially on page 1).
        */
       this.objectService.clearAll();
       this.pendingCommentDrafts.clear();
+
+      // Start the editable-content foundation with page 1 only after the new
+      // document session is clean. Remaining pages are analyzed lazily.
+      this.contentAnalysis.begin(newDocument);
+      void this.contentAnalysis.ensurePage(
+        newDocument,
+        1,
+        pageNumber => this.pdfEngine.getPage(newDocument, pageNumber)
+      ).then(result => {
+        // Ignore stale analysis from a PDF that has since been replaced.
+        if (result && this.document()?.id === newDocument.id) {
+          this.objectService.syncPdfTextBlocks(result.textBlocks);
+          this.objectService.syncPdfImageBlocks(result.imageBlocks);
+        }
+      });
 
       /**
        * A new PDF is a new history session.
@@ -665,6 +691,24 @@ setActiveTool(
   this.state.setActiveTool(
     tool
   );
+
+  /**
+   * Dedicated source-edit tools require page-scoped analysis overlays.
+   * Ensure the current page is analyzed when either toolbar tool is activated,
+   * so the tool never depends on a previous navigation/render finishing first.
+   */
+  if (
+    tool === 'edit-pdf-text' ||
+    tool === 'edit-pdf-image'
+  ) {
+    const document = this.document();
+    if (document) {
+      void this.ensurePageContent(
+        document,
+        this.currentPage()
+      );
+    }
+  }
 }
 
 runToolAction(
@@ -702,12 +746,8 @@ runToolAction(
       return;
 
     case 'link':
-
-      this.toast.show(
-        'Link editing will be available in the next editing stage.',
-        'info'
-      );
-
+      this.setActiveTool('link');
+      this.toast.show('Click the page to add a link, then set its destination in the inspector.', 'info');
       return;
 
     case 'more':
@@ -745,6 +785,17 @@ runToolAction(
 
     if (this.pendingObjectTransform?.objectId === objectId) {
       this.pendingObjectTransform = null;
+    }
+
+    // Existing PDF text is part of the source document. Deleting its Studio
+    // representation must restore the original text, not remove the hit target.
+    if (object.type === 'text' && object.pdfText) {
+      const restored = this.objectService.restorePdfText(objectId);
+      if (restored) {
+        this.state.setSelection({ objectId: restored.id, pageNumber: restored.pageNumber, bounds: restored.bounds, type: restored.type });
+        this.commitHistoryMutation('Restore original PDF text', before);
+        return true;
+      }
     }
 
     const removed = this.objectService.remove(objectId);
@@ -827,6 +878,13 @@ discardTextObject(
     object.type !== 'text'
   ) {
     return false;
+  }
+
+  // Existing PDF text may be intentionally cleared. Keep its source mapping so
+  // export can cover the original region instead of deleting the editable map.
+  if (object.pdfText) {
+    this.updateTextObject(objectId, '');
+    return true;
   }
 
   const before =
@@ -2036,9 +2094,20 @@ goToPage(page: number): void {
     return;
   }
 
+  const document = this.document();
+
+  /**
+   * Content analysis is asynchronous. Re-requesting the already-visible page
+   * must therefore still ensure its source overlays are materialized; the old
+   * early return could leave the current page permanently without editable PDF
+   * text/image objects after a timing race.
+   */
   if (
     page === this.currentPage()
   ) {
+    if (document) {
+      void this.ensurePageContent(document, page);
+    }
     return;
   }
 
@@ -2047,7 +2116,61 @@ goToPage(page: number): void {
   this.state.setCurrentPage(
     page
   );
+
+  if (document) {
+    void this.ensurePageContent(document, page);
+  }
 }
+
+  /**
+   * Ensure the currently visible logical page has source PDF overlays.
+   *
+   * This is intentionally public so interaction tools can await the same
+   * page-analysis lifecycle used by navigation. In particular, the
+   * edit-pdf-text tool must not require a tool toggle after page navigation
+   * just because PDF.js text extraction is asynchronous.
+   */
+  async ensureCurrentPageContent(): Promise<void> {
+    const document = this.document();
+    if (!document) {
+      return;
+    }
+
+    const page = this.currentPage();
+    await this.ensurePageContent(document, page);
+  }
+
+  /**
+   * Ensure one logical page has source text/image overlays. This helper is
+   * shared by navigation and dedicated edit-tool activation so every PDF page
+   * follows the same analysis lifecycle.
+   */
+  private async ensurePageContent(
+    document: StudioPdfDocument,
+    pageNumber: number
+  ): Promise<void> {
+    const result = await this.contentAnalysis.ensurePage(
+      document,
+      pageNumber,
+      currentPageNumber =>
+        this.pdfEngine.getPage(document, currentPageNumber)
+    );
+
+    // A late analysis result must never mutate a replacement document.
+    if (
+      !result ||
+      this.document()?.id !== document.id
+    ) {
+      return;
+    }
+
+    this.objectService.syncPdfTextBlocks(
+      result.textBlocks
+    );
+    this.objectService.syncPdfImageBlocks(
+      result.imageBlocks
+    );
+  }
 
 
 /**
@@ -2623,6 +2746,28 @@ selectObject(selection: StudioSelection): void {
 clearSelection(): void {
   this.state.clearSelection();
 }
+
+
+  createLinkObject(x: number, y: number): StudioSelection | null {
+    if (!this.hasDocument()) return null;
+    const before = this.captureHistorySnapshot();
+    const object = this.objectService.createLinkObject(this.currentPage(), x, y);
+    const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+    this.state.setSelection(selection);
+    this.commitHistoryMutation('Add link', before);
+    return selection;
+  }
+
+  updateLink(objectId: string, patch: Partial<StudioLinkData>): StudioSelection | null {
+    if (!this.hasDocument()) return null;
+    const before = this.captureHistorySnapshot();
+    const object = this.objectService.updateLink(objectId, patch);
+    if (!object) return null;
+    const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+    this.state.setSelection(selection);
+    this.commitHistoryMutation('Edit link', before);
+    return selection;
+  }
 
 createCommentObject(
   x: number,
@@ -3220,6 +3365,47 @@ updateDrawingStyle(
   return selection;
 }
 
+updatePdfImageFitMode(
+  objectId: string,
+  fitMode: 'fit' | 'fill' | 'stretch'
+): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.updatePdfImage(objectId, { fitMode });
+  if (!object) return null;
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  this.state.setSelection(selection);
+  this.commitHistoryMutation('Change image replacement fit', before);
+  return selection;
+}
+
+updatePdfImageBackground(
+  objectId: string,
+  patch: { backgroundMode?: 'auto' | 'solid' | 'white' | 'pixel' | 'layered'; backgroundColor?: string; backgroundConfidence?: 'high' | 'medium' | 'low'; pixelReconstructionDataUrl?: string; pixelReconstructionConfidence?: 'high' | 'medium' | 'low'; layeredReconstructionDataUrl?: string; seamBlendDataUrl?: string; seamBlendWidth?: number; seamBlendConfidence?: 'high' | 'medium' | 'low' }
+): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.updatePdfImage(objectId, patch);
+  if (!object) return null;
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  this.state.setSelection(selection);
+  this.commitHistoryMutation('Reconstruct image background', before);
+  return selection;
+}
+
+restoreOriginalPdfImage(objectId: string): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.updatePdfImage(objectId, { replaced: false });
+  if (!object) return null;
+  // Remove replacement artwork while keeping the selectable source mapping.
+  this.objectService.clearImageData(objectId);
+  const selection: StudioSelection = { objectId, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  this.state.setSelection(selection);
+  this.commitHistoryMutation('Restore original PDF image', before);
+  return selection;
+}
+
 replaceImageData(
   objectId: string,
   image: StudioImageData
@@ -3302,6 +3488,33 @@ duplicateSelectedObject(): StudioSelection | null {
     before
   );
 
+  return selection;
+}
+
+updatePdfTextAppearance(
+  objectId: string,
+  patch: { backgroundColor?: string; textColor?: string; coverPadding?: number; fitMode?: 'original' | 'auto'; metricScaleX?: number }
+): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.updatePdfTextAppearance(objectId, patch);
+  if (!object) return null;
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  if (object.pageNumber === this.currentPage()) this.state.setSelection(selection);
+  this.commitHistoryMutation('Change PDF text replacement appearance', before);
+  return selection;
+}
+
+restoreOriginalPdfText(
+  objectId: string
+): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.restorePdfText(objectId);
+  if (!object) return null;
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  if (object.pageNumber === this.currentPage()) this.state.setSelection(selection);
+  this.commitHistoryMutation('Restore original PDF text', before);
   return selection;
 }
 

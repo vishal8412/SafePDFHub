@@ -15,6 +15,7 @@ import {
 import { StudioCanvas } from '../../canvas/studio-canvas/studio-canvas';
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioPageThumbnail } from '../../left-sidebar/studio-page-thumbnail/studio-page-thumbnail';
+import { StudioRightSidebar } from '../../right-sidebar/studio-right-sidebar/studio-right-sidebar';
 import type { StudioSidebarPageView } from '../../models/studio-sidebar.model';
 
 @Component({
@@ -22,7 +23,8 @@ import type { StudioSidebarPageView } from '../../models/studio-sidebar.model';
   standalone: true,
   imports: [
     StudioCanvas,
-    StudioPageThumbnail
+    StudioPageThumbnail,
+    StudioRightSidebar
   ],
   templateUrl:
     './studio-workspace.html',

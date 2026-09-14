@@ -146,6 +146,25 @@
     box-shadow 90ms ease;
 }
 
+.studio-editor-object--text {
+  display: block;
+  align-items: flex-start;
+}
+
+.studio-editor-object--pdf-source-text {
+  display: block;
+  align-items: flex-start;
+
+  /*
+   * Existing PDF text is positioned from source PDF geometry. The generic
+   * 1px Studio object border would consume 2px of the text box and visibly
+   * shift/reduce the replacement line. Selection is drawn by the dedicated
+   * selection box, not by this object border.
+   */
+  border: 0;
+  border-radius: 0;
+}
+
 .studio-editor-object__image {
   display: block;
 
@@ -161,6 +180,22 @@
   -webkit-user-drag: none;
 }
 
+
+.studio-pdf-image-replacement-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+.studio-editor-object--image .studio-editor-object__image {
+  position: relative;
+  z-index: 1;
+}
+
 .studio-canvas__file-input {
   position: absolute;
 
@@ -170,6 +205,14 @@
   opacity: 0;
 
   pointer-events: none;
+}
+
+.studio-pdf-text-hit-target {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
 }
 
 .studio-editor-object__text {
@@ -594,20 +637,20 @@
 .studio-editor-object--editing {
   z-index: 30;
 
-  border-color:
-    rgba(
-      0,
-      212,
-      179,
-      0.85
-    );
+  /*
+   * Do not use a border on source-PDF text while editing. A 1px border on
+   * each side changes the CSS content box and creates the visible left/right
+   * breathing room reported in the editor. The selection box supplies the
+   * interaction chrome.
+   */
+  border: 0;
 
   background:
     rgba(
       255,
       255,
       255,
-      0.96
+      1
     );
 
   box-shadow:
@@ -635,7 +678,7 @@
       255,
       255,
       255,
-      0.96
+      1
     );
 }
 
@@ -656,8 +699,7 @@
 
   line-height: 1.2;
 
-  color:
-    #111820;
+  color: inherit;
 
   user-select: none;
 }
@@ -671,6 +713,11 @@
   scrollbar-width: none;
 
   display: block;
+
+  /*
+   * Source PDF glyph boxes are tight. The native textarea needs a few extra
+   * pixels so Calibri descenders are not clipped by the control itself.
+   */
 
   width: 100%;
   height: 100%;
@@ -686,13 +733,12 @@
 
   resize: none;
 
-  overflow: auto;
+  overflow: hidden;
 
   background:
     transparent;
 
-  color:
-    #111820;
+  color: inherit;
 
   font: inherit;
 
@@ -700,12 +746,19 @@
   font-style: inherit;
   text-align: inherit;
 
-  line-height: 1.2;
+  line-height: inherit;
 
   white-space: pre-wrap;
 
+  font-kerning: normal;
+  font-variant-ligatures: normal;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+
   appearance: none;
 
+  vertical-align: top;
+  text-indent: 0;
   user-select: text;
 
   cursor: text;
@@ -1566,4 +1619,73 @@
   .studio-comment-editor__primary {
     width: 100%;
   }
+}
+
+.studio-editor-object--link { border: 1px dashed rgba(45, 212, 191, .95); background: rgba(45, 212, 191, .08); min-width: 24px; min-height: 18px; }
+.studio-link-region { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#5eead4; pointer-events:none; }
+.studio-link-region svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.studio-editor-object--link:not(.studio-editor-object--selected) .studio-link-region { opacity:.72; }
+
+/* Phase 5B — existing PDF text stays visible from the rendered PDF canvas.
+   The transparent overlay provides selection/editing without duplicating text. */
+.studio-editor-object--pdf-source-text:not(.studio-editor-object--pdf-source-text-edited) .studio-editor-object__text {
+  visibility: hidden;
+}
+
+.studio-pdf-edited-source-layer {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  user-select: none;
+}
+
+.studio-pdf-edited-source-segment {
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  white-space: pre;
+  overflow: visible;
+  line-height: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  font-style: inherit;
+  font-synthesis: none;
+  font-kerning: normal;
+  font-variant-ligatures: normal;
+  text-rendering: geometricPrecision;
+}
+
+.studio-editor-object--pdf-source-text-edited {
+  /* Source-aware colours are bound inline from sampled PDF pixels. */
+}
+.studio-editor-object--pdf-source-text-edited .studio-editor-object__text {
+  background: transparent;
+  color: inherit;
+  text-rendering: geometricPrecision;
+  font-synthesis: none;
+  font-kerning: normal;
+  font-variant-ligatures: normal;
+  font-feature-settings: "kern" 1;
+}
+.studio-editor-object--pdf-source-text .studio-text-editor {
+  background: inherit;
+  color: inherit;
+  line-height: inherit;
+  font-synthesis: none;
+  font-kerning: normal;
+  font-variant-ligatures: normal;
+}
+
+.studio-pdf-image-overlay{width:100%;height:100%;border:1px dashed transparent;pointer-events:none}.studio-editor-object--selected .studio-pdf-image-overlay{border-color:#fff;background:rgba(90,150,255,.08);box-shadow:0 0 0 1px rgba(90,150,255,.55)}
+
+/* Existing PDF text bounds are extracted from the glyph region itself. Extra
+   editor padding shifts the replacement away from the original baseline. */
+.studio-editor-object--pdf-source-text .studio-editor-object__text,
+.studio-editor-object--pdf-source-text .studio-text-editor {
+  padding: 0;
 }

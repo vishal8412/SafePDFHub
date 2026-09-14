@@ -103,7 +103,12 @@ export class PdfEngineService {
 
   const loadingTask =
     pdfjs.getDocument({
-      data
+      data,
+      // Source-font fidelity is a first-class editor requirement. Keep PDF.js
+      // native font-face conversion enabled and retain parsed font properties
+      // so the editor can register the same OpenType face for its edit layer.
+      disableFontFace: false,
+      fontExtraProperties: true
     });
 
   const pdf =

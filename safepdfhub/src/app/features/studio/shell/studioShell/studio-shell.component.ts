@@ -679,11 +679,14 @@ onToolSelected(
     case 'select':
     case 'hand':
     case 'text':
+    case 'edit-pdf-text':
+    case 'edit-pdf-image':
     case 'image':
     case 'draw':
     case 'highlight':
     case 'shape':
     case 'comment':
+    case 'link':
 
       this.facade.setActiveTool(
         tool
@@ -703,7 +706,6 @@ onToolSelected(
 
     case 'rotate':
     case 'delete':
-    case 'link':
     case 'more':
       this.facade.runToolAction(
         tool
