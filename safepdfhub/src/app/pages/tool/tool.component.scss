@@ -1527,3 +1527,83 @@ border:
     justify-content: center;
   }
 }
+
+
+/* =========================
+   LOCAL PROCESSING CAPACITY
+========================= */
+.capacity-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 8px 12px;
+  padding: 10px 13px;
+  border: 1px solid rgba(34, 211, 238, 0.12);
+  border-radius: 13px;
+  background: rgba(34, 211, 238, 0.045);
+  color: rgba(255,255,255,0.78);
+}
+
+.capacity-status__icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(34, 211, 238, 0.10);
+  color: #67e8f9;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.capacity-status__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.capacity-status__content strong {
+  color: #eaf4ff;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.capacity-status__content span {
+  color: rgba(255,255,255,0.56);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.capacity-status--large {
+  border-color: rgba(251, 191, 36, 0.16);
+  background: rgba(251, 191, 36, 0.045);
+}
+
+.capacity-status--large .capacity-status__icon {
+  color: #f5d78b;
+  background: rgba(251, 191, 36, 0.10);
+}
+
+.capacity-status--blocked {
+  border-color: rgba(255, 122, 77, 0.22);
+  background: rgba(255, 122, 77, 0.055);
+}
+
+.capacity-status--blocked .capacity-status__icon {
+  color: #ffb09a;
+  background: rgba(255, 122, 77, 0.12);
+}
+
+.limits .capacity-device {
+  opacity: 0.72;
+}
+
+@media (max-width: 768px) {
+  .capacity-status {
+    margin-left: 0;
+    margin-right: 0;
+    padding: 9px 11px;
+  }
+}

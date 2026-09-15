@@ -1,5 +1,7 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { LocalProcessingCapabilityService } from '../../core/capacity/local-processing-capability.service';
+import { PdfValidationService } from '../../core/capacity/pdf-validation.service';
 
 @Component({
   selector: 'app-file-upload',
@@ -10,17 +12,25 @@ import { CommonModule } from '@angular/common';
 })
 export class FileUploadComponent {
 
+  @Input() allowMultiple = true;
   @Output() filesSelected = new EventEmitter<File[]>();
-
-  MAX_FILE_MB = 50;
-  MAX_TOTAL_MB = 200;
 
   files: File[] = [];
   isDragging = false;
 
-  // =============================
-  // SELECT FILE (STRICT TYPING)
-  // =============================
+  constructor(
+    readonly capabilityService: LocalProcessingCapabilityService,
+    private readonly pdfValidation: PdfValidationService
+  ) {}
+
+  get maxFileMB(): number {
+    return Math.round(this.capabilityService.budget.maxFileBytes / (1024 * 1024));
+  }
+
+  get maxTotalMB(): number {
+    return Math.round(this.capabilityService.budget.maxTotalBytes / (1024 * 1024));
+  }
+
   onFileSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     const selected = Array.from(input.files || []);
@@ -28,9 +38,6 @@ export class FileUploadComponent {
     input.value = '';
   }
 
-  // =============================
-  // DRAG & DROP
-  // =============================
   allowDrop(event: DragEvent) {
     event.preventDefault();
     this.isDragging = true;
@@ -43,73 +50,39 @@ export class FileUploadComponent {
   onDrop(event: DragEvent) {
     event.preventDefault();
     this.isDragging = false;
-
     const dropped = Array.from(event.dataTransfer?.files || []);
     this.handleFiles(dropped);
   }
 
-  // =============================
-  // VALIDATION + ADD FILES
-  // =============================
   handleFiles(newFiles: File[]) {
-    let validFiles: File[] = [];
-    let next = [...this.files];
+    const accepted: File[] = [];
 
     for (const file of newFiles) {
-
-      // ✅ only PDF
-      if (file.type !== 'application/pdf') {
-        alert(`❌ ${file.name} is not a PDF`);
-        continue;
-      }
-
-      // ✅ prevent duplicate
-      const alreadyExists = next.some(f =>
-        f.name === file.name && f.size === file.size
+      const result = this.pdfValidation.validateSelection(
+        file,
+        [...this.files, ...accepted],
+        this.allowMultiple
       );
-      if (alreadyExists) continue;
 
-      const sizeMB = file.size / (1024 * 1024);
-
-      // ✅ per file limit
-      if (sizeMB > this.MAX_FILE_MB) {
-        alert(`❌ ${file.name} exceeds ${this.MAX_FILE_MB} MB`);
+      if (!result.valid) {
+        if (result.message) alert(`❌ ${result.message}`);
         continue;
       }
 
-      next.push(file);
-      validFiles.push(file);
+      accepted.push(file);
     }
 
-    // ✅ total size limit
-    const totalSize =
-      next.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024);
+    if (!accepted.length) return;
 
-    if (totalSize > this.MAX_TOTAL_MB) {
-      alert(`❌ Total size exceeds ${this.MAX_TOTAL_MB} MB`);
-      return;
-    }
-
-    // ✅ update state
-    this.files = next;
-
-    // ✅ emit only if something added
-    if (validFiles.length > 0) {
-      this.filesSelected.emit(this.files);
-    }
+    this.files = [...this.files, ...accepted];
+    this.filesSelected.emit(this.files);
   }
 
-  // =============================
-  // REMOVE FILE
-  // =============================
   removeFile(index: number) {
     this.files = this.files.filter((_, i) => i !== index);
     this.filesSelected.emit(this.files);
   }
 
-  // =============================
-  // CLEAR ALL (VERY IMPORTANT)
-  // =============================
   clearAll() {
     this.files = [];
     this.filesSelected.emit(this.files);

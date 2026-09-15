@@ -1,0 +1,917 @@
+<div class="shell">
+  <h1>SafePDFHub qpdf WASM Benchmark</h1>
+  <p>
+    Development-only evidence gathering. This runs the qpdf WASM prototype and the existing
+    pdf-lib Worker locally against the same PDFs. Nothing is uploaded and this page does not
+    change production engine selection or capacity limits.
+  </p>
+
+  <section class="panel">
+    <div class="grid">
+      <div>
+        <label for="pdfs">Benchmark PDFs</label>
+        <input id="pdfs" type="file" accept="application/pdf,.pdf" multiple
+          (change)="onFilesSelected($event)" [disabled]="running" />
+      </div>
+      <div>
+        <label for="complexity">PDF complexity class</label>
+        <select id="complexity" [(ngModel)]="complexity" [disabled]="running">
+          @for (option of complexityOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <button type="button" (click)="run()" [disabled]="running || selectedFiles.length < 2 || !browserAvailable">
+      {{ running ? 'Running...' : 'Run qpdf vs pdf-lib Worker' }}
+    </button>
+    <button type="button" class="secondary" (click)="cancel()" [disabled]="!running">Cancel</button>
+
+    <div class="progress" aria-hidden="true">
+      <div [style.width.%]="progress"></div>
+    </div>
+    <p>{{ statusMessage }}</p>
+
+    @if (result; as report) {
+      <section>
+        <h2 [class.pass]="report.qpdf.success && report.pdfLibWorker.success" [class.warn]="!report.qpdf.success || !report.pdfLibWorker.success">
+          {{ report.status === 'cancelled' ? 'Benchmark cancelled' : (report.qpdf.success && report.pdfLibWorker.success ? 'Benchmark completed' : 'Review / failure evidence') }}
+        </h2>
+
+        <div class="metric-grid">
+          <div class="metric"><span>Input files</span><strong>{{ report.inputFileCount }}</strong></div>
+          <div class="metric"><span>Input bytes</span><strong>{{ formatBytes(report.inputBytes) }}</strong></div>
+          <div class="metric"><span>Input pages</span><strong>{{ formatNumber(report.inputPages) }}</strong></div>
+          <div class="metric"><span>Complexity</span><strong>{{ report.complexity }}</strong></div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <h3>qpdf WASM</h3>
+            <dl>
+              <dt>Success</dt><dd>{{ report.qpdf.success ? 'YES' : 'NO' }}</dd>
+              <dt>Elapsed</dt><dd>{{ formatMs(report.qpdf.elapsedMs) }}</dd>
+              <dt>Input throughput</dt><dd>{{ report.qpdf.throughputMiBPerSecond.toFixed(2) }} MiB/s</dd>
+              <dt>Pages/s</dt><dd>{{ formatNumber(report.qpdf.pagesPerSecond) }}</dd>
+              <dt>Output size</dt><dd>{{ formatBytes(report.qpdf.outputBytes) }}</dd>
+              <dt>Output pages</dt><dd>{{ formatNumber(report.qpdf.outputPages) }}</dd>
+              <dt>Main-thread gap</dt><dd>{{ formatMs(report.qpdf.maxMainThreadGapMs) }}</dd>
+              <dt>JS heap peak</dt><dd>{{ report.qpdf.memory?.supported ? formatBytes(report.qpdf.memory?.peakBytes ?? null) : 'Unavailable' }}</dd>
+              <dt>JS heap delta</dt><dd>{{ report.qpdf.memory?.supported ? formatSignedBytes(report.qpdf.memory?.deltaBytes ?? null) : 'Unavailable' }}</dd>
+              <dt>Long tasks</dt><dd>{{ report.qpdf.longTasks?.supported ? report.qpdf.longTasks?.count ?? 0 : 'Unavailable' }}</dd>
+              <dt>Max long task</dt><dd>{{ report.qpdf.longTasks?.supported ? formatMs(report.qpdf.longTasks?.maxDurationMs ?? null) : 'Unavailable' }}</dd>
+            </dl>
+            @if (report.qpdf.errorMessage) { <p class="fail">{{ report.qpdf.errorMessage }}</p> }
+          </div>
+
+          <div>
+            <h3>pdf-lib Worker</h3>
+            <dl>
+              <dt>Success</dt><dd>{{ report.pdfLibWorker.success ? 'YES' : 'NO' }}</dd>
+              <dt>Elapsed</dt><dd>{{ formatMs(report.pdfLibWorker.elapsedMs) }}</dd>
+              <dt>Input throughput</dt><dd>{{ report.pdfLibWorker.throughputMiBPerSecond.toFixed(2) }} MiB/s</dd>
+              <dt>Pages/s</dt><dd>{{ formatNumber(report.pdfLibWorker.pagesPerSecond) }}</dd>
+              <dt>Output size</dt><dd>{{ formatBytes(report.pdfLibWorker.outputBytes) }}</dd>
+              <dt>Output pages</dt><dd>{{ formatNumber(report.pdfLibWorker.outputPages) }}</dd>
+              <dt>Main-thread gap</dt><dd>{{ formatMs(report.pdfLibWorker.maxMainThreadGapMs) }}</dd>
+              <dt>JS heap peak</dt><dd>{{ report.pdfLibWorker.memory?.supported ? formatBytes(report.pdfLibWorker.memory?.peakBytes ?? null) : 'Unavailable' }}</dd>
+              <dt>JS heap delta</dt><dd>{{ report.pdfLibWorker.memory?.supported ? formatSignedBytes(report.pdfLibWorker.memory?.deltaBytes ?? null) : 'Unavailable' }}</dd>
+              <dt>Long tasks</dt><dd>{{ report.pdfLibWorker.longTasks?.supported ? report.pdfLibWorker.longTasks?.count ?? 0 : 'Unavailable' }}</dd>
+              <dt>Max long task</dt><dd>{{ report.pdfLibWorker.longTasks?.supported ? formatMs(report.pdfLibWorker.longTasks?.maxDurationMs ?? null) : 'Unavailable' }}</dd>
+            </dl>
+            @if (report.pdfLibWorker.errorMessage) { <p class="fail">{{ report.pdfLibWorker.errorMessage }}</p> }
+          </div>
+        </div>
+
+        <h3>Structural and visual fidelity</h3>
+        <table>
+          <thead><tr><th>Check</th><th>qpdf vs input</th><th>pdf-lib vs input</th><th>qpdf vs pdf-lib</th></tr></thead>
+          <tbody>
+            <tr><td>Page count</td><td>{{ status(report.qpdfPageCountPreserved) }}</td><td>{{ status(report.pdfLibPageCountPreserved) }}</td><td>{{ status(report.pageCountMatch) }}</td></tr>
+            <tr><td>Page geometry</td><td>{{ status(report.qpdfPageGeometryPreserved) }}</td><td>{{ status(report.pdfLibPageGeometryPreserved) }}</td><td>{{ status(report.pageGeometryMatch) }}</td></tr>
+            <tr><td>Annotations</td><td>{{ status(report.qpdfAnnotationsPreserved) }}</td><td>{{ status(report.pdfLibAnnotationsPreserved) }}</td><td>{{ status(report.annotationsMatch) }}</td></tr>
+            <tr><td>Links</td><td>{{ status(report.qpdfLinksPreserved) }}</td><td>{{ status(report.pdfLibLinksPreserved) }}</td><td>{{ status(report.linksMatch) }}</td></tr>
+            <tr><td>Form widgets</td><td>{{ status(report.qpdfWidgetsPreserved) }}</td><td>{{ status(report.pdfLibWidgetsPreserved) }}</td><td>{{ status(report.widgetsMatch) }}</td></tr>
+            <tr><td>Outlines / bookmarks</td><td>{{ status(report.qpdfOutlinesPreserved) }}</td><td>{{ status(report.pdfLibOutlinesPreserved) }}</td><td>{{ status(report.outlinesMatch) }}</td></tr>
+            <tr><td>Form fields</td><td>{{ status(report.qpdfFieldsPreserved) }}</td><td>{{ status(report.pdfLibFieldsPreserved) }}</td><td>{{ status(report.fieldsMatch) }}</td></tr>
+            <tr><td>First-page render</td><td>—</td><td>—</td><td>{{ status(report.firstPageRenderMatch) }}</td></tr>
+            <tr><td>Output byte size</td><td>—</td><td>—</td><td>{{ status(report.outputSizeMatch) }}</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Performance comparison</h3>
+        <dl>
+          <dt>qpdf speedup vs pdf-lib Worker</dt><dd>{{ report.qpdfSpeedup === null ? '—' : report.qpdfSpeedup.toFixed(2) + '×' }}</dd>
+          <dt>qpdf main-thread gap reduction vs pdf-lib Worker</dt><dd>{{ formatPercent(report.qpdfMainThreadGapReduction) }}</dd>
+        </dl>
+        <p class="table-note">Memory telemetry uses the browser's exposed JavaScript heap metric when available; it does not directly measure qpdf Worker WASM memory. Long-task telemetry is best-effort and browser-dependent.</p>
+
+        @if (report.inputPageCountError) {
+          <p class="warn"><strong>Input inspection:</strong> {{ report.inputPageCountError }}</p>
+        }
+        @if (report.errorMessage) {
+          <p class="warn"><strong>Benchmark note:</strong> {{ report.errorMessage }}</p>
+        }
+      </section>
+    }
+  </section>
+
+  <section class="panel soak-panel">
+    <h2>Controlled repeated-run / soak test</h2>
+    <p>
+      Repeats the same workload against qpdf WASM and the pdf-lib Worker to detect intermittent failures,
+      fidelity drift, responsiveness degradation, and timing drift. Each completed iteration is also saved to
+      the local evidence ledger. PDFs remain local and PDF bytes are never stored by the soak controller.
+    </p>
+
+    <div class="grid">
+      <div>
+        <label for="soakIterations">Iterations</label>
+        <select id="soakIterations" [(ngModel)]="soakIterations" [disabled]="soakRunning || running">
+          <option [ngValue]="2">2 — quick check</option>
+          <option [ngValue]="5">5 — standard</option>
+          <option [ngValue]="10">10 — extended</option>
+          <option [ngValue]="20">20 — long soak</option>
+        </select>
+      </div>
+      <div>
+        <label for="soakCooldown">Cooldown between iterations (ms)</label>
+        <select id="soakCooldown" [(ngModel)]="soakCooldownMs" [disabled]="soakRunning || running">
+          <option [ngValue]="0">0 — continuous</option>
+          <option [ngValue]="500">500 ms</option>
+          <option [ngValue]="1000">1 second</option>
+          <option [ngValue]="2500">2.5 seconds</option>
+          <option [ngValue]="5000">5 seconds</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="button" (click)="runSoak()" [disabled]="soakRunning || running || selectedFiles.length < 2 || !browserAvailable">
+      {{ soakRunning ? 'Running soak...' : 'Start repeated-run soak' }}
+    </button>
+    <button type="button" class="secondary" (click)="cancelSoak()" [disabled]="!soakRunning">Cancel soak</button>
+
+    <div class="progress" aria-hidden="true">
+      <div [style.width.%]="soakProgress"></div>
+    </div>
+    <p>{{ soakStatusMessage }}</p>
+
+    @if (soakResult; as soak) {
+      <h3 [class.pass]="soak.status === 'completed' && soak.qpdfFailureCount === 0 && soak.pdfLibWorkerFailureCount === 0 && soak.fidelityMismatchCount === 0"
+          [class.warn]="soak.status !== 'completed' || soak.qpdfFailureCount > 0 || soak.pdfLibWorkerFailureCount > 0 || soak.fidelityMismatchCount > 0">
+        {{ soak.status === 'completed' ? 'Soak test completed' : 'Soak test stopped' }}
+      </h3>
+
+      <div class="metric-grid">
+        <div class="metric"><span>Completed iterations</span><strong>{{ soak.completedIterations }} / {{ soak.requestedIterations }}</strong></div>
+        <div class="metric"><span>Paired successes</span><strong>{{ soak.pairedSuccessCount }}</strong></div>
+        <div class="metric"><span>qpdf failures</span><strong>{{ soak.qpdfFailureCount }}</strong></div>
+        <div class="metric"><span>pdf-lib failures</span><strong>{{ soak.pdfLibWorkerFailureCount }}</strong></div>
+        <div class="metric"><span>Fidelity mismatches</span><strong>{{ soak.fidelityMismatchCount }}</strong></div>
+        <div class="metric"><span>Median qpdf time</span><strong>{{ formatMs(soak.qpdfMedianElapsedMs) }}</strong></div>
+        <div class="metric"><span>Median qpdf speedup</span><strong>{{ soak.qpdfMedianSpeedup === null ? '—' : soak.qpdfMedianSpeedup.toFixed(2) + '×' }}</strong></div>
+        <div class="metric"><span>qpdf elapsed drift</span><strong>{{ formatPercent(soak.qpdfElapsedDriftRatio) }}</strong></div>
+      </div>
+
+      <dl>
+        <dt>qpdf first iteration</dt><dd>{{ formatMs(soak.qpdfFirstIterationElapsedMs) }}</dd>
+        <dt>qpdf last iteration</dt><dd>{{ formatMs(soak.qpdfLastIterationElapsedMs) }}</dd>
+        <dt>Median qpdf main-thread gap</dt><dd>{{ formatMs(soak.qpdfMedianMainThreadGapMs) }}</dd>
+        <dt>Maximum qpdf main-thread gap</dt><dd>{{ formatMs(soak.qpdfMaxMainThreadGapMs) }}</dd>
+        <dt>Maximum qpdf long task</dt><dd>{{ formatMs(soak.qpdfMaxLongTaskMs) }}</dd>
+        <dt>Maximum pdf-lib long task</dt><dd>{{ formatMs(soak.pdfLibMaxLongTaskMs) }}</dd>
+        <dt>qpdf memory delta trend</dt><dd>{{ formatSignedBytes(soak.qpdfMemoryDeltaTrendBytes) }}</dd>
+        <dt>pdf-lib memory delta trend</dt><dd>{{ formatSignedBytes(soak.pdfLibMemoryDeltaTrendBytes) }}</dd>
+      </dl>
+
+      @if (soak.iterations.length > 0) {
+        <h3>Iteration history</h3>
+        <table>
+          <thead><tr><th>#</th><th>qpdf</th><th>pdf-lib</th><th>Speedup</th><th>qpdf gap</th><th>Fidelity</th><th>qpdf heap Δ</th></tr></thead>
+          <tbody>
+            @for (item of soak.iterations; track item.iteration) {
+              <tr>
+                <td>{{ item.iteration }}</td>
+                <td>{{ item.qpdfSuccess ? formatMs(item.qpdfElapsedMs) : 'FAIL' }}</td>
+                <td>{{ item.pdfLibWorkerSuccess ? formatMs(item.pdfLibWorkerElapsedMs) : 'FAIL' }}</td>
+                <td>{{ item.qpdfSpeedup === null ? '—' : item.qpdfSpeedup.toFixed(2) + '×' }}</td>
+                <td>{{ formatMs(item.qpdfMainThreadGapMs) }}</td>
+                <td [class.pass]="item.hardFidelityPass" [class.fail]="!item.hardFidelityPass">{{ item.hardFidelityPass ? 'PASS' : 'REVIEW' }}</td>
+                <td>{{ formatSignedBytes(item.qpdfMemoryDeltaBytes) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+
+      @if (soak.stopReason) {
+        <p class="warn"><strong>Stop reason:</strong> {{ soak.stopReason }}</p>
+      }
+
+      <p class="table-note">
+        A completed soak means the requested iterations ran; it does not mean qpdf is production-approved.
+        Timing drift is a diagnostic signal, not a direct memory-leak proof. Browser JS heap telemetry does not
+        measure qpdf's internal WASM Worker memory.
+      </p>
+    }
+  </section>
+
+  <section class="panel evidence-panel">
+    <div class="evidence-heading">
+      <div>
+        <h2>Benchmark evidence ledger</h2>
+        <p>
+          Completed benchmark metadata is saved locally so repeated runs can be compared later.
+          PDF bytes are never stored in this ledger.
+        </p>
+      </div>
+      <div class="evidence-actions">
+        <button type="button" class="secondary" (click)="exportEvidence()" [disabled]="evidenceRecords.length === 0">
+          Export evidence JSON
+        </button>
+        <label class="file-button secondary">
+          Import evidence JSON
+          <input type="file" accept="application/json,.json" (change)="importEvidence($event)" hidden />
+        </label>
+        <button type="button" class="danger" (click)="clearEvidence()" [disabled]="evidenceRecords.length === 0">
+          Clear ledger
+        </button>
+      </div>
+    </div>
+
+    @if (evidenceMessage) {
+      <p class="evidence-message">{{ evidenceMessage }}</p>
+    }
+
+    <div class="metric-grid evidence-metrics">
+      <div class="metric"><span>Saved runs</span><strong>{{ evidenceSummary.recordCount }}</strong></div>
+      <div class="metric"><span>Successful engine runs</span><strong>{{ evidenceSummary.successfulRecordCount }}</strong></div>
+      <div class="metric"><span>Complexity classes</span><strong>{{ evidenceSummary.complexityClasses.length }}</strong></div>
+      <div class="metric"><span>Device classes</span><strong>{{ evidenceSummary.deviceClasses.length }}</strong></div>
+      <div class="metric"><span>Memory telemetry</span><strong>{{ evidenceSummary.memoryTelemetryRecordCount }}</strong></div>
+      <div class="metric"><span>Long-task telemetry</span><strong>{{ evidenceSummary.longTaskTelemetryRecordCount }}</strong></div>
+    </div>
+
+    @if (evidenceRecords.length > 0) {
+      <table>
+        <thead>
+          <tr>
+            <th>Recorded</th>
+            <th>Device</th>
+            <th>Complexity</th>
+            <th>Input</th>
+            <th>qpdf</th>
+            <th>pdf-lib</th>
+            <th>Speedup</th>
+            <th>Fidelity</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (record of evidenceRecords; track record.id) {
+            <tr>
+              <td>{{ formatDate(record.recordedAt) }}</td>
+              <td>{{ formatDeviceClass(record.deviceClass) }}</td>
+              <td>{{ record.complexity }}</td>
+              <td>{{ formatBytes(record.inputBytes) }} / {{ formatNumber(record.inputPages) }}p</td>
+              <td>{{ record.qpdfSuccess ? formatMs(record.qpdfElapsedMs) : 'FAIL' }}</td>
+              <td>{{ record.pdfLibWorkerSuccess ? formatMs(record.pdfLibWorkerElapsedMs) : 'FAIL' }}</td>
+              <td>{{ record.qpdfSpeedup === null ? '—' : record.qpdfSpeedup.toFixed(2) + '×' }}</td>
+              <td>{{ status(record.pageGeometryMatch) }}</td>
+              <td><button type="button" class="tiny danger" (click)="deleteEvidence(record.id)">Delete</button></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    } @else {
+      <p class="empty">No benchmark evidence has been saved yet. Run the benchmark above to create the first local record.</p>
+    }
+
+    <p class="note">{{ evidenceSummary.note }}</p>
+  </section>
+
+  <section class="panel plan-panel">
+    <h2>Controlled benchmark test matrix</h2>
+    <p>
+      Use this matrix to collect representative evidence instead of repeatedly testing only easy PDFs.
+      Classify each run by the actual PDF characteristics. Encrypted and malformed cases are negative tests:
+      a safe failure is evidence and should not be counted as a successful merge.
+    </p>
+
+    <div class="metric-grid">
+      <div class="metric"><span>Matrix coverage</span><strong>{{ benchmarkPlan.coveragePercent }}%</strong></div>
+      <div class="metric"><span>Completed runs</span><strong>{{ benchmarkPlan.totalRecordCount }} / {{ benchmarkPlan.totalRecordTarget }}</strong></div>
+      <div class="metric"><span>Required class runs</span><strong>{{ benchmarkPlan.requiredRecordCount }} / {{ benchmarkPlan.requiredRecordTarget }}</strong></div>
+      <div class="metric"><span>Required devices</span><strong>{{ requiredDeviceCoverageCount }} / {{ requiredDeviceTargetCount }}</strong></div>
+    </div>
+
+    <h3>PDF complexity coverage</h3>
+    <table>
+      <thead><tr><th>Class</th><th>Priority</th><th>Runs</th><th>Target</th><th>Status</th></tr></thead>
+      <tbody>
+        @for (item of benchmarkPlan.items; track item.id) {
+          <tr>
+            <td><strong>{{ item.label }}</strong><br><span class="table-note">{{ item.description }}</span></td>
+            <td>{{ item.priority }}</td>
+            <td>{{ item.observedRuns }}</td>
+            <td>{{ item.minimumRuns }}</td>
+            <td [class.pass]="item.covered" [class.warn]="!item.covered">{{ item.covered ? 'Covered' : item.remainingRuns + ' needed' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <h3>Device coverage</h3>
+    <table>
+      <thead><tr><th>Device class</th><th>Priority</th><th>Runs</th><th>Target</th><th>Status</th></tr></thead>
+      <tbody>
+        @for (device of benchmarkPlan.devices; track device.deviceClass) {
+          <tr>
+            <td>{{ device.label }}</td>
+            <td>{{ device.priority }}</td>
+            <td>{{ device.observedRuns }}</td>
+            <td>{{ device.minimumRuns }}</td>
+            <td [class.pass]="device.covered" [class.warn]="!device.covered">{{ device.covered ? 'Covered' : device.remainingRuns + ' needed' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <h3>Next evidence actions</h3>
+    <ul class="gate-list">
+      @for (action of benchmarkPlan.nextActions; track action) {
+        <li>{{ action }}</li>
+      }
+    </ul>
+    <p class="note">{{ benchmarkPlan.note }}</p>
+  </section>
+
+  <section class="panel gate-panel">
+    <h2>Production-readiness gate</h2>
+    <p>
+      This is a conservative evidence gate. It evaluates the saved benchmark ledger and only says whether a human review is justified.
+      It never changes the production engine or public capacity automatically.
+    </p>
+
+    <h3 [class.pass]="gateStatusClass() === 'pass'" [class.warn]="gateStatusClass() === 'warn'" [class.fail]="gateStatusClass() === 'fail'">
+      {{ productionGate.title }}
+    </h3>
+    <p>{{ productionGate.summary }}</p>
+
+    <div class="metric-grid">
+      <div class="metric"><span>Completed runs</span><strong>{{ productionGate.recordCount }} / {{ productionGate.criteria.minimumRecordsForFallbackReview }}</strong></div>
+      <div class="metric"><span>Device classes</span><strong>{{ productionGate.deviceClasses.length }} / {{ productionGate.criteria.minimumDeviceClassesForFallbackReview }}</strong></div>
+      <div class="metric"><span>Complexity classes</span><strong>{{ productionGate.complexityClasses.length }} / {{ productionGate.criteria.minimumComplexityClassesForFallbackReview }}</strong></div>
+      <div class="metric"><span>qpdf failures</span><strong>{{ productionGate.failedQpdfRecordCount }}</strong></div>
+    </div>
+
+    <dl>
+      <dt>Median qpdf speedup</dt><dd>{{ productionGate.medianQpdfSpeedup === null ? '—' : productionGate.medianQpdfSpeedup.toFixed(2) + '×' }}</dd>
+      <dt>Median qpdf main-thread gap</dt><dd>{{ formatMs(productionGate.medianQpdfMainThreadGapMs) }}</dd>
+      <dt>Median pdf-lib Worker main-thread gap</dt><dd>{{ formatMs(productionGate.medianPdfLibMainThreadGapMs) }}</dd>
+      <dt>Device classes observed</dt><dd>{{ formatGateDeviceClasses() }}</dd>
+      <dt>Complexity classes observed</dt><dd>{{ formatGateComplexityClasses() }}</dd>
+      <dt>Hard fidelity mismatches</dt><dd>{{ productionGate.hardFidelityMismatchCount }}</dd>
+      <dt>Incomplete advanced fidelity records</dt><dd>{{ productionGate.missingAdvancedFidelityCount }}</dd>
+      <dt>Runs with memory telemetry</dt><dd>{{ productionGate.memoryTelemetryRecordCount }} / {{ productionGate.successfulRecordCount }}</dd>
+      <dt>Runs with long-task telemetry</dt><dd>{{ productionGate.longTaskTelemetryRecordCount }} / {{ productionGate.successfulRecordCount }}</dd>
+      <dt>Max observed qpdf long task</dt><dd>{{ formatMs(productionGate.maxObservedQpdfLongTaskMs) }}</dd>
+      <dt>Max observed pdf-lib long task</dt><dd>{{ formatMs(productionGate.maxObservedPdfLibLongTaskMs) }}</dd>
+    </dl>
+
+    @if (productionGate.blockers.length > 0) {
+      <h3>Blockers</h3>
+      <ul class="gate-list">
+        @for (blocker of productionGate.blockers; track blocker) {
+          <li>{{ blocker }}</li>
+        }
+      </ul>
+    }
+
+    @if (productionGate.nextActions.length > 0) {
+      <h3>Next evidence actions</h3>
+      <ul class="gate-list">
+        @for (action of productionGate.nextActions; track action) {
+          <li>{{ action }}</li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="panel decision-panel">
+    <h2>Decision gate</h2>
+    <p>
+      This ledger is an evidence collection tool, not an automatic promotion system. qpdf remains a prototype
+      until repeated results across representative PDF complexity classes and device classes are reviewed.
+      Import exported JSON from other test machines when building a broader evidence set.
+    </p>
+    <ul>
+      <li>Do not increase public file/total/page limits from a single benchmark.</li>
+      <li>Do not treat equal output byte size as a fidelity requirement.</li>
+      <li>Investigate every failed parse, fidelity mismatch, encrypted-input result, and malformed-input result.</li>
+      <li>Review responsiveness and stability in addition to raw throughput.</li>
+    </ul>
+  </section>
+  <section class="panel corpus-panel">
+    <div class="evidence-heading">
+      <div>
+        <h2>Phase 0D.14 — Final corpus hardening</h2>
+        <p>
+          Final evidence gate for the qpdf prototype. It checks representative PDF classes, negative-test behavior,
+          device diversity, boundary workloads, repeatability, and complete fidelity. It is a review milestone only.
+        </p>
+      </div>
+      <div class="evidence-actions">
+        <button type="button" class="secondary" (click)="exportCorpusHardening()" [disabled]="evidenceRecords.length === 0">
+          Export hardening report
+        </button>
+      </div>
+    </div>
+
+    <h3 [class.pass]="corpusHardening.status === 'review-ready'"
+        [class.warn]="corpusHardening.status === 'not-ready'"
+        [class.fail]="corpusHardening.status === 'blocked'">
+      {{ corpusHardening.title }}
+    </h3>
+    <p>{{ corpusHardening.summary }}</p>
+
+    <div class="metric-grid">
+      <div class="metric"><span>Total records</span><strong>{{ corpusHardening.totalRecords }}</strong></div>
+      <div class="metric"><span>Positive records</span><strong>{{ corpusHardening.positiveRecords }}</strong></div>
+      <div class="metric"><span>Negative-test records</span><strong>{{ corpusHardening.negativeRecords }}</strong></div>
+      <div class="metric"><span>Positive qpdf success</span><strong>{{ formatCorpusPercent(corpusHardening.positiveSuccessRate) }}</strong></div>
+      <div class="metric"><span>Positive hard fidelity</span><strong>{{ formatCorpusPercent(corpusHardening.positiveHardFidelityPassRate) }}</strong></div>
+      <div class="metric"><span>Repeated workloads</span><strong>{{ corpusHardening.repeatedWorkloadCount }}</strong></div>
+      <div class="metric"><span>≥250 MiB workloads</span><strong>{{ corpusHardening.largeWorkloadRecordCount }}</strong></div>
+      <div class="metric"><span>≥1,000-page workloads</span><strong>{{ corpusHardening.highPageCountRecordCount }}</strong></div>
+      <div class="metric"><span>≥5,000-page workloads</span><strong>{{ corpusHardening.veryHighPageCountRecordCount }}</strong></div>
+    </div>
+
+    <h3>Final hardening requirements</h3>
+    <table>
+      <thead><tr><th>Requirement</th><th>Observed</th><th>Target</th><th>Status</th></tr></thead>
+      <tbody>
+        @for (requirement of corpusHardening.requirements; track requirement.id) {
+          <tr>
+            <td><strong>{{ requirement.label }}</strong><br><span class="table-note">{{ requirement.description }}</span></td>
+            <td>{{ requirement.observed }}</td>
+            <td>{{ requirement.target }}</td>
+            <td [class.pass]="requirement.covered" [class.warn]="!requirement.covered">
+              {{ requirement.covered ? 'Covered' : 'Needed' }}
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <h3>Boundary coverage</h3>
+    <div class="grid">
+      <div>
+        <h3>Input-size bands</h3>
+        <table>
+          <thead><tr><th>Band</th><th>Observed</th><th>Status</th></tr></thead>
+          <tbody>
+            @for (band of corpusHardening.sizeBandCoverage; track band.id) {
+              <tr><td>{{ band.label }}</td><td>{{ band.observed }}</td><td [class.pass]="band.covered" [class.warn]="!band.covered">{{ band.covered ? 'Covered' : 'Needed' }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3>Page-count bands</h3>
+        <table>
+          <thead><tr><th>Band</th><th>Observed</th><th>Status</th></tr></thead>
+          <tbody>
+            @for (band of corpusHardening.pageBandCoverage; track band.id) {
+              <tr><td>{{ band.label }}</td><td>{{ band.observed }}</td><td [class.pass]="band.covered" [class.warn]="!band.covered">{{ band.covered ? 'Covered' : 'Needed' }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h3>Repeated workload signatures</h3>
+    @if (corpusHardening.workloadSignatures.length > 0) {
+      <table>
+        <thead><tr><th>Complexity</th><th>Files</th><th>Input</th><th>Pages</th><th>Repeated</th></tr></thead>
+        <tbody>
+          @for (signature of corpusHardening.workloadSignatures.slice(0, 12); track signature.complexity + '-' + signature.inputBytes + '-' + signature.inputPages) {
+            <tr>
+              <td>{{ signature.complexity }}</td>
+              <td>{{ signature.inputFileCount }}</td>
+              <td>{{ formatBytes(signature.inputBytes) }}</td>
+              <td>{{ formatNumber(signature.inputPages) }}</td>
+              <td [class.pass]="signature.repeatedRuns >= 3">{{ signature.repeatedRuns }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <p class="table-note">A workload signature uses complexity, file count, total input bytes, and total input pages. It does not hash or store PDF contents.</p>
+    } @else {
+      <p class="empty">No positive workload signatures are available yet.</p>
+    }
+
+    <h3>Hardening actions</h3>
+    <ul class="gate-list">
+      @for (action of corpusHardening.nextActions; track action) {
+        <li>{{ action }}</li>
+      }
+    </ul>
+
+    <p class="note">{{ corpusHardening.privacyNote }}</p>
+    <p class="table-note">
+      Phase 0D.14 is the final evidence/corpus hardening layer. A review-ready result does not automatically promote qpdf,
+      change the production MergeEngine, raise public capacity, or change the browser-only privacy boundary.
+    </p>
+  </section>
+
+
+  <section class="panel pilot-panel">
+    <div class="evidence-heading">
+      <div>
+        <h2>Phase 0D.16 — Controlled qpdf fallback pilot</h2>
+        <p>
+          Internal-only pilot harness. It is deliberately disconnected from the production MergeEngine path.
+          When enabled for this test, qpdf is attempted first; if qpdf fails its hard page-count/geometry gate,
+          the existing pdf-lib Worker is used as the fallback.
+        </p>
+      </div>
+    </div>
+
+    <label>
+      <input type="checkbox" [(ngModel)]="fallbackPilotEnabled" [disabled]="fallbackPilotRunning" />
+      I explicitly enable this internal pilot for the selected PDFs.
+    </label>
+
+    <div class="evidence-actions">
+      <button
+        type="button"
+        [disabled]="!fallbackPilotEnabled || selectedFiles.length < 2 || running || soakRunning || fallbackPilotRunning"
+        (click)="runFallbackPilot()">
+        {{ fallbackPilotRunning ? 'Pilot running…' : 'Run controlled fallback pilot' }}
+      </button>
+      <button
+        type="button"
+        class="secondary"
+        [disabled]="!fallbackPilotRunning"
+        (click)="cancelFallbackPilot()">
+        Cancel
+      </button>
+    </div>
+
+    @if (fallbackPilotRunning || fallbackPilotResult) {
+      <div class="progress"><div [style.width.%]="fallbackPilotProgress"></div></div>
+      <p>{{ fallbackPilotStatusMessage }}</p>
+    }
+
+    @if (fallbackPilotResult) {
+      <h3
+        [class.pass]="fallbackPilotResult.outcome === 'qpdf-success'"
+        [class.warn]="fallbackPilotResult.outcome === 'pdf-lib-fallback' || fallbackPilotResult.outcome === 'cancelled'"
+        [class.fail]="fallbackPilotResult.outcome === 'failed'">
+        {{ fallbackPilotOutcomeLabel() }}
+      </h3>
+
+      <div class="metric-grid">
+        <div class="metric"><span>qpdf attempted</span><strong>{{ status(fallbackPilotResult.qpdfAttempted) }}</strong></div>
+        <div class="metric"><span>qpdf succeeded</span><strong>{{ status(fallbackPilotResult.qpdfSucceeded) }}</strong></div>
+        <div class="metric"><span>Fallback used</span><strong>{{ status(fallbackPilotResult.fallbackUsed) }}</strong></div>
+        <div class="metric"><span>Hard fidelity</span><strong>{{ status(fallbackPilotResult.hardFidelityPassed) }}</strong></div>
+        <div class="metric"><span>Input pages</span><strong>{{ formatNumber(fallbackPilotResult.inputPageCount) }}</strong></div>
+        <div class="metric"><span>Output pages</span><strong>{{ formatNumber(fallbackPilotResult.outputPageCount) }}</strong></div>
+        <div class="metric"><span>Output size</span><strong>{{ formatBytes(fallbackPilotResult.outputBytes) }}</strong></div>
+        <div class="metric"><span>Elapsed</span><strong>{{ formatMs(fallbackPilotResult.elapsedMs) }}</strong></div>
+      </div>
+
+      @if (fallbackPilotResult.qpdfFailureReason) {
+        <p class="fail"><strong>qpdf reason:</strong> {{ fallbackPilotResult.qpdfFailureReason }}</p>
+      }
+      @if (fallbackPilotResult.fallbackFailureReason) {
+        <p class="fail"><strong>Fallback reason:</strong> {{ fallbackPilotResult.fallbackFailureReason }}</p>
+      }
+    }
+
+    <p class="note">
+      Safety boundary: this pilot never changes production behavior, never raises capacity, never uploads PDFs,
+      and never treats a successful qpdf run as automatic approval. Human engineering approval remains required.
+    </p>
+  </section>
+
+  <section class="panel production-pilot-panel">
+    <div class="evidence-heading">
+      <div>
+        <h2>Production-pilot hardening</h2>
+        <p>
+          Fail-closed operational controls for a future qpdf pilot. This layer is not connected to the production
+          MergeEngine. It provides a kill switch, human-approval gate, rollout percentage, workload envelope,
+          and metadata-only failure telemetry so a future pilot can be introduced reversibly.
+        </p>
+      </div>
+      <div class="evidence-actions">
+        <button type="button" class="secondary" (click)="exportProductionPilotTelemetry()" [disabled]="productionPilotTelemetry.length === 0">
+          Export pilot telemetry
+        </button>
+        <button type="button" class="danger" (click)="clearProductionPilotTelemetry()" [disabled]="productionPilotTelemetry.length === 0">
+          Clear telemetry
+        </button>
+      </div>
+    </div>
+
+    <h3 [class.pass]="productionPilotEligibility.allowed" [class.warn]="!productionPilotEligibility.allowed">
+      {{ productionPilotEligibility.allowed ? 'Eligible for pilot controls' : 'Pilot blocked by safety controls' }}
+    </h3>
+    <p>{{ productionPilotBlockReason() }}</p>
+
+    <div class="metric-grid">
+      <div class="metric"><span>Enabled</span><strong>{{ productionPilotEligibility.config.enabled ? 'YES' : 'NO' }}</strong></div>
+      <div class="metric"><span>Kill switch</span><strong>{{ productionPilotEligibility.config.killSwitch ? 'ON' : 'OFF' }}</strong></div>
+      <div class="metric"><span>Human approval</span><strong>{{ productionPilotEligibility.config.humanApprovalRecorded ? 'RECORDED' : 'NOT RECORDED' }}</strong></div>
+      <div class="metric"><span>Rollout</span><strong>{{ productionPilotEligibility.config.rolloutPercent }}%</strong></div>
+      <div class="metric"><span>Selected files</span><strong>{{ selectedFiles.length }}</strong></div>
+      <div class="metric"><span>Selected bytes</span><strong>{{ formatBytes(selectedFiles.reduce((sum, file) => sum + file.size, 0)) }}</strong></div>
+      <div class="metric"><span>Max pilot files</span><strong>{{ productionPilotEligibility.config.maxFiles }}</strong></div>
+      <div class="metric"><span>Max pilot bytes</span><strong>{{ formatBytes(productionPilotEligibility.config.maxTotalBytes) }}</strong></div>
+      <div class="metric"><span>Session bucket</span><strong>{{ productionPilotEligibility.sessionBucket }}</strong></div>
+      <div class="metric"><span>Telemetry events</span><strong>{{ productionPilotTelemetry.length }}</strong></div>
+    </div>
+
+    <h3>Production-pilot observability</h3>
+    <div class="evidence-actions">
+      <button type="button" class="secondary" (click)="refreshProductionPilotObservability()">Refresh observability</button>
+      <button type="button" class="secondary" (click)="runKillSwitchValidation()">Validate kill switch</button>
+      <button type="button" class="secondary" (click)="exportProductionPilotObservability()">Export observability</button>
+    </div>
+    <div class="metric-grid">
+      <div class="metric"><span>Total pilot events</span><strong>{{ productionPilotObservability.totalEvents }}</strong></div>
+      <div class="metric"><span>qpdf attempts</span><strong>{{ productionPilotObservability.qpdfAttemptCount }}</strong></div>
+      <div class="metric"><span>qpdf success rate</span><strong>{{ productionPilotObservability.qpdfSuccessRate === null ? '—' : formatPercent(productionPilotObservability.qpdfSuccessRate) }}</strong></div>
+      <div class="metric"><span>Fallback rate</span><strong>{{ productionPilotObservability.fallbackRateAmongAttempts === null ? '—' : formatPercent(productionPilotObservability.fallbackRateAmongAttempts) }}</strong></div>
+      <div class="metric"><span>Failed</span><strong>{{ productionPilotObservability.failedCount }}</strong></div>
+      <div class="metric"><span>Cancelled</span><strong>{{ productionPilotObservability.cancelledCount }}</strong></div>
+      <div class="metric"><span>Hard fidelity failures</span><strong>{{ productionPilotObservability.hardFidelityFailureCount }}</strong></div>
+      <div class="metric"><span>Last event</span><strong>{{ productionPilotObservability.lastEventAt ? formatDate(productionPilotObservability.lastEventAt) : '—' }}</strong></div>
+    </div>
+
+    @if (killSwitchValidation) {
+      <h3 [class.pass]="killSwitchValidation.passed" [class.fail]="!killSwitchValidation.passed">
+        {{ killSwitchValidation.passed ? 'Kill-switch validation PASSED' : 'Kill-switch validation FAILED' }}
+      </h3>
+      <table>
+        <thead><tr><th>Check</th><th>Expected</th><th>Observed</th><th>Status</th></tr></thead>
+        <tbody>
+          @for (check of killSwitchValidation.checks; track check.id) {
+            <tr>
+              <td>{{ check.label }}</td>
+              <td>{{ check.expected }}</td>
+              <td>{{ check.observed }}</td>
+              <td [class.pass]="check.passed" [class.fail]="!check.passed">{{ check.passed ? 'PASS' : 'FAIL' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <p class="table-note">{{ killSwitchValidation.safetyNote }}</p>
+    }
+
+    <h3>Operational rules</h3>
+    <ul class="gate-list">
+      <li>Production defaults are fail-closed: disabled, kill switch active, 0% rollout, and no human approval.</li>
+      <li>A pilot must never run when the kill switch is active, approval is absent, or the workload exceeds the safety envelope.</li>
+      <li>Rollout selection is session-scoped and deterministic only for the current browser session; it is not a secure replacement for trusted remote configuration.</li>
+      <li>Telemetry contains outcome, sizes, counts, timing and failure codes only. Filenames, PDF bytes and document content are excluded.</li>
+      <li>Any future production rollout must retain the existing pdf-lib Worker fallback and an independently operable kill switch.</li>
+    </ul>
+
+    @if (productionPilotTelemetry.length > 0) {
+      <h3>Local pilot telemetry</h3>
+      <table>
+        <thead><tr><th>Time</th><th>Outcome</th><th>Files</th><th>Input</th><th>qpdf</th><th>Fallback</th><th>Fidelity</th><th>Elapsed</th></tr></thead>
+        <tbody>
+          @for (event of productionPilotTelemetry; track $index) {
+            <tr>
+              <td>{{ formatDate(event.recordedAt) }}</td>
+              <td>{{ event.outcome }}</td>
+              <td>{{ event.inputFileCount }}</td>
+              <td>{{ formatBytes(event.inputBytes) }}</td>
+              <td>{{ event.qpdfSucceeded ? 'YES' : event.qpdfAttempted ? 'NO' : '—' }}</td>
+              <td>{{ event.fallbackUsed ? 'YES' : 'NO' }}</td>
+              <td>{{ status(event.hardFidelityPassed) }}</td>
+              <td>{{ formatMs(event.elapsedMs) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <p class="note">
+      Phase 0D.16 remains the only current qpdf execution path for manual testing. Phase 0D.17 hardening adds
+      operational controls but does not authorize production execution.
+    </p>
+  </section>
+
+
+
+  <section class="panel routing-validation-panel">
+    <div class="evidence-heading">
+      <div>
+        <h2>Controlled production routing validation</h2>
+        <p>
+          Development-only validation of the real production merge router. It exercises the default blocked path,
+          kill-switch and capacity blocks, an explicitly eligible qpdf path, and the qpdf-failure → pdf-lib Worker
+          fallback path using the selected local PDFs. Validation never mutates the real pilot configuration.
+        </p>
+      </div>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric"><span>Scenarios</span><strong>{{ routingValidationScenarios.length }}</strong></div>
+      <div class="metric"><span>Selected PDFs</span><strong>{{ selectedFiles.length }}</strong></div>
+      <div class="metric"><span>Status</span><strong>{{ routingValidationRunning ? 'RUNNING' : routingValidationReport ? (routingValidationReport.passed ? 'PASS' : 'REVIEW') : 'NOT RUN' }}</strong></div>
+      <div class="metric"><span>Production config changed</span><strong>NO</strong></div>
+    </div>
+
+    <div class="evidence-actions">
+      <button type="button" (click)="runProductionRoutingValidation()" [disabled]="routingValidationRunning || running || soakRunning || selectedFiles.length < 2 || !browserAvailable">
+        {{ routingValidationRunning ? 'Validating routing...' : 'Validate real production routing' }}
+      </button>
+      <button type="button" class="secondary" (click)="cancelProductionRoutingValidation()" [disabled]="!routingValidationRunning">
+        Cancel validation
+      </button>
+    </div>
+
+    <div class="progress" aria-hidden="true">
+      <div [style.width.%]="routingValidationProgress"></div>
+    </div>
+    <p>{{ routingValidationStatusMessage }}</p>
+
+    @if (routingValidationReport; as routingReport) {
+      <h3 [class.pass]="routingReport.passed" [class.fail]="!routingReport.passed">
+        {{ routingReport.passed ? 'Production routing validation PASSED' : 'Production routing validation needs review' }}
+      </h3>
+
+      <table>
+        <thead>
+          <tr><th>Scenario</th><th>Expected</th><th>Observed</th><th>qpdf attempted</th><th>Fallback</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          @for (item of routingReport.results; track item.scenario) {
+            <tr>
+              <td><strong>{{ routingScenarioLabel(item.scenario) }}</strong></td>
+              <td>{{ item.expected }}</td>
+              <td>{{ item.observed }}</td>
+              <td>{{ item.qpdfAttempted ? 'YES' : 'NO' }}</td>
+              <td>{{ item.fallbackUsed ? 'YES' : 'NO' }}</td>
+              <td [class.pass]="item.passed" [class.fail]="!item.passed">{{ item.passed ? 'PASS' : 'FAIL' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+
+      <p class="table-note">{{ routingReport.safetyNote }}</p>
+    }
+
+    <ul class="gate-list">
+      <li><strong>Default path:</strong> the current fail-closed production configuration must route to the existing pdf-lib Worker without attempting qpdf.</li>
+      <li><strong>Kill switch:</strong> an otherwise eligible pilot configuration must still route to the existing Worker.</li>
+      <li><strong>Capacity:</strong> a workload outside the pilot envelope must be blocked from qpdf and use the existing Worker.</li>
+      <li><strong>Eligible qpdf:</strong> an explicitly authorized validation configuration may attempt the real qpdf WASM path.</li>
+      <li><strong>Fallback:</strong> the forced qpdf-failure scenario must recover through the existing pdf-lib Worker.</li>
+      <li>This validation is not a production rollout and does not change the static pilot configuration.</li>
+    </ul>
+  </section>
+
+  <section class="panel final-decision-panel">
+    <div class="evidence-heading">
+      <div>
+        <h2>Phase 0D.15 — Final engineering decision</h2>
+        <p>
+          This is the final engineering recommendation generated from the current quantitative gate and final corpus hardening evidence.
+          It is deliberately conservative: a candidate status never changes the production engine, public capacity, or privacy boundary.
+        </p>
+      </div>
+      <div class="evidence-actions">
+        <button type="button" class="secondary" (click)="exportFinalDecision()">
+          Export decision report
+        </button>
+      </div>
+    </div>
+
+    <h3
+      [class.pass]="finalDecisionStatusClass() === 'pass'"
+      [class.warn]="finalDecisionStatusClass() === 'warn'"
+      [class.fail]="finalDecisionStatusClass() === 'fail'">
+      {{ finalDecision.title }}
+    </h3>
+    <p>{{ finalDecision.summary }}</p>
+
+    <div class="metric-grid">
+      <div class="metric"><span>Recommended role</span><strong>{{ finalDecisionRoleLabel() }}</strong></div>
+      <div class="metric"><span>Evidence records</span><strong>{{ finalDecision.evidenceRecordCount }}</strong></div>
+      <div class="metric"><span>Quantitative gate</span><strong>{{ finalDecision.productionGate }}</strong></div>
+      <div class="metric"><span>Corpus hardening</span><strong>{{ finalDecision.corpusHardening }}</strong></div>
+    </div>
+
+    <h3>Decision criteria</h3>
+    <table>
+      <thead><tr><th>Criterion</th><th>Observed</th><th>Required</th><th>Status</th></tr></thead>
+      <tbody>
+        @for (criterion of finalDecision.criteria; track criterion.id) {
+          <tr>
+            <td>
+              <strong>{{ criterion.label }}</strong>
+              @if (criterion.blocking) { <br><span class="table-note">Blocking criterion</span> }
+            </td>
+            <td>{{ criterion.observed }}</td>
+            <td>{{ criterion.required }}</td>
+            <td [class.pass]="criterion.passed" [class.warn]="!criterion.passed && !criterion.blocking" [class.fail]="!criterion.passed && criterion.blocking">
+              {{ criterion.passed ? 'PASS' : 'REVIEW' }}
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    @if (finalDecision.blockers.length > 0) {
+      <h3>Decision blockers</h3>
+      <ul class="gate-list">
+        @for (blocker of finalDecision.blockers; track blocker) {
+          <li class="fail">{{ blocker }}</li>
+        }
+      </ul>
+    }
+
+    <h3>Required actions before production use</h3>
+    <ul class="gate-list">
+      @for (action of finalDecision.nextActions; track action) {
+        <li>{{ action }}</li>
+      }
+    </ul>
+
+    <dl>
+      <dt>Production engine change authorized</dt><dd class="fail">NO</dd>
+      <dt>Public capacity change authorized</dt><dd class="fail">NO</dd>
+      <dt>Privacy boundary change authorized</dt><dd class="fail">NO</dd>
+      <dt>Human approval required</dt><dd class="pass">YES</dd>
+    </dl>
+
+    <p class="note">{{ finalDecision.privacyNote }}</p>
+  </section>
+
+  <section class="panel phase0d-final-panel">
+    <div class="evidence-heading">
+      <div>
+        <h2>Phase 0D — Consolidated final engineering status</h2>
+        <p>
+          This is the consolidated 0D release view. It combines the evidence decision with the immutable
+          production safety guards. A candidate result never enables qpdf, changes capacity, or changes the
+          browser-only privacy boundary.
+        </p>
+      </div>
+      <div class="evidence-actions">
+        <button type="button" class="secondary" (click)="exportPhase0dFinalReport()">
+          Export Phase 0D status
+        </button>
+      </div>
+    </div>
+
+    <h3
+      [class.pass]="phase0dFinalReport.status === 'fallback-candidate' || phase0dFinalReport.status === 'primary-experiment-candidate'"
+      [class.warn]="phase0dFinalReport.status === 'prototype-only'"
+      [class.fail]="phase0dFinalReport.status === 'blocked'">
+      {{ phase0dFinalReport.title }} — {{ phase0dFinalReport.status }}
+    </h3>
+    <p>{{ phase0dFinalReport.summary }}</p>
+
+    <div class="metric-grid">
+      <div class="metric"><span>Decision</span><strong>{{ phase0dFinalReport.decisionStatus }}</strong></div>
+      <div class="metric"><span>Evidence records</span><strong>{{ phase0dFinalReport.evidenceRecordCount }}</strong></div>
+      <div class="metric"><span>qpdf enabled</span><strong>{{ phase0dFinalReport.productionPilotConfig.enabled ? 'YES' : 'NO' }}</strong></div>
+      <div class="metric"><span>Kill switch</span><strong>{{ phase0dFinalReport.productionPilotConfig.killSwitch ? 'ON' : 'OFF' }}</strong></div>
+    </div>
+
+    <h3>Immutable production guards</h3>
+    <table>
+      <thead><tr><th>Guard</th><th>Observed</th><th>Required</th><th>Status</th></tr></thead>
+      <tbody>
+        @for (guard of phase0dFinalReport.guards; track guard.id) {
+          <tr>
+            <td>{{ guard.label }}</td>
+            <td>{{ guard.observed }}</td>
+            <td>{{ guard.required }}</td>
+            <td [class.pass]="guard.passed" [class.fail]="!guard.passed">{{ guard.passed ? 'PASS' : 'FAIL' }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <dl>
+      <dt>Production engine change authorized</dt><dd class="fail">NO</dd>
+      <dt>Public capacity change authorized</dt><dd class="fail">NO</dd>
+      <dt>Privacy boundary change authorized</dt><dd class="fail">NO</dd>
+      <dt>Human approval required</dt><dd class="pass">YES</dd>
+    </dl>
+
+    <p class="note"><strong>Next step:</strong> {{ phase0dFinalReport.nextStep }}</p>
+  </section>
+
+</div>

@@ -14,12 +14,14 @@ export class MergeFacade {
 
   async merge(
     files: File[],
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    pageCounts: readonly number[] = []
   ) {
 
     return this.mergeEngine.merge(
       files,
-      onProgress
+      onProgress,
+      pageCounts
     );
   }
 }

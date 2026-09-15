@@ -1,16 +1,24 @@
 <div
   class="upload-box"
+  [class.dragging]="isDragging"
   (drop)="onDrop($event)"
   (dragover)="allowDrop($event)"
+  (dragleave)="onLeave()"
 >
-  <p>Drag & drop PDF files here</p>
+  <p>Drag &amp; drop PDF files here</p>
 
   <label class="upload-btn">
     Select PDF files
-    <input type="file" multiple (change)="onFileSelect($event)" hidden />
+    <input
+      type="file"
+      accept=".pdf,application/pdf"
+      [attr.multiple]="allowMultiple ? '' : null"
+      (change)="onFileSelect($event)"
+      hidden
+    />
   </label>
 
   <div class="limits">
-    Max per file: {{ MAX_FILE_MB }} MB • Max total: {{ MAX_TOTAL_MB }} MB
+    Up to {{ maxFileMB }} MB per file<span *ngIf="allowMultiple"> • {{ maxTotalMB }} MB total</span>
   </div>
 </div>

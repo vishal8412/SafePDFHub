@@ -5,7 +5,7 @@ import { Meta, Title } from '@angular/platform-browser';
 import { TOOLS, Tool } from '../../config/tools.config';
 import { LoaderService } from '../../shared/services/loader.service';
 import { ToastService } from '../../shared/services/toast.service';
-import { MergeEngine } from '../../core/engines/merge.engine';
+import { QpdfProductionMergeRouterService } from '../../core/qpdf/qpdf-production-merge-router.service';
 import { CompressEngine } from '../../core/engines/compress.engine';
 import { WorkflowService } from '../../core/services/workflow.service';
 import { PreviewService } from '../../core/services/preview.service';
@@ -28,6 +28,10 @@ import { CompressionState } from '../../core/compression/compression.state';
 import { CompressionFacade } from '../../core/compression/compress.facade';
 import { WorkspaceOutputService } from '../../core/workflow/workspace-output.service';
 import { WorkspaceUploadService } from '../../core/workflow/workspace-upload.service';
+import { LocalProcessingCapabilityService } from '../../core/capacity/local-processing-capability.service';
+import { PdfValidationService } from '../../core/capacity/pdf-validation.service';
+import { PdfWorkloadAnalyzerService } from '../../core/capacity/pdf-workload-analyzer.service';
+import { LocalProcessingCapability, WorkloadAssessment } from '../../core/capacity/local-processing-capability.model';
 
 type WorkflowStep = 'merge' | 'compress' | 'split';
 
@@ -56,8 +60,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   showFileSheet = false;
   selectedFileIndex = -1;
 
-  MAX_FILE_MB = 50;
-  MAX_TOTAL_MB = 200;
+  localCapability!: LocalProcessingCapability;
+  workloadAssessment!: WorkloadAssessment;
 
   showViewer = false;
   viewerPages: string[] = [];
@@ -65,6 +69,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   zoom = 1;
 
   viewerFile: File | null = null;
+
+  private unregisterLoaderCancellation: (() => void) | null = null;
 
   // Compress PDF
   private analysisRequestId = 0;
@@ -91,7 +97,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     private cd: ChangeDetectorRef,
     private loader: LoaderService,
     private toast: ToastService,
-    private mergeEngine: MergeEngine,
+    private mergeEngine: QpdfProductionMergeRouterService,
     public compressionState: CompressionState,
     private compressionFacade: CompressionFacade,
     private compressEngine: CompressEngine,
@@ -104,12 +110,17 @@ export class ToolComponent implements OnInit, OnDestroy {
     public workspace: WorkspaceStateService,
     private workspaceOps: WorkspaceOperationsService,
     private workspaceUpload: WorkspaceUploadService,
+    private localProcessingCapability: LocalProcessingCapabilityService,
+    private pdfValidation: PdfValidationService,
+    private pdfWorkloadAnalyzer: PdfWorkloadAnalyzerService,
     private ngZone: NgZone,
     @Inject(PLATFORM_ID) private platformId: Object
   ) { }
 
   ngOnInit() {
     this.isBrowser = isPlatformBrowser(this.platformId);
+    this.localCapability = this.localProcessingCapability.current;
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
     this.workspaceUploadFileCapacity();
     this.route.paramMap.subscribe(params => {
       const slug = params.get('slug');
@@ -190,6 +201,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.workspace.dragIndex = null;
     this.workspace.hoverIndex = null;
     this.workspace.isDragging = false;
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
     // viewer reset
     this.viewerPages = [];
     this.viewerFile = null;
@@ -197,18 +209,95 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   workspaceUploadFileCapacity() {
-    if (!this.isBrowser) return;
-    const width = window.innerWidth;
-    if (width < 768) {
-      this.MAX_FILE_MB = 40;
-      this.MAX_TOTAL_MB = 120;
-    } else if (width < 1024) {
-      this.MAX_FILE_MB = 80;
-      this.MAX_TOTAL_MB = 250;
-    } else {
-      this.MAX_FILE_MB = 100;
-      this.MAX_TOTAL_MB = 400;
+    // Capacity is determined by browser/device capability, not viewport width.
+    // The capability service already applies the current engine safety ceiling.
+    this.localCapability = this.localProcessingCapability.current;
+  }
+
+  get maxFileMB(): number {
+    return Math.round(this.localCapability.budget.maxFileBytes / (1024 * 1024));
+  }
+
+  get maxTotalMB(): number {
+    return Math.round(this.localCapability.budget.maxTotalBytes / (1024 * 1024));
+  }
+
+  get maxFiles(): number {
+    return this.localCapability.budget.maxFiles;
+  }
+
+  get maxPages(): number {
+    return this.localCapability.budget.maxPages;
+  }
+
+  get capacityTierLabel(): string {
+    switch (this.localCapability.tier) {
+      case 'maximum': return 'High-capacity device';
+      case 'high': return 'High-capacity device';
+      case 'standard': return 'Standard device';
+      default: return 'Conservative device profile';
     }
+  }
+
+  get capacitySummary(): string {
+    if (this.behavior?.allowMultiple) {
+      return `Up to ${this.maxFileMB} MB per file • ${this.maxTotalMB} MB total`;
+    }
+    return `Up to ${this.maxFileMB} MB per file`;
+  }
+
+  get hasBlockedWorkload(): boolean {
+    return this.workloadAssessment?.risk === 'blocked';
+  }
+
+  get workloadIsLarge(): boolean {
+    return this.workloadAssessment?.risk === 'large' || this.workloadAssessment?.risk === 'high-risk';
+  }
+
+  get workloadMessage(): string {
+    const assessment = this.workloadAssessment;
+    if (!assessment || !this.workspace.files.length) return '';
+    if (!assessment.workload.knownPageCount) return 'Checking PDF workload; page limits will be verified before processing.';
+    if (assessment.risk === 'blocked') return assessment.reasons[0] ?? 'This workload cannot be processed locally on this device.';
+    if (assessment.risk === 'large' || assessment.risk === 'high-risk') {
+      return 'Large PDF workload. Processing may use significant device memory.';
+    }
+    return 'Ready for local processing.';
+  }
+
+  private refreshWorkloadAssessment(): void {
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess(
+      this.workspace.files,
+      this.workspace.pageCounts
+    );
+    this.applyWorkspaceValidationState();
+  }
+
+  private applyWorkspaceValidationState(): void {
+    const assessment = this.workloadAssessment;
+    this.workspace.workspaceFiles = this.workspace.workspaceFiles.map((item, index) => {
+      const pageCount = this.workspace.pageCounts[index] || 0;
+      let state: 'checking' | 'ready' | 'large' | 'blocked' = 'checking';
+      let message: string | undefined;
+
+      if (assessment.risk === 'blocked') {
+        state = 'blocked';
+        message = assessment.reasons[0];
+      } else if (pageCount > this.maxPages) {
+        state = 'blocked';
+        message = `This PDF exceeds the ${this.maxPages.toLocaleString()} page local-processing limit.`;
+      } else if (!assessment.workload.knownPageCount) {
+        state = 'checking';
+        message = 'Page count is being checked locally.';
+      } else if (assessment.risk === 'large' || assessment.risk === 'high-risk') {
+        state = 'large';
+        message = 'Large workload; processing may use significant device memory.';
+      } else if (pageCount > 0) {
+        state = 'ready';
+      }
+
+      return { ...item, validationState: state, validationMessage: message };
+    });
   }
 
   private setRecommendations() {
@@ -284,6 +373,8 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.loader.hide();
       this.toast.show('Workflow failed', 'error');
     } finally {
+      this.unregisterLoaderCancellation?.();
+      this.unregisterLoaderCancellation = null;
       this.workspace.loading = false;
       this.cd.markForCheck();
     }
@@ -326,6 +417,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     const startIndex = this.workspaceUpload.addFiles(selected,this.behavior.replaceOnUpload);
 
     this.handlePostUploadProcessing();
+    this.refreshWorkloadAssessment();
     this.queueInitialPreviews(startIndex);
     this.updateActiveFileAfterUpload(startIndex);
   }
@@ -364,7 +456,11 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   private queueInitialPreviews(startIndex: number): void {
-    const immediatePreviewCount = 5;
+    const pendingFiles = this.workspace.workspaceFiles.slice(startIndex);
+    const pendingBytes = pendingFiles.reduce((sum, item) => sum + item.file.size, 0);
+    // Preview only what is needed for the first viewport. Large local workloads
+    // should not pay the memory cost of rendering five PDFs before processing.
+    const immediatePreviewCount = pendingBytes >= 150 * 1024 * 1024 ? 1 : Math.min(3, pendingFiles.length);
     const end = Math.min(startIndex + immediatePreviewCount, this.workspace.workspaceFiles.length);
     for (let i = startIndex; i < end; i++) {
       const item = this.workspace.workspaceFiles[i];
@@ -404,46 +500,22 @@ export class ToolComponent implements OnInit, OnDestroy {
   // =====================
   private validateFiles(newFiles: File[]): File[] {
     const valid: File[] = [];
-    let currentTotalMB = this.workspace.files.reduce((a, f) => a + f.size, 0) / (1024 * 1024);
+    const existing = [...this.workspace.files];
+
     for (const file of newFiles) {
-      // ❌ type check
-      if (file.type !== 'application/pdf') {
-        this.toast.show('Only PDF files are allowed', 'error');
-        continue;
-      }
-
-      const fileMB = file.size / (1024 * 1024);
-
-      // ❌ per file size
-      // if (fileMB > this.MAX_FILE_MB) {
-      //   this.toast.show(
-      //     `${file.name} exceeds ${this.MAX_FILE_MB} MB limit`,
-      //     'error'
-      //   );
-      //   continue;
-      // }
-
-      // // ❌ total size
-      // if (currentTotalMB + fileMB > this.MAX_TOTAL_MB) {
-      //   this.toast.show(
-      //     `Total size cannot exceed ${this.MAX_TOTAL_MB} MB`,
-      //     'error'
-      //   );
-      //   break;
-      // }
-
-      // ❌ duplicate
-      const isDuplicate = this.workspace.files.some(
-        f => f.name === file.name && f.size === file.size
+      const result = this.pdfValidation.validateSelection(
+        file,
+        [...existing, ...valid],
+        this.behavior.allowMultiple
       );
 
-      if (isDuplicate) {
-        this.toast.show(`${file.name} already added`, 'info');
+      if (!result.valid) {
+        const level = result.code === 'duplicate' ? 'info' : 'error';
+        if (result.message) this.toast.show(result.message, level);
         continue;
       }
 
       valid.push(file);
-      currentTotalMB += fileMB;
     }
 
     return valid;
@@ -678,6 +750,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       item.preview = result.preview;
       item.pageCount = result.pages;
       item.previewLoading = false;
+      this.refreshWorkloadAssessment();
       item.previewProgress = 100;
       this.updateWorkflow();
     } catch (e) {
@@ -746,6 +819,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     if (from === to) return;
     this.capturePositions();
     this.workspaceOps.reorder(from, to);
+    this.refreshWorkloadAssessment();
     this.resetDrag();
     setTimeout(() => {
       this.animateReorder();
@@ -771,6 +845,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     }
 
     this.workspaceOps.removeFile(i);
+    this.refreshWorkloadAssessment();
     this.toast.show('File removed', 'info', 4000, {
       actions: [{ label: 'Undo', action: () => { this.workspaceOps.restoreFile(i, removedFile); } }]
     });
@@ -901,12 +976,32 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.toast.show('Please add at least 2 PDFs to merge', 'error');
       return;
     }
+    this.refreshWorkloadAssessment();
+    if (this.hasBlockedWorkload) {
+      this.toast.show(this.workloadMessage, 'error');
+      return;
+    }
     this.workspace.loading = true;
     this.toast.show('Merging started...', 'info');
     this.loader.show();
+    // Stop the loader's synthetic progress immediately; MergeEngine now reports
+    // real Worker stage/progress boundaries.
+    this.loader.setProgress?.(0);
     this.loader.setText('Merging PDFs...');
+    this.unregisterLoaderCancellation?.();
+    this.unregisterLoaderCancellation = this.loader.registerCancellationHandler(() => {
+      this.loader.setText('Cancelling merge...');
+      this.mergeEngine.cancel();
+    });
     try {
-      const result = await this.mergeEngine.merge(this.workspace.files, (p) => this.loader.setProgress?.(p));
+      const result = await this.mergeEngine.merge(
+        this.workspace.files,
+        (p) => this.loader.setProgress?.(p),
+        this.workspace.pageCounts,
+        {
+          onStage: (_stage, message) => this.loader.setText(message)
+        }
+      );
       this.downloadFile(result);
       await this.workspaceOutput.showResult({ file: result, previewGenerator: this.generatePreview.bind(this) });
       console.log('Merged Result Size:', result.size);
@@ -918,10 +1013,15 @@ export class ToolComponent implements OnInit, OnDestroy {
       }, 400);
     } catch (e) {
       console.error(e);
-      this.loader.setText('Merge failed...');
+      const message = e instanceof Error && e.message
+        ? e.message
+        : 'Merge failed. Please try again with a smaller workload.';
+      this.loader.setText('Merge could not be completed');
       setTimeout(() => this.loader.hide(), 500);
-      this.toast.show('Merge failed', 'error');
+      this.toast.show(message, 'error');
     } finally {
+      this.unregisterLoaderCancellation?.();
+      this.unregisterLoaderCancellation = null;
       this.workspace.loading = false;
       this.cd.markForCheck();
     }
@@ -932,6 +1032,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.workspace.activeIndex = -1;
     this.workspace.hasMerged = false;
     this.workspace.lastMergedUrl = null;
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
   }
 
   // =====================
@@ -1072,6 +1173,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   confirmClearAll() {
     this.workspace.previews.forEach(p => p && URL.revokeObjectURL(p));
     this.workspaceOps.clear();
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
     this.showClearDialog = false;
     this.toast.show(
       'All files removed',
@@ -1116,6 +1218,11 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.unregisterLoaderCancellation?.();
+    this.unregisterLoaderCancellation = null;
+    if (this.workspace.loading) {
+      this.mergeEngine.cancel();
+    }
     if (this.workspace.lastMergedUrl) {
       URL.revokeObjectURL(this.workspace.lastMergedUrl);
     }

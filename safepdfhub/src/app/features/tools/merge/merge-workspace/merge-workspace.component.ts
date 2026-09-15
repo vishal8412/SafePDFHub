@@ -58,6 +58,10 @@ touchCurrentX = 0;
 
   @Input() fileIds: string[] = [];
 
+  @Input() validationStates: Array<'checking' | 'ready' | 'large' | 'blocked' | undefined> = [];
+
+  @Input() validationMessages: Array<string | undefined> = [];
+
   // =====================
   // OUTPUTS
   // =====================

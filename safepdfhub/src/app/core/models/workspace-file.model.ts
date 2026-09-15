@@ -10,4 +10,6 @@ export interface WorkspaceFile {
   processing?: boolean;
   resultUrl?: string;
   previewQueued: boolean;
+  validationState?: 'checking' | 'ready' | 'large' | 'blocked';
+  validationMessage?: string;
 }

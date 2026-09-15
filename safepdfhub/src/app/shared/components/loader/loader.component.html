@@ -26,6 +26,16 @@
       <span class="typing"></span>
     </p>
 
+    @if (loader.cancellationAvailable()) {
+      <button
+        type="button"
+        class="loader-cancel-button"
+        (click)="loader.cancelActiveTask()"
+        aria-label="Cancel current operation">
+        Cancel
+      </button>
+    }
+
   </div>
 
 </div>

@@ -16,6 +16,11 @@ export class LoaderService {
   private minDuration = 600; // prevents flicker
 
   private progressInterval: any;
+  private cancellationHandler: (() => void) | null = null;
+  private cancellationRegistrationId = 0;
+  private _cancellationAvailable = signal(false);
+
+  cancellationAvailable = this._cancellationAvailable.asReadonly();
 
   private steps = [
     'Analyzing your PDF...',
@@ -101,6 +106,28 @@ export class LoaderService {
 
   }, 1200);
 }
+
+
+  /**
+   * Registers the cancellation action for the currently visible global loader.
+   * Returns an unregister function so the owner can release it in finally/ngOnDestroy.
+   */
+  registerCancellationHandler(handler: () => void): () => void {
+    const registrationId = ++this.cancellationRegistrationId;
+    this.cancellationHandler = handler;
+    this._cancellationAvailable.set(true);
+
+    return () => {
+      if (registrationId !== this.cancellationRegistrationId) return;
+      this.cancellationHandler = null;
+      this._cancellationAvailable.set(false);
+    };
+  }
+
+  /** Requests cancellation of the active operation, when one is registered. */
+  cancelActiveTask(): void {
+    this.cancellationHandler?.();
+  }
 
   setText(value: string) {
     this._text.set(value);

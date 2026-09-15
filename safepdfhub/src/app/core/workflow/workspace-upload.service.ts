@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 
 import { WorkspaceOperationsService } from '../services/workspace-operations.service';
+import type { WorkspaceFile } from '../models/workspace-file.model';
 import { WorkspaceStateService } from '../services/workspace-state.service';
 
 @Injectable({
@@ -20,7 +21,7 @@ export class WorkspaceUploadService {
         }
 
         const startIndex = this.workspace.files.length;
-        const items = files.map(file => ({
+        const items: WorkspaceFile[] = files.map((file): WorkspaceFile => ({
             id: crypto.randomUUID(),
             file,
             preview: '',
@@ -28,7 +29,8 @@ export class WorkspaceUploadService {
             previewLoading: false,
             previewProgress: 0,
             previewError: false,
-            previewQueued: false
+            previewQueued: false,
+            validationState: 'checking'
         }));
 
         this.workspaceOps.addFiles(items);

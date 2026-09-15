@@ -1,6 +1,21 @@
+import { isDevMode } from '@angular/core';
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
+  {
+    path: '__dev/qpdf-benchmark',
+    canMatch: [() => isDevMode()],
+    loadComponent: () =>
+      import('./pages/dev/qpdf-benchmark/qpdf-benchmark.component')
+        .then(m => m.QpdfBenchmarkComponent)
+  },
+  {
+    path: '__dev/qpdf-smoke',
+    canMatch: [() => isDevMode()],
+    loadComponent: () =>
+      import('./pages/dev/qpdf-smoke/qpdf-smoke.component')
+        .then(m => m.QpdfSmokeComponent)
+  },
   {
     path: '',
     loadComponent: () =>

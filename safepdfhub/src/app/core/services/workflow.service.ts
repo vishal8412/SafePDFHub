@@ -47,7 +47,7 @@ export class WorkflowService {
       if (step === 'merge') {
         const merged = await this.mergeEngine.merge(workingFiles, (p) => {
           onProgress?.(this.mapProgress(p, currentStep, totalSteps), 'merge');
-        });
+        }, pageCounts);
 
         workingFiles = [merged];
       }

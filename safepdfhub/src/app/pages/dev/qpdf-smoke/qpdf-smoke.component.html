@@ -1,0 +1,51 @@
+<div class="shell">
+  <h1>SafePDFHub qpdf WASM Smoke Test</h1>
+  <p>
+    Development-only validation page. PDF files remain in this browser. This test compares
+    the qpdf WASM prototype against the existing pdf-lib Worker and does not change production
+    engine selection or capacity limits.
+  </p>
+
+  <section class="panel">
+    <label for="pdfs">PDF files</label>
+    <input id="pdfs" type="file" accept="application/pdf,.pdf" multiple (change)="onFilesSelected($event)" [disabled]="running" />
+
+    <button type="button" (click)="run()" [disabled]="running || selectedFiles.length < 2 || !browserAvailable">
+      {{ running ? 'Running...' : 'Run qpdf smoke test' }}
+    </button>
+
+    <div class="progress" aria-hidden="true">
+      <div [style.width.%]="progress"></div>
+    </div>
+    <p>{{ statusMessage }}</p>
+
+    @if (result; as report) {
+      <div class="result">
+        <h2 [class.pass]="report.status === 'passed'" [class.fail]="report.status === 'failed'">
+          {{ report.status === 'passed' ? 'PASS' : 'REVIEW / FAIL' }}
+        </h2>
+
+        <dl>
+          <dt>Input files</dt><dd>{{ report.inputFileCount }}</dd>
+          <dt>Input pages</dt><dd>{{ report.inputPageCount }}</dd>
+          <dt>qpdf duration</dt><dd>{{ report.qpdfDurationMs === null ? '—' : (report.qpdfDurationMs | number:'1.0-0') + ' ms' }}</dd>
+          <dt>qpdf output pages</dt><dd>{{ report.qpdfOutput.pageCount ?? '—' }}</dd>
+          <dt>pdf-lib output pages</dt><dd>{{ report.pdfLibOutput.pageCount ?? '—' }}</dd>
+          <dt>Page count match</dt><dd>{{ report.comparison.pageCountMatch ? 'YES' : 'NO' }}</dd>
+          <dt>Page geometry match</dt><dd>{{ report.comparison.pageGeometryMatch ? 'YES' : 'NO' }}</dd>
+          <dt>qpdf parseable</dt><dd>{{ report.qpdfOutput.parseable ? 'YES' : 'NO' }}</dd>
+          <dt>pdf-lib parseable</dt><dd>{{ report.pdfLibOutput.parseable ? 'YES' : 'NO' }}</dd>
+        </dl>
+
+        @if (report.errorMessage) {
+          <p class="fail"><strong>{{ report.errorMessage }}</strong></p>
+        }
+      </div>
+    }
+
+    <p class="note">
+      This smoke test is evidence gathering only. A successful run does not authorize a public
+      capacity increase or automatic qpdf fallback.
+    </p>
+  </section>
+</div>

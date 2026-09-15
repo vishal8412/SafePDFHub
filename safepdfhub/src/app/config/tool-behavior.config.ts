@@ -28,6 +28,8 @@ export interface ToolBehavior {
   showQuickActions?: boolean;
 
   primaryActionText?: string;
+  maxFilesOverride?: number;
+  maxPagesOverride?: number;
 }
 
 export const TOOL_BEHAVIORS: ToolBehavior[] = [
@@ -54,7 +56,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
     uploadButtonText: 'Select PDF files',
 
     uploadHint:
-      'Max per file: 100 MB • Max total: 400 MB',
+      'Capacity is adjusted for your device • PDF files stay on your device',
 
     showWorkflowSuggestions: true,
 
@@ -85,7 +87,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
     uploadButtonText: 'Select PDF File',
 
     uploadHint:
-      'Supports single PDF up to 100 MB',
+      'Capacity is adjusted for your device • PDF stays on your device',
 
     autoAnalyze: true,
 
@@ -118,7 +120,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
     uploadButtonText: 'Select PDF',
 
     uploadHint:
-      'Supports single PDF up to 100 MB',
+      'Capacity is adjusted for your device • PDF stays on your device',
 
     showQuickActions: true,
 
