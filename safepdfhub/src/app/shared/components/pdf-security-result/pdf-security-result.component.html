@@ -31,9 +31,6 @@
 
   <div class="security-result__actions">
     <button type="button" class="security-result__primary" (click)="download.emit()">{{ actionLabel }} <span>↓</span></button>
-    @if (result.mode !== 'protect') {
-      <button type="button" class="security-result__secondary" (click)="protectAgain.emit()">Protect this PDF again →</button>
-    }
     <button type="button" class="security-result__secondary" (click)="processAnother.emit()">Process another PDF</button>
   </div>
 </section>

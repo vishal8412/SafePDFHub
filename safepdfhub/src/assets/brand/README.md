@@ -1,13 +1,27 @@
 # SafePDFHub Brand Assets
 
-- `safepdfhub-logo-primary.svg` — approved primary full lockup for dark website surfaces. Uses the SafePDFHub cyan/blue brand palette and the compact tagline `PRIVATE PDF TOOLS · BUILT FOR YOU.`.
-- `safepdfhub-logo-dark.svg` — legacy dark full lockup retained for compatibility.
-- `safepdfhub-logo-light.svg` — legacy full lockup for light surfaces.
-- `safepdfhub-mark.svg` — standalone shield/document mark for compact UI, cards and app identity.
+## Approved identity assets
+
+- `safepdfhub-mark.svg` — standalone SafePDFHub symbol for compact UI, favicon/app identity and brand applications.
+- `safepdfhub-logo-navbar.svg` — compact horizontal lockup for the global website navigation. It intentionally omits the tagline so the navigation stays visually compact.
+- `safepdfhub-logo-primary.svg` — primary full lockup for dark website surfaces, including the tagline.
+- `safepdfhub-logo-dark.svg` — dark-surface full lockup retained for compatibility.
+- `safepdfhub-logo-light.svg` — light-surface full lockup.
 - `favicon.svg` — browser/app icon derived from the standalone mark.
 
-## Brand usage
+## Symbol direction
 
-The application should use `safepdfhub-logo-primary.svg` for the header, footer and loading screen. The standalone `safepdfhub-mark.svg` is used where a compact mark is more appropriate, such as the home manifesto and app identity.
+The SafePDFHub symbol combines a shield and a folded document using one consistent custom geometry. The document is centered on the shield axis and uses the stepped three-line signature retained across the brand family.
 
-The primary lockup keeps the slogan intentionally small so the brand name remains the visual focus. Orange is reserved for primary action buttons elsewhere in the product rather than the logo.
+This is an original brand-asset design direction, but it must not be described as legally exclusive or trademark-cleared until a formal trademark/design clearance search has been completed.
+
+## Usage
+
+- Global navbar: `safepdfhub-logo-navbar.svg`
+- Landing/footer/loading: `safepdfhub-logo-primary.svg`
+- Compact/app identity: `safepdfhub-mark.svg`
+- Favicon: `favicon.svg`
+
+The navbar lockup is designed around a 72px desktop header and a 64px mobile header. Do not reintroduce the tagline into the navbar unless there is a deliberate brand-system change.
+
+Orange remains reserved for primary action buttons elsewhere in the product rather than the logo.

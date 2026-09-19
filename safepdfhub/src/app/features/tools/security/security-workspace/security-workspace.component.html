@@ -5,7 +5,6 @@
       [originalFileName]="file?.name || ''"
       (download)="downloadResult.emit()"
       (processAnother)="processAnother.emit()"
-      (protectAgain)="protectAgain.emit()"
     />
   } @else {
     <div class="security-workspace__topbar">
@@ -24,38 +23,14 @@
     </div>
 
     @if (file) {
-      @if (mode === 'protect' && encryptionStatus === 'encrypted') {
-        <div class="security-workspace__warning" role="alert">
-          <div class="security-workspace__warning-icon">🔐</div>
-          <div class="security-workspace__warning-content">
-            <strong>This PDF is already password-protected.</strong>
-            <p>Protect PDF cannot safely add a second password. Unlock this PDF first with its current password, then protect the unlocked copy with your new password.</p>
-            <button type="button" class="security-workspace__warning-action" [disabled]="busy" (click)="unlockFirst.emit()">
-              Unlock PDF first →
-            </button>
-          </div>
-        </div>
-      } @else if ((mode === 'unlock' || mode === 'remove-password') && encryptionStatus === 'not-encrypted') {
-        <div class="security-workspace__warning" role="status">
-          <div class="security-workspace__warning-icon">ℹ️</div>
-          <div class="security-workspace__warning-content">
-            <strong>No PDF password protection was detected.</strong>
-            <p>This tool removes an existing PDF password. To add password protection, use Protect PDF instead.</p>
-            <button type="button" class="security-workspace__warning-action" [disabled]="busy" (click)="replaceFile.emit()">
-              Choose another PDF →
-            </button>
-          </div>
-        </div>
-      } @else {
-        <app-pdf-security-form
-          [mode]="mode"
-          [fileName]="file.name"
-          [busy]="busy"
-          [errorMessage]="errorMessage"
-          (submitted)="onSubmit($event)"
-          (cancelled)="replaceFile.emit()"
-        />
-      }
+      <app-pdf-security-form
+        [mode]="mode"
+        [fileName]="file.name"
+        [busy]="busy"
+        [errorMessage]="errorMessage"
+        (submitted)="onSubmit($event)"
+        (cancelled)="replaceFile.emit()"
+      />
 
       @if (busy) {
         <div class="security-workspace__progress" aria-live="polite">

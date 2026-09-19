@@ -30,14 +30,11 @@ export class SecurityWorkspaceComponent {
   @Input() progress = 0;
   @Input() errorMessage: string | null = null;
   @Input() result: PdfSecurityResult | null = null;
-  @Input() encryptionStatus: 'encrypted' | 'not-encrypted' | 'unknown' = 'unknown';
 
   @Output() readonly replaceFile = new EventEmitter<void>();
   @Output() readonly submit = new EventEmitter<PdfSecurityRequest>();
   @Output() readonly downloadResult = new EventEmitter<void>();
   @Output() readonly processAnother = new EventEmitter<void>();
-  @Output() readonly unlockFirst = new EventEmitter<void>();
-  @Output() readonly protectAgain = new EventEmitter<void>();
 
   onSubmit(request: PdfSecurityRequest): void {
     this.submit.emit(request);

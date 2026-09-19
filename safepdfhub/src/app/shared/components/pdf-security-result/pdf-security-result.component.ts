@@ -16,7 +16,6 @@ export class PdfSecurityResultComponent {
 
   @Output() readonly download = new EventEmitter<void>();
   @Output() readonly processAnother = new EventEmitter<void>();
-  @Output() readonly protectAgain = new EventEmitter<void>();
 
   get title(): string {
     switch (this.result.mode) {

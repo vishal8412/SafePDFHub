@@ -72,13 +72,10 @@
     [progress]="securityProgress"
     [errorMessage]="securityErrorMessage"
     [result]="securityResult"
-    [encryptionStatus]="securityEncryptionStatus"
     (replaceFile)="triggerUpload()"
     (submit)="runSecurityOperation($event)"
-    (unlockFirst)="openUnlockForCurrentFile()"
     (downloadResult)="downloadSecurityResult()"
     (processAnother)="processAnotherSecurityPdf()"
-    (protectAgain)="protectSecurityResult()"
   />
 
   <!-- =========================
@@ -129,8 +126,6 @@
   [showResult]="showSplitResult"
 
   [generatedFiles]="generatedSplitFiles"
-  [validationBlocked]="hasInvalidFiles || hasBlockedWorkload"
-  [validationMessage]="workspace.workspaceFiles[0]?.validationMessage || workloadMessage"
 
   (changePdf)="splitPdfUpload()"
   (downloadZip)="downloadZipAgain()"
@@ -154,8 +149,6 @@
   [estimatedFinalSize]="compressionState.estimatedFinalSize"
 
   [compressionLevel]="compressionState.compressionLevel"
-  [validationBlocked]="hasInvalidFiles || hasBlockedWorkload"
-  [validationMessage]="workspace.workspaceFiles[0]?.validationMessage || workloadMessage"
   [pdfInsights]="compressionState.pdfInsights"
 
   (compressionLevelChange)="compressionState.compressionLevel = $event; analyzeCompression();"
@@ -181,7 +174,7 @@
     <button
       class="merge-btn"
       (click)="mergePdf()"
-      [disabled]="!canProcessWorkspace || workspace.files.length < 2"
+      [disabled]="workspace.loading || workspace.files.length < 2 || hasBlockedWorkload"
     >
       {{ workspace.loading ? 'Merging...' : 'Merge ' + workspace.files.length + ' PDFs' }}
     </button>

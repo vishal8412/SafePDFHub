@@ -30,8 +30,6 @@ export class CompressWorkspaceComponent {
   @Input() loading = false;
   @Input() compressing = false;
   @Input() progress = 0;
-  @Input() validationBlocked = false;
-  @Input() validationMessage = '';
 
   @Output() compressionLevelChange = new EventEmitter<'light' | 'recommended' | 'strong'>();
   @Output() compress = new EventEmitter<void>();
@@ -56,7 +54,7 @@ export class CompressWorkspaceComponent {
   }
 
   startCompress() {
-    if (this.loading || this.validationBlocked) {
+    if (this.loading) {
       return;
     }
     this.compress.emit();

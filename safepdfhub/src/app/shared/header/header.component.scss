@@ -9,20 +9,19 @@
 
 .header-inner {
   width: min(1180px, calc(100% - 48px));
-  min-height: 88px;
+  height: 72px;
   margin: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 28px;
+  gap: 24px;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
-  width: 292px;
-  max-width: 42vw;
+  flex: 0 0 auto;
+  width: 238px;
   text-decoration: none;
   line-height: 0;
 }
@@ -31,7 +30,7 @@
   display: block;
   width: 100%;
   height: auto;
-  max-height: 68px;
+  max-height: 50px;
   object-fit: contain;
   object-position: left center;
 }
@@ -40,7 +39,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 31px;
+  gap: 26px;
 }
 
 .desktop-nav a {
@@ -65,13 +64,13 @@
 }
 
 .desktop-nav .nav-cta {
-  min-height: 50px;
-  padding: 0 20px;
+  min-height: 42px;
+  padding: 0 17px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   border: 1px solid rgba(25, 234, 211, 0.32);
-  border-radius: 13px;
+  border-radius: 11px;
   color: #dff9f6;
   background: rgba(25, 234, 211, 0.045);
 }
@@ -84,17 +83,17 @@
 
 .nav-cta b {
   color: #19ead3;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 500;
   line-height: 1;
 }
 
 .menu-btn {
   display: none;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 11px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.03);
   cursor: pointer;
 }
@@ -111,18 +110,19 @@
   display: none;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .header-inner {
-    min-height: 78px;
+    width: min(1180px, calc(100% - 36px));
+    height: 68px;
+    gap: 18px;
   }
 
   .logo {
-    width: 258px;
-    max-width: 50vw;
+    width: 224px;
   }
 
   .desktop-nav {
-    gap: 20px;
+    gap: 18px;
   }
 
   .desktop-nav a {
@@ -130,15 +130,15 @@
   }
 
   .desktop-nav .nav-cta {
-    min-height: 44px;
-    padding: 0 15px;
+    min-height: 40px;
+    padding-inline: 14px;
   }
 }
 
 @media (max-width: 760px) {
   .header-inner {
     width: calc(100% - 30px);
-    min-height: 70px;
+    height: 64px;
   }
 
   .desktop-nav {
@@ -146,17 +146,17 @@
   }
 
   .logo {
-    width: 228px;
-    max-width: calc(100vw - 85px);
+    width: 218px;
+    max-width: calc(100vw - 78px);
   }
 
   .logo img {
-    max-height: 56px;
+    max-height: 48px;
   }
 
   .menu-btn {
     display: block;
-    flex: 0 0 42px;
+    flex: 0 0 40px;
   }
 
   .mobile-menu {
@@ -187,7 +187,7 @@
 
 @media (max-width: 430px) {
   .logo {
-    width: 210px;
-    max-width: calc(100vw - 78px);
+    width: 204px;
+    max-width: calc(100vw - 72px);
   }
 }

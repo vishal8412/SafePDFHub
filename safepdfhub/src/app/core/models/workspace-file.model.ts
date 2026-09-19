@@ -12,5 +12,4 @@ export interface WorkspaceFile {
   previewQueued: boolean;
   validationState?: 'checking' | 'ready' | 'large' | 'blocked';
   validationMessage?: string;
-  validationCode?: import('../capacity/local-processing-capability.model').PdfValidationCode;
 }

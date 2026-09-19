@@ -1,0 +1,31 @@
+<svg width="246" height="52" viewBox="0 0 246 52" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">SafePDFHub</title>
+  <desc id="desc">SafePDFHub</desc>
+  <defs>
+    <linearGradient id="sphNavShield" x1="4" y1="4" x2="44" y2="45" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#27E6D4"/>
+      <stop offset="0.52" stop-color="#12BFEA"/>
+      <stop offset="1" stop-color="#1675E8"/>
+    </linearGradient>
+    <linearGradient id="sphNavPaper" x1="18" y1="18" x2="43" y2="43" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22E1D0"/>
+      <stop offset="1" stop-color="#4AAFFF"/>
+    </linearGradient>
+    <linearGradient id="sphNavHub" x1="150" y1="18" x2="202" y2="37" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#19EAD3"/>
+      <stop offset="1" stop-color="#59BFFF"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(1 1)">
+    <path d="M25 2.5 45 9.8v16C45 38.5 37.6 45.9 25 51.5 12.4 45.9 5 38.5 5 25.8v-16L25 2.5Z" fill="url(#sphNavShield)"/>
+    <path d="M25 7.5 40 12.9v12.8c0 8.9-5 15.3-15 19.9-10-4.6-15-11-15-19.9V12.9L25 7.5Z" fill="#071B2C"/>
+    <path d="M17.8 16.1h11.1l4.6 4.6v17.2H17.8V16.1Z" fill="#071B2C" stroke="url(#sphNavPaper)" stroke-width="1.65" stroke-linejoin="round"/>
+    <path d="M28.9 16.1v4.6h4.6" stroke="url(#sphNavPaper)" stroke-width="1.65" stroke-linejoin="round"/>
+    <path d="M21.2 24.1h8.9M21.2 28.5h7.2M21.2 32.9h4.8" stroke="url(#sphNavPaper)" stroke-width="1.9" stroke-linecap="round"/>
+  </g>
+
+  <text x="57" y="33" font-family="Inter, Arial, Helvetica, sans-serif" font-size="27" font-weight="720" letter-spacing="-1.05">
+    <tspan fill="#F3F7FA">SafePDF</tspan><tspan fill="url(#sphNavHub)">Hub</tspan>
+  </text>
+</svg>
