@@ -1,7 +1,8 @@
 import {
   Injectable,
   computed,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 
 import { LoaderService } from '../../../shared/services/loader.service';
@@ -20,6 +21,7 @@ import { StudioToolId } from '../models/studio-tool.model';
 import { StudioObjectService } from '../services/studio-object.service';
 import { StudioSelection } from '../models/studio-selection.model';
 import type {
+  StudioObject,
   StudioImageData,
   StudioTextStyle,
   StudioShapeKind,
@@ -29,6 +31,9 @@ import type {
   StudioLinkData
 } from '../models/studio-selection.model';
 import { StudioPdfExportService } from '../services/studio-pdf-export.service';
+import { PdfSecurityService } from '../../../core/security/pdf-security.service';
+import type { PdfSecurityMode, PdfSecurityRequest } from '../../../core/security/pdf-security.types';
+import { saveAs } from 'file-saver';
 import { StudioPageService } from '../services/studio-page.service';
 import {
   StudioHistoryService,
@@ -74,6 +79,9 @@ export class StudioFacade {
 
   private readonly history =
     inject(StudioHistoryService);
+
+  private readonly pdfSecurity =
+    inject(PdfSecurityService);
 
   /**
    * F6.3 — One live pointer transform is treated as one history mutation.
@@ -150,6 +158,16 @@ export class StudioFacade {
   readonly canRedo =
     this.history.canRedo;
 
+  readonly passwordPromptOpen = signal(false);
+  readonly passwordPromptFileName = signal('');
+  readonly passwordPromptError = signal<string | null>(null);
+  readonly securityDialogOpen = signal(false);
+  readonly securityDialogMode = signal<PdfSecurityMode>('protect');
+  readonly securityDialogBusy = signal(false);
+  readonly securityDialogError = signal<string | null>(null);
+
+  private pendingPasswordFile: File | null = null;
+
   /** F7.2 — Saved comments only, sorted newest first. */
   readonly comments = computed(() => {
     this.objectService.changes();
@@ -174,7 +192,7 @@ export class StudioFacade {
    * This method intentionally owns the workflow.
    * Components should never call PdfEngineService directly.
    */
-  async loadPdf(file: File): Promise<void> {
+  async loadPdf(file: File, password?: string): Promise<void> {
     if (this.isLoading()) {
       return;
     }
@@ -206,7 +224,7 @@ export class StudioFacade {
        * if the new PDF fails, the old PDF remains usable.
        */
       const newDocument =
-        await this.pdfEngine.loadFile(file);
+        await this.pdfEngine.loadFile(file, password);
 
       const previousDocument =
         this.document();
@@ -282,6 +300,22 @@ export class StudioFacade {
       );
 
     } catch (error: unknown) {
+      if (!password && this.isPasswordRequiredError(error)) {
+        this.pendingPasswordFile = file;
+        this.passwordPromptFileName.set(file.name);
+        this.passwordPromptError.set(null);
+        this.passwordPromptOpen.set(true);
+        this.state.setError('Password required to open this PDF.');
+        this.loader.hide();
+        return;
+      }
+
+      if (password && this.isInvalidSecurityPasswordError(error)) {
+        this.passwordPromptError.set('The password is incorrect. Please try again.');
+        this.state.setError('The PDF password was incorrect.');
+        return;
+      }
+
       const message =
         this.getLoadErrorMessage(error);
 
@@ -306,6 +340,156 @@ export class StudioFacade {
     } finally {
       this.loader.hide();
     }
+  }
+
+  submitPdfPassword(password: string): void {
+    const file = this.pendingPasswordFile;
+    const value = password.trim();
+
+    if (!file || !value) {
+      this.passwordPromptError.set('Enter the PDF password.');
+      return;
+    }
+
+    this.passwordPromptError.set(null);
+    void this.loadPdf(file, value).then(() => {
+      if (this.hasDocument()) {
+        this.passwordPromptOpen.set(false);
+        this.pendingPasswordFile = null;
+      }
+    });
+  }
+
+  cancelPdfPasswordPrompt(): void {
+    if (this.isLoading()) return;
+    this.passwordPromptOpen.set(false);
+    this.passwordPromptError.set(null);
+    this.pendingPasswordFile = null;
+  }
+
+  openSecurityDialog(mode: PdfSecurityMode): void {
+    if (!this.hasDocument()) return;
+    this.securityDialogMode.set(mode);
+    this.securityDialogError.set(null);
+    this.securityDialogOpen.set(true);
+  }
+
+  closeSecurityDialog(): void {
+    if (this.securityDialogBusy()) return;
+    this.securityDialogOpen.set(false);
+    this.securityDialogError.set(null);
+  }
+
+  async runSecurityOperation(request: PdfSecurityRequest): Promise<void> {
+    const document = this.document();
+    if (!document || this.securityDialogBusy()) return;
+
+    this.securityDialogBusy.set(true);
+    this.securityDialogError.set(null);
+    this.loader.show('Applying PDF security...');
+    this.loader.setProgress?.(0);
+    this.loader.setText('Preparing PDF security operation...');
+
+    try {
+      if (request.mode !== 'protect' && document.sourceWasProtected) {
+        // Verify the supplied password against the original protected source.
+        // The returned decrypted bytes are intentionally kept only in memory.
+        await this.pdfSecurity.unlock(
+          document.sourceFile ?? document.file,
+          request.password,
+          progress => {
+            this.loader.setProgress?.(progress);
+            this.loader.setText('Verifying PDF password locally...');
+          }
+        );
+      }
+
+      const sourceBlob = await this.pdfExportService.exportTextObjects(
+        document.file,
+        this.collectAllObjects(),
+        this.pages()
+      );
+
+      const exportedFile = new File(
+        [sourceBlob],
+        document.file.name,
+        { type: 'application/pdf' }
+      );
+
+      let outputFile = exportedFile;
+
+      if (request.mode === 'protect') {
+        const result = await this.pdfSecurity.protect(
+          exportedFile,
+          {
+            userPassword: request.password,
+            permissions: request.permissions ?? {
+              allowPrinting: true,
+              allowCopying: true,
+              allowModifying: false,
+              allowAnnotations: true,
+              allowForms: true,
+              allowAssembly: false
+            },
+            bits: 256
+          },
+          progress => {
+            this.loader.setProgress?.(progress);
+            this.loader.setText('Encrypting PDF locally...');
+          }
+        );
+        outputFile = result.file;
+      }
+
+      saveAs(outputFile, request.mode === 'protect'
+        ? outputFile.name
+        : this.securityOutputName(document.file.name, request.mode));
+      this.securityDialogOpen.set(false);
+      this.toast.show(
+        request.mode === 'protect'
+          ? 'Protected PDF exported successfully.'
+          : request.mode === 'unlock'
+            ? 'Unlocked PDF exported successfully.'
+            : 'Password-free PDF exported successfully.',
+        'success'
+      );
+    } catch (error: unknown) {
+      const message = error instanceof Error
+        ? error.message
+        : 'PDF security operation failed.';
+      this.securityDialogError.set(message);
+      this.toast.show(message, 'error');
+    } finally {
+      this.securityDialogBusy.set(false);
+      this.loader.hide();
+    }
+  }
+
+  private securityOutputName(name: string, mode: PdfSecurityMode): string {
+    const base = name.replace(/\.pdf$/i, '') || 'document';
+    const suffix = mode === 'unlock' ? 'unlocked' : 'password-removed';
+    return `${base}_${suffix}.pdf`;
+  }
+
+  private collectAllObjects(): readonly StudioObject[] {
+    return Array.from(
+      { length: this.pageCount() },
+      (_, index) => this.objectService.listForPage(index + 1)
+    ).flat();
+  }
+
+  private isPasswordRequiredError(error: unknown): boolean {
+    if (error && typeof error === 'object' && 'name' in error) {
+      return String((error as { name?: unknown }).name) === 'PasswordException';
+    }
+    return false;
+  }
+
+  private isInvalidSecurityPasswordError(error: unknown): boolean {
+    return error instanceof Error && (
+      error.name === 'PdfSecurityError' ||
+      error.message.toLowerCase().includes('password')
+    );
   }
 
   /**
@@ -1079,8 +1263,7 @@ fitWidth(): void {
         name === 'PasswordException'
       ) {
         return (
-          'This PDF is password protected. ' +
-          'Password handling will be available in a later Studio feature.'
+          'This PDF is password protected. Enter the password to continue.'
         );
       }
     }

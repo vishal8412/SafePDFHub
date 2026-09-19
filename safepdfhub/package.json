@@ -7,7 +7,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "serve:ssr:safepdfhub": "node dist/safepdfhub/server/server.mjs"
+    "serve:ssr:safepdfhub": "node dist/safepdfhub/server/server.mjs",
+    "benchmark:large-pdf:browser": "python scripts/phase1.5-browser-benchmark.py --start-server"
   },
   "private": true,
   "packageManager": "npm@10.9.7",
@@ -30,7 +31,8 @@
     "pdfjs-dist": "5.3.31",
     "qpdf-run": "0.2.1",
     "rxjs": "~7.8.0",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "@neslinesli93/qpdf-wasm": "0.3.0"
   },
   "devDependencies": {
     "@angular/build": "^21.2.0",

@@ -3,9 +3,12 @@ import { Injectable } from '@angular/core';
 import type {
   QpdfRunRequest,
   QpdfRunResult,
-  QpdfWasmRunner,
   QpdfWasmRunnerFactory
 } from './qpdf-wasm.types';
+import {
+  QpdfWasmRuntimeService,
+  createBrowserQpdfRunnerFactory
+} from './qpdf-wasm-runtime.service';
 
 /**
  * Phase 0D qpdf WASM prototype service.
@@ -17,8 +20,11 @@ import type {
  */
 @Injectable({ providedIn: 'root' })
 export class QpdfWasmPrototypeService {
-  private activeRunner: QpdfWasmRunner | null = null;
   private cancelled = false;
+
+  constructor(
+    private readonly runtime: QpdfWasmRuntimeService
+  ) {}
 
   async merge(
     files: readonly File[],
@@ -69,47 +75,41 @@ export class QpdfWasmPrototypeService {
 
     this.throwIfCancelled();
 
-    const runner = await runnerFactory.create();
+    onProgress?.(45);
 
-    this.activeRunner = runner;
+    const result = await this.runtime.run(
+      request,
+      progress => {
+        onProgress?.(45 + Math.round(progress * 0.5));
+      },
+      runnerFactory
+    );
 
-    try {
-      onProgress?.(45);
+    this.throwIfCancelled();
 
-      const result = await runner.run(request);
-
-      this.throwIfCancelled();
-
-      if (!result.ok || result.exitCode !== 0) {
-        throw new Error(this.formatQpdfError(result));
-      }
-
-      const output = result.outputs[outputName];
-
-      if (!output) {
-        throw new Error(
-          'QPDF prototype did not return the merged PDF output.'
-        );
-      }
-
-      onProgress?.(95);
-
-      const outputBuffer = toArrayBuffer(output);
-
-      onProgress?.(100);
-
-      return new File(
-        [outputBuffer],
-        outputName,
-        { type: 'application/pdf' }
-      );
-    } finally {
-      if (this.activeRunner === runner) {
-        this.activeRunner = null;
-      }
-
-      await runner.destroy?.();
+    if (!result.ok || result.exitCode !== 0) {
+      throw new Error(this.formatQpdfError(result));
     }
+
+    const output = result.outputs[outputName];
+
+    if (!output) {
+      throw new Error(
+        'QPDF prototype did not return the merged PDF output.'
+      );
+    }
+
+    onProgress?.(95);
+
+    const outputBuffer = toArrayBuffer(output);
+
+    onProgress?.(100);
+
+    return new File(
+      [outputBuffer],
+      outputName,
+      { type: 'application/pdf' }
+    );
   }
 
   /**
@@ -118,12 +118,7 @@ export class QpdfWasmPrototypeService {
    */
   async cancel(): Promise<void> {
     this.cancelled = true;
-
-    const runner = this.activeRunner;
-
-    this.activeRunner = null;
-
-    await runner?.destroy?.();
+    await this.runtime.cancel();
   }
 
   private throwIfCancelled(): void {
@@ -166,79 +161,6 @@ export class QpdfPrototypeCancelledError extends Error {
     super('QPDF prototype merge was cancelled.');
     this.name = 'QpdfPrototypeCancelledError';
   }
-}
-
-/**
- * Adapter between the real qpdf-run API and our SafePDFHub
- * QpdfWasmRunner abstraction.
- *
- * Important:
- * qpdf-run's runner is NOT structurally identical to our interface
- * because its run() method expects its own QpdfRunOptions type.
- *
- * We therefore adapt it explicitly instead of casting it.
- */
-function createBrowserQpdfRunnerFactory(): QpdfWasmRunnerFactory {
-  return {
-    async create(): Promise<QpdfWasmRunner> {
-      const module = await import('qpdf-run');
-
-      const workerUrl = new URL(
-        'qpdf-run/worker',
-        import.meta.url
-      ).href;
-
-      const qpdfJsUrl = new URL(
-        'qpdf-run/qpdf.js',
-        import.meta.url
-      ).href;
-
-      const wasmUrl = new URL(
-        'qpdf-run/qpdf.wasm',
-        import.meta.url
-      ).href;
-
-      const qpdf = await module.createQpdfRunner({
-        workerUrl,
-        qpdfJsUrl,
-        wasmUrl,
-        timeoutMs: 15 * 60 * 1000,
-        env: 'browser'
-      });
-
-      return {
-        run: async (
-          request: QpdfRunRequest
-        ): Promise<QpdfRunResult> => {
-          /*
-           * qpdf-run expects mutable string[].
-           *
-           * Our internal contract intentionally exposes readonly arrays,
-           * so create fresh mutable arrays at this boundary.
-           */
-          const result = await qpdf.run({
-            inputs: request.inputs,
-            args: [...request.args],
-            outputs: [...request.outputs]
-          });
-
-          return {
-            ok: result.ok,
-            outputs: result.outputs,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            warnings: result.warnings,
-            exitCode: result.exitCode,
-            durationMs: result.durationMs
-          };
-        },
-
-        destroy: async (): Promise<void> => {
-          await qpdf.destroy();
-        }
-      };
-    }
-  };
 }
 
 /**

@@ -1838,3 +1838,79 @@ app-studio-status-bar {
     transform: translateX(-50%);
   }
 }
+
+.studio-security-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(15, 23, 42, .48);
+  backdrop-filter: blur(6px);
+}
+
+.studio-security-dialog__panel {
+  width: min(520px, 100%);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 28px 90px rgba(15, 23, 42, .28);
+}
+
+.studio-security-dialog__panel--security {
+  width: min(620px, 100%);
+  padding: 20px;
+}
+
+.studio-security-dialog__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 22px 0;
+}
+
+.studio-security-dialog__panel--security .studio-security-dialog__header { padding: 0; }
+.studio-security-dialog__eyebrow { display: block; color: #64748b; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.studio-security-dialog__header h2 { margin: 5px 0 0; font-size: 21px; }
+.studio-security-dialog__header p { margin: 5px 0 0; color: #64748b; font-size: 13px; }
+
+.studio-security-dialog__close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 0;
+  border-radius: 9px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.studio-security-dialog__field { display: grid; gap: 7px; padding: 22px; }
+.studio-security-dialog__field span { font-size: 13px; font-weight: 700; color: #334155; }
+.studio-security-dialog__field input { padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; outline: none; }
+.studio-security-dialog__field input:focus { border-color: #64748b; box-shadow: 0 0 0 3px rgba(100,116,139,.12); }
+
+.studio-security-dialog__modes { display: flex; gap: 7px; margin: 18px 0 14px; padding: 4px; border-radius: 11px; background: #f1f5f9; }
+.studio-security-dialog__modes button { flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: transparent; color: #64748b; font-size: 12px; font-weight: 800; cursor: pointer; }
+.studio-security-dialog__modes button.is-active { background: #fff; color: #0f172a; box-shadow: 0 1px 5px rgba(15,23,42,.08); }
+
+.studio-security-dialog__panel > app-pdf-security-form { display: block; }
+.studio-security-dialog__panel--security app-pdf-security-form .security-form { box-shadow: none; padding: 0; border: 0; }
+.studio-security-dialog__panel--security app-pdf-security-form .security-form__header { display: none; }
+
+.studio-security-dialog__error { margin: 0 22px 14px; padding: 10px 12px; border-radius: 10px; background: #fef2f2; color: #b91c1c; font-size: 13px; }
+.studio-security-dialog__actions { display: flex; justify-content: flex-end; gap: 10px; padding: 0 22px 22px; }
+.studio-security-dialog__actions button { min-height: 40px; padding: 0 15px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+.studio-security-dialog__secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
+.studio-security-dialog__primary { border: 1px solid #0f172a; background: #0f172a; color: #fff; }
+.studio-security-dialog__actions button:disabled { opacity: .55; cursor: not-allowed; }
+
+@media (max-width: 760px) {
+  .studio-security-dialog { padding: 12px; }
+  .studio-security-dialog__panel--security { padding: 14px; }
+  .studio-security-dialog__modes button { font-size: 11px; }
+}

@@ -48,6 +48,9 @@ export class StudioHeader {
   exportPdf = new EventEmitter<void>();
 
   @Output()
+  security = new EventEmitter<void>();
+
+  @Output()
   undo = new EventEmitter<void>();
 
   @Output()

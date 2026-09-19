@@ -1,0 +1,703 @@
+#!/usr/bin/env python3
+"""Apply SafePDFHub F2 bulk AES-CBC optimization to qpdf 12.4.1.
+
+This patch is deliberately tolerant of qpdf formatting variants while keeping
+hard semantic checks. The qpdf 12.4.x AES pipeline buffers one AES block at a
+time; F2 increases that pipeline buffer and replaces the provider call with a
+single block-aligned bulk operation. CBC state remains owned by the provider.
+"""
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+ROOT = Path("/src/qpdf")
+
+
+def source_path(*candidates: str) -> Path:
+    for rel in candidates:
+        p = ROOT / rel
+        if p.is_file():
+            return p
+    raise RuntimeError(
+        "qpdf source layout mismatch. Expected one of:\n"
+        + "\n".join(f"  {c}" for c in candidates)
+    )
+
+
+def read(p: str | Path) -> str:
+    p = Path(p)
+    if not p.is_absolute():
+        p = ROOT / p
+    return p.read_text(encoding="utf-8")
+
+
+def write(p: Path, s: str) -> None:
+    p.write_text(s, encoding="utf-8")
+
+
+def replace_once(s: str, old: str, new: str, label: str) -> str:
+    n = s.count(old)
+    if n != 1:
+        raise RuntimeError(f"{label}: expected exactly one anchor, found {n}")
+    return s.replace(old, new, 1)
+
+
+def regex_once(s: str, pat: str, repl: str, label: str, flags: int = re.S) -> str:
+    out, n = re.subn(pat, repl, s, count=1, flags=flags)
+    if n != 1:
+        raise RuntimeError(f"{label}: expected exactly one regex anchor, found {n}")
+    return out
+
+
+def require(s: str, needle: str, label: str) -> None:
+    if needle not in s:
+        raise RuntimeError(f"{label}: missing {needle!r}")
+
+
+def locate_function_body(source: str, signature_pattern: str, label: str) -> tuple[int, int]:
+    """Return (body_start, body_end) for one C++ function using balanced braces.
+
+    Regex alone cannot safely capture C++ function bodies because nested if/for
+    blocks contain their own closing braces. This scanner ignores braces inside
+    comments and string/character literals.
+    """
+    match = re.search(signature_pattern, source, flags=re.S)
+    if not match:
+        raise RuntimeError(f"{label}: could not locate function signature")
+
+    brace_start = source.find("{", match.end())
+    if brace_start < 0:
+        raise RuntimeError(f"{label}: could not locate function opening brace")
+
+    depth = 0
+    i = brace_start
+    n = len(source)
+    state = "code"
+
+    while i < n:
+        ch = source[i]
+        nxt = source[i + 1] if i + 1 < n else ""
+
+        if state == "code":
+            if ch == "/" and nxt == "/":
+                state = "line_comment"
+                i += 2
+                continue
+            if ch == "/" and nxt == "*":
+                state = "block_comment"
+                i += 2
+                continue
+            if ch == '"':
+                state = "string"
+                i += 1
+                continue
+            if ch == "'":
+                state = "char"
+                i += 1
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return brace_start + 1, i
+            i += 1
+            continue
+
+        if state == "line_comment":
+            if ch == "\n":
+                state = "code"
+            i += 1
+            continue
+
+        if state == "block_comment":
+            if ch == "*" and nxt == "/":
+                state = "code"
+                i += 2
+            else:
+                i += 1
+            continue
+
+        if state == "string":
+            if ch == "\\":
+                i += 2
+            elif ch == '"':
+                state = "code"
+                i += 1
+            else:
+                i += 1
+            continue
+
+        if state == "char":
+            if ch == "\\":
+                i += 2
+            elif ch == "'":
+                state = "code"
+                i += 1
+            else:
+                i += 1
+            continue
+
+    raise RuntimeError(f"{label}: unterminated C++ function body")
+
+
+BUF = int(os.environ.get("QPDF_AES_BULK_BUFFER_SIZE", "262144"))
+if BUF not in {16384, 65536, 262144, 1048576, 4194304}:
+    raise RuntimeError(f"Unsupported QPDF_AES_BULK_BUFFER_SIZE={BUF}")
+if BUF % 16:
+    raise RuntimeError("QPDF_AES_BULK_BUFFER_SIZE must be block aligned")
+print(f"SafePDFHub F2 bulk AES buffer: {BUF} bytes")
+
+# ---------------------------------------------------------------------------
+# 1. Crypto abstraction: add a safe default bulk implementation.
+#    This avoids breaking the GnuTLS provider, which does not need a custom
+#    optimized implementation. OpenSSL overrides it below.
+# ---------------------------------------------------------------------------
+impl = source_path("include/qpdf/QPDFCryptoImpl.hh")
+s = read(impl)
+if "rijndael_process_buffer" not in s:
+    if "#include <cstring>" not in s:
+        s = "#include <cstring>\n" + s
+    if "#include <stdexcept>" not in s:
+        s = "#include <stdexcept>\n" + s
+    pat = r"(?P<indent>\s*)virtual void rijndael_process\(\s*unsigned char\* in_data,\s*unsigned char\* out_data\) = 0;"
+    repl = r"""\g<indent>virtual void rijndael_process(unsigned char* in_data, unsigned char* out_data) = 0;
+\g<indent>// Bulk AES operation. Providers may override this for a native bulk
+\g<indent>// primitive. The default preserves the existing 16-byte semantics.
+\g<indent>virtual void rijndael_process_buffer(
+\g<indent>    unsigned char const* in_data, unsigned char* out_data, size_t len)
+\g<indent>{
+\g<indent>    if ((len % rijndael_buf_size) != 0) {
+\g<indent>        throw std::logic_error("QPDFCryptoImpl: AES bulk length is not block aligned");
+\g<indent>    }
+\g<indent>    unsigned char block[rijndael_buf_size];
+\g<indent>    for (size_t offset = 0; offset < len; offset += rijndael_buf_size) {
+\g<indent>        std::memcpy(block, in_data + offset, rijndael_buf_size);
+\g<indent>        rijndael_process(block, out_data + offset);
+\g<indent>    }
+\g<indent>}"""
+    s2, n = re.subn(pat, repl, s, count=1, flags=re.S)
+    if n != 1:
+        raise RuntimeError("QPDFCryptoImpl bulk API: could not locate rijndael_process declaration")
+    s = s2
+write(impl, s)
+
+# ---------------------------------------------------------------------------
+# 2. OpenSSL provider: one EVP_Update over the entire block-aligned buffer.
+# ---------------------------------------------------------------------------
+openssl_h = source_path("libqpdf/qpdf/QPDFCrypto_openssl.hh")
+s = read(openssl_h)
+if "rijndael_process_buffer" not in s:
+    if "#include <cstddef>" not in s and "#include <stddef.h>" not in s:
+        s = "#include <cstddef>\n" + s
+    pat = r"(\s*)void rijndael_process\(\s*unsigned char\* in_data,\s*unsigned char\* out_data\) override;"
+    repl = r"\1void rijndael_process(unsigned char* in_data, unsigned char* out_data) override;\n\1void rijndael_process_buffer(\n\1    unsigned char const* in_data, unsigned char* out_data, size_t len) override;"
+    s = regex_once(s, pat, repl, "OpenSSL bulk declaration")
+if "bool rijndael_encrypt" not in s:
+    s = replace_once(
+        s,
+        "    EVP_CIPHER_CTX* const cipher_ctx;\n",
+        "    EVP_CIPHER_CTX* const cipher_ctx;\n    bool rijndael_encrypt = false;\n",
+        "OpenSSL AES direction state",
+    )
+write(openssl_h, s)
+
+openssl_cc = source_path("libqpdf/QPDFCrypto_openssl.cc")
+s = read(openssl_cc)
+if "#include <stdexcept>" not in s:
+    s = "#include <stdexcept>\n" + s
+if "this->rijndael_encrypt = encrypt;" not in s:
+    s = regex_once(
+        s,
+        r"(void\s+QPDFCrypto_openssl::rijndael_init\s*\([^)]*\)\s*\{)",
+        r"\1\n    this->rijndael_encrypt = encrypt;",
+        "OpenSSL AES direction assignment",
+    )
+if "QPDFCrypto_openssl::rijndael_process_buffer" not in s:
+    anchor = r"(void\s+QPDFCrypto_openssl::rijndael_process\s*\(\s*unsigned char\*\s+in_data,\s*unsigned char\*\s+out_data\s*\)\s*\{.*?\n\})\s*(void\s+QPDFCrypto_openssl::rijndael_finalize\s*\()"
+    repl = r"""\1
+
+void
+QPDFCrypto_openssl::rijndael_process_buffer(
+    unsigned char const* in_data, unsigned char* out_data, size_t len)
+{
+    if (len == 0) {
+        return;
+    }
+    if ((len % QPDFCryptoImpl::rijndael_buf_size) != 0) {
+        throw std::logic_error(
+            "QPDFCrypto_openssl: AES bulk length is not block aligned");
+    }
+    int const int_len = QIntC::to_int(len);
+    int out_len = 0;
+    if (this->rijndael_encrypt) {
+        check_openssl(EVP_EncryptUpdate(
+            this->cipher_ctx, out_data, &out_len, in_data, int_len));
+    } else {
+        check_openssl(EVP_DecryptUpdate(
+            this->cipher_ctx, out_data, &out_len, in_data, int_len));
+    }
+    if (out_len != int_len) {
+        throw std::logic_error(
+            "QPDFCrypto_openssl: AES bulk update changed output length");
+    }
+}
+
+\2"""
+    s2, n = re.subn(anchor, repl, s, count=1, flags=re.S)
+    if n != 1:
+        raise RuntimeError("OpenSSL bulk implementation: could not locate rijndael_process/finalize")
+    s = s2
+write(openssl_cc, s)
+
+# ---------------------------------------------------------------------------
+# 3. Pl_AES_PDF: increase pipeline buffer, keep CBC IV state at 16 bytes.
+# ---------------------------------------------------------------------------
+aes_h = source_path("libqpdf/qpdf/Pl_AES_PDF.hh")
+s = read(aes_h)
+# qpdf 12.4.x has several historical spellings for its AES block buffer
+# member (including `static unsigned int const buf_size = ...`). Treat every
+# existing buf_size declaration as the legacy 16-byte pipeline buffer and
+# replace it in-place. Do NOT add a second buf_size member.
+buf_decl_pat = (
+    r"(?m)^(?P<indent>\s*)static\s+(?:size_t|unsigned\s+int)\s+"
+    r"(?:(?:const|constexpr)\s+)?buf_size\s*=\s*"
+    r"(?:16|QPDFCryptoImpl::rijndael_buf_size)\s*;\s*$"
+)
+buf_matches = list(re.finditer(buf_decl_pat, s))
+if len(buf_matches) == 1:
+    s = re.sub(
+        buf_decl_pat,
+        lambda m: f"{m.group('indent')}static size_t constexpr buf_size = {BUF};",
+        s,
+        count=1,
+    )
+elif len(buf_matches) > 1:
+    raise RuntimeError(
+        "Pl_AES_PDF pipeline buffer constant: expected one existing buf_size "
+        f"declaration, found {len(buf_matches)}"
+    )
+else:
+    # If this qpdf revision has no named pipeline buffer constant, add one
+    # immediately after the class opening.
+    s = regex_once(
+        s,
+        r"(class\s+Pl_AES_PDF(?:\s+final)?\s*:\s*public\s+Pipeline\s*\{)",
+        r"\1\n    static size_t constexpr buf_size = " + str(BUF) + ";",
+        "Pl_AES_PDF pipeline buffer constant",
+    )
+
+# Keep the crypto primitive block size distinct from the pipeline chunk size.
+# qpdf 12.4.1 already declares the primitive block size as an unsigned-int
+# constant; normalize that declaration to a named block_size member.
+block_decl_pat = (
+    r"(?m)^(?P<indent>\s*)static\s+(?:size_t|unsigned\s+int)\s+"
+    r"(?:(?:const|constexpr)\s+)?(?:rijndael_buf_size|block_size)\s*=\s*"
+    r"QPDFCryptoImpl::rijndael_buf_size\s*;\s*$"
+)
+block_matches = list(re.finditer(block_decl_pat, s))
+if len(block_matches) == 0:
+    # Insert exactly one block_size next to the pipeline buffer constant.
+    s = replace_once(
+        s,
+        "    static size_t constexpr buf_size = " + str(BUF) + ";\n",
+        "    static size_t constexpr buf_size = " + str(BUF) + ";\n"
+        "    static size_t constexpr block_size = QPDFCryptoImpl::rijndael_buf_size;\n",
+        "Pl_AES_PDF block-size constant",
+    )
+elif len(block_matches) > 1:
+    raise RuntimeError(
+        "Pl_AES_PDF block-size constant: expected at most one declaration, "
+        f"found {len(block_matches)}"
+    )
+else:
+    s = re.sub(
+        block_decl_pat,
+        lambda m: f"{m.group('indent')}static size_t constexpr block_size = QPDFCryptoImpl::rijndael_buf_size;",
+        s,
+        count=1,
+    )
+
+# Raw multi-hundred-KB arrays would be unsafe for stack-allocated pipeline
+# instances. Match the declaration's size expression rather than assuming it
+# literally says [buf_size].
+s = re.sub(
+    r"unsigned char\s+inbuf\s*\[[^\]]+\]\s*;",
+    "std::unique_ptr<unsigned char[]> inbuf;",
+    s,
+    count=1,
+)
+s = re.sub(
+    r"unsigned char\s+outbuf\s*\[[^\]]+\]\s*;",
+    "std::unique_ptr<unsigned char[]> outbuf;",
+    s,
+    count=1,
+)
+# CBC state must remain exactly one AES block.
+s = re.sub(
+    r"unsigned char\s+cbc_block\s*\[[^\]]+\]\s*;",
+    "unsigned char cbc_block[block_size];",
+    s,
+    count=1,
+)
+if "std::unique_ptr<unsigned char[]>" in s and "#include <memory>" not in s:
+    s = "#include <memory>\n" + s
+# IV is always exactly one AES block.
+s = re.sub(r"unsigned char\s+specified_iv\s*\[[^\]]+\]\s*;", "unsigned char specified_iv[block_size];", s, count=1)
+write(aes_h, s)
+
+# ---------------------------------------------------------------------------
+# 4. Pl_AES_PDF implementation. Support the actual qpdf provider call shape:
+#    crypto->rijndael_process(inbuf, outbuf)
+# as well as formatting variants.
+# ---------------------------------------------------------------------------
+aes_cc = source_path("libqpdf/Pl_AES_PDF.cc")
+s = read(aes_cc)
+if "#include <memory>" not in s and "std::make_unique" not in s:
+    s = "#include <memory>\n" + s
+
+# Allocate buffers once in the constructor. Match the existing memset anchor.
+if "std::make_unique<unsigned char[]>(this->buf_size)" not in s:
+    # qpdf 12.4.x has these initialization lines together.
+    pat = r"(\s*)std::memset\(this->inbuf,\s*0,\s*this->buf_size\);\s*\n\s*std::memset\(this->outbuf,\s*0,\s*this->buf_size\);"
+    repl = r"\1this->inbuf = std::make_unique<unsigned char[]>(this->buf_size);\n\1this->outbuf = std::make_unique<unsigned char[]>(this->buf_size);\n\1std::memset(this->inbuf.get(), 0, this->buf_size);\n\1std::memset(this->outbuf.get(), 0, this->buf_size);"
+    s2, n = re.subn(pat, repl, s, count=1, flags=re.S)
+    if n != 1:
+        raise RuntimeError("Pl_AES_PDF heap buffers: constructor buffer initialization anchor not found")
+    s = s2
+
+# If cbc_block was previously cleared using buf_size, make it block-sized.
+s = re.sub(
+    r"std::memset\(this->cbc_block,\s*0,\s*this->buf_size\)",
+    "std::memset(this->cbc_block, 0, this->block_size)",
+    s,
+)
+# PDF AES padding is expressed in AES blocks. Once buf_size is enlarged,
+# the legacy `last <= buf_size` check becomes both semantically wrong and,
+# under -Wconversion diagnostics, a tautological unsigned-char comparison.
+s = s.replace("if (last <= buf_size)", "if (last <= block_size)")
+s = s.replace("if (last > buf_size)", "if (last > block_size)")
+
+# IV copies/checks must be exactly 16 bytes.
+s = s.replace("bytes != this->buf_size", "bytes != this->block_size")
+s = re.sub(
+    r"std::memcpy\(this->specified_iv,\s*this->cbc_block,\s*this->buf_size\)",
+    "std::memcpy(this->specified_iv, this->cbc_block, this->block_size)",
+    s,
+)
+s = re.sub(
+    r"std::memcpy\(this->cbc_block,\s*this->specified_iv,\s*this->buf_size\)",
+    "std::memcpy(this->cbc_block, this->specified_iv, this->block_size)",
+    s,
+)
+
+# Normalize legacy deterministic IV loop only if it exists. qpdf 12.4.1 may
+# use qualified or unqualified member access here.
+iv_pat = r"for\s*\(\s*(?:unsigned int|size_t)\s+i\s*=\s*0\s*;\s*i\s*<\s*(?:this->)?buf_size\s*;\s*\+\+i\s*\)"
+if re.search(iv_pat, s):
+    s = re.sub(iv_pat, "for (size_t i = 0; i < this->block_size; ++i)", s, count=1)
+    print("F2 IV initialization: normalized legacy IV loop to 16-byte block")
+else:
+    print("F2 IV initialization: source already uses block-sized IV semantics")
+
+# CBC/IV state is always exactly one AES block. The pipeline buffer is much
+# larger after F2, so every IV/cbc_block operation must continue to use
+# block_size. Handle both qualified and unqualified qpdf member access.
+s = re.sub(
+    r"next\(\)->write\(\s*(?:this->)?cbc_block\s*,\s*(?:this->)?buf_size\s*\)",
+    "next()->write(this->cbc_block, this->block_size)",
+    s,
+)
+s = re.sub(
+    r"memcpy\(\s*(?:this->)?cbc_block\s*,\s*(?:this->)?inbuf(?:\.get\(\))?\s*,\s*(?:this->)?buf_size\s*\)",
+    "memcpy(this->cbc_block, this->inbuf.get(), this->block_size)",
+    s,
+)
+s = re.sub(
+    r"memset\(\s*(?:this->)?cbc_block\s*,\s*0\s*,\s*(?:this->)?buf_size\s*\)",
+    "memset(this->cbc_block, 0, this->block_size)",
+    s,
+)
+s = re.sub(
+    r"std::memset\(\s*(?:this->)?cbc_block\s*,\s*0\s*,\s*(?:this->)?buf_size\s*\)",
+    "std::memset(this->cbc_block, 0, this->block_size)",
+    s,
+)
+# setIV() validates an IV, not the pipeline chunk. Accept either qualified or
+# unqualified access and normalize the validation to one AES block.
+s = re.sub(
+    r"(?:this->)?bytes\s*!=\s*(?:this->)?buf_size",
+    "bytes != this->block_size",
+    s,
+)
+# Any cbc_block/specified_iv copy that still uses the pipeline size is unsafe.
+s = re.sub(
+    r"memcpy\(\s*(?:this->)?cbc_block\s*,\s*(?:this->)?specified_iv\s*,\s*(?:this->)?buf_size\s*\)",
+    "memcpy(this->cbc_block, this->specified_iv, this->block_size)",
+    s,
+)
+s = re.sub(
+    r"std::memcpy\(\s*(?:this->)?cbc_block\s*,\s*(?:this->)?specified_iv\s*,\s*(?:this->)?buf_size\s*\)",
+    "std::memcpy(this->cbc_block, this->specified_iv, this->block_size)",
+    s,
+)
+s = re.sub(
+    r"memcpy\(\s*(?:this->)?specified_iv\s*,\s*(?:this->)?cbc_block\s*,\s*(?:this->)?buf_size\s*\)",
+    "memcpy(this->specified_iv, this->cbc_block, this->block_size)",
+    s,
+)
+s = re.sub(
+    r"std::memcpy\(\s*(?:this->)?specified_iv\s*,\s*(?:this->)?cbc_block\s*,\s*(?:this->)?buf_size\s*\)",
+    "std::memcpy(this->specified_iv, this->cbc_block, this->block_size)",
+    s,
+)
+
+# ---------------------------------------------------------------------------
+# 4a. Flush/finalization correctness after enlarging the pipeline buffer.
+#
+# qpdf's original Pl_AES_PDF uses buf_size for BOTH:
+#   - the streaming pipeline chunk, and
+#   - the AES block/padding length.
+#
+# F2 deliberately separates those concepts. A final stream chunk can therefore
+# be smaller than buf_size while still needing to be a multiple of 16 bytes.
+# The original `QIntC::to_uchar(buf_size - offset)` is invalid once buf_size is
+# 256 KiB: for example, a 115627-byte padding request cannot fit in one byte.
+# ---------------------------------------------------------------------------
+finish_body_start, finish_body_end = locate_function_body(
+    s,
+    r"void\s+Pl_AES_PDF::finish\s*\(\s*\)",
+    "F2 finalization",
+)
+finish_body = s[finish_body_start:finish_body_end]
+
+# Deterministic finalization transformation. Do not patch the padding, memset,
+# and offset statements independently: they are one semantic unit. Locate the
+# legacy padding declaration and the final flush(false) inside finish(), then
+# replace the complete padding/finalization region with one canonical block.
+# This deliberately removes source-format sensitivity from the critical path.
+pad_start = re.search(
+    r"unsigned\s+char\s+pad\s*=",
+    finish_body,
+    flags=re.S,
+)
+if not pad_start:
+    raise RuntimeError(
+        "F2 finalization: could not locate the legacy AES padding declaration"
+    )
+flush_matches = list(re.finditer(r"\bflush\s*\(\s*false\s*\)\s*;", finish_body))
+if not flush_matches:
+    raise RuntimeError(
+        "F2 finalization: could not locate finish() final flush(false)"
+    )
+flush_end = flush_matches[-1].end()
+legacy_finalization = finish_body[pad_start.start():flush_end]
+if "buf_size" not in legacy_finalization or "pad" not in legacy_finalization:
+    raise RuntimeError(
+        "F2 finalization: legacy padding region does not contain the expected "
+        "buf_size-based padding logic"
+    )
+canonical_finalization = """size_t pad_size = this->block_size - (this->offset % this->block_size);
+    unsigned char pad = QIntC::to_uchar(pad_size);
+    std::memset(this->inbuf.get() + this->offset, pad, pad_size);
+    this->offset += pad_size;
+    flush(false);"""
+finish_body = (
+    finish_body[:pad_start.start()]
+    + canonical_finalization
+    + finish_body[flush_end:]
+)
+
+# Ensure the deterministic replacement really eliminated the old semantic
+# dependency before writing it back.
+if re.search(
+    r"QIntC::to_uchar\s*\(\s*(?:this->)?buf_size\s*-\s*(?:this->)?offset",
+    finish_body,
+    flags=re.S,
+):
+    raise RuntimeError(
+        "F2 finalization: legacy buf_size-offset padding conversion remains"
+    )
+if not re.search(
+    r"(?:std::)?memset\(\s*this->inbuf\.get\(\)\s*\+\s*this->offset"
+    r"\s*,\s*pad\s*,\s*pad_size\s*\)",
+    finish_body,
+    flags=re.S,
+):
+    raise RuntimeError(
+        "F2 finalization: deterministic padding write was not installed"
+    )
+
+if "pad_size" not in finish_body:
+    raise RuntimeError(
+        "F2 finalization: could not replace the legacy buf_size-based AES padding calculation"
+    )
+
+s = s[:finish_body_start] + finish_body + s[finish_body_end:]
+
+# In flush(), encrypt exactly the currently buffered, block-aligned bytes.
+# Full streaming chunks still have offset == buf_size, while finish() may
+# provide a smaller final block-aligned length.
+flush_body_start, flush_body_end = locate_function_body(
+    s,
+    r"void\s+Pl_AES_PDF::flush\s*\(\s*bool\s+strip_padding\s*\)",
+    "F2 flush sizing",
+)
+flush_body = s[flush_body_start:flush_body_end]
+
+# qpdf 12.4.x declares `bytes` from buf_size. Replace it with the actual
+# buffered length. Accept unsigned int or size_t spelling.
+flush_body, n_bytes = re.subn(
+    r"(?m)^(\s*)(?:unsigned\s+int|size_t)\s+bytes\s*=\s*(?:this->)?buf_size\s*;",
+    r"\1size_t bytes = this->offset;",
+    flush_body,
+    count=1,
+)
+if n_bytes != 1:
+    raise RuntimeError(
+        "F2 flush sizing: expected exactly one `bytes = buf_size` declaration"
+    )
+
+# Padding stripping must inspect the last encrypted byte of the actual output
+# length, not the end of the 256 KiB scratch buffer.
+flush_body, n_last = re.subn(
+    r"unsigned char\s+last\s*=\s*(?:this->)?outbuf(?:\.get\(\))?\[\s*(?:this->)?buf_size\s*-\s*1\s*\]\s*;",
+    "unsigned char last = this->outbuf.get()[bytes - 1];",
+    flush_body,
+    count=1,
+)
+if n_last != 1:
+    raise RuntimeError(
+        "F2 flush sizing: expected exactly one `last = outbuf[buf_size - 1]` anchor"
+    )
+
+# The bulk provider must receive the actual number of bytes in this flush.
+# It is always block-aligned because finish() pads to block_size and normal
+# write() flushes only when offset == buf_size.
+s = s[:flush_body_start] + flush_body + s[flush_body_end:]
+
+# Replace the provider's single-block operation. This is the critical anchor.
+if "rijndael_process_buffer(" not in s:
+    call_patterns = [
+        r"(?:this->)?crypto->rijndael_process\(\s*(?:this->)?inbuf(?:\.get\(\))?\s*,\s*(?:this->)?outbuf(?:\.get\(\))?\s*\)",
+        r"(?:this->)?crypto->rijndael_process\(\s*(?:this->)?inbuf\s*\+\s*0\s*,\s*(?:this->)?outbuf\s*\+\s*0\s*\)",
+    ]
+    replacement = "this->crypto->rijndael_process_buffer(\n        this->inbuf.get(), this->outbuf.get(), bytes)"
+    for pat in call_patterns:
+        s2, n = re.subn(pat, replacement, s, count=1, flags=re.S)
+        if n == 1:
+            s = s2
+            print("F2 bulk flush: replaced qpdf single-block crypto call")
+            break
+    else:
+        # Some qpdf revisions have a local alias. Provide a diagnostic with the
+        # actual flush body rather than silently guessing.
+        m = re.search(r"void\s+Pl_AES_PDF::flush\s*\([^)]*\)\s*\{", s)
+        context = s[m.start():m.start()+5000] if m else s[:5000]
+        raise RuntimeError(
+            "Pl_AES_PDF bulk flush: could not locate the provider's original "
+            "rijndael_process(inbuf,outbuf) call.\n"
+            "Observed flush source:\n" + context
+        )
+
+# Convert all executable inbuf/outbuf references to unique_ptr raw pointers.
+# qpdf 12.4.1 uses both qualified and unqualified member access in this file
+# (for example: crypto->rijndael_process(inbuf, outbuf)). Handle both forms.
+# Do this after the crypto call replacement so the generated call is stable.
+s = re.sub(r"this->inbuf(?!\.get\(\))", "this->inbuf.get()", s)
+s = re.sub(r"this->outbuf(?!\.get\(\))", "this->outbuf.get()", s)
+s = re.sub(r"(?<![\w.])inbuf(?!\s*\.get\(\))", "this->inbuf.get()", s)
+s = re.sub(r"(?<![\w.])outbuf(?!\s*\.get\(\))", "this->outbuf.get()", s)
+# Restore member assignment syntax introduced above.
+s = s.replace(
+    "this->inbuf.get() = std::make_unique<unsigned char[]>(this->buf_size);",
+    "this->inbuf = std::make_unique<unsigned char[]>(this->buf_size);",
+)
+s = s.replace(
+    "this->outbuf.get() = std::make_unique<unsigned char[]>(this->buf_size);",
+    "this->outbuf = std::make_unique<unsigned char[]>(this->buf_size);",
+)
+
+require(s, "rijndael_process_buffer(", "Pl_AES_PDF bulk integration")
+write(aes_cc, s)
+
+# ---------------------------------------------------------------------------
+# 5. Structural checks.
+# ---------------------------------------------------------------------------
+for p, needles in [
+    (impl, ["rijndael_process_buffer", "std::memcpy"]),
+    (openssl_h, ["rijndael_process_buffer", "rijndael_encrypt"]),
+    (openssl_cc, ["QPDFCrypto_openssl::rijndael_process_buffer", "EVP_EncryptUpdate", "EVP_DecryptUpdate"]),
+    (aes_h, ["buf_size", "block_size", "cbc_block[block_size]", "std::unique_ptr<unsigned char[]> inbuf"]),
+    (aes_cc, ["std::make_unique<unsigned char[]>(this->buf_size)", "rijndael_process_buffer"]),
+    (aes_cc, ["block_size", "memcpy(this->cbc_block, this->inbuf.get(), this->block_size)"]),
+]:
+    text = read(p)
+    for needle in needles:
+        require(text, needle, f"F2 final validation {p.relative_to(ROOT)}")
+
+# Hard-fail on the exact regression that previously reached the compiler:
+# two buf_size members, or padding still comparing an unsigned-char padding
+# byte against the enlarged pipeline buffer.
+aes_h_final = read(aes_h)
+aes_cc_final = read(aes_cc)
+buf_decl_count = len(re.findall(
+    r"(?m)^\s*static\s+(?:size_t|unsigned\s+int)\s+(?:(?:const|constexpr)\s+)?buf_size\s*=",
+    aes_h_final,
+))
+if buf_decl_count != 1:
+    raise RuntimeError(
+        "F2 final validation: Pl_AES_PDF.hh must contain exactly one buf_size "
+        f"member, found {buf_decl_count}"
+    )
+if re.search(r"last\s*(?:<=|>)\s*(?:this->)?buf_size", aes_cc_final):
+    raise RuntimeError(
+        "F2 final validation: PDF AES padding still compares last against "
+        "the enlarged pipeline buf_size; expected block_size"
+    )
+if re.search(
+    r"(?:QIntC::to_uchar|static_cast<unsigned char>)\s*\(?\s*"
+    r"this->buf_size\s*-\s*this->offset",
+    aes_cc_final,
+    flags=re.S,
+):
+    raise RuntimeError(
+        "F2 final validation: AES finish() still converts buf_size-offset "
+        "directly to unsigned char; padding must use block_size"
+    )
+if "size_t pad_size = this->block_size - (this->offset % this->block_size);" not in aes_cc_final:
+    raise RuntimeError(
+        "F2 final validation: block-size-based PKCS#7 pad_size calculation is missing"
+    )
+if not re.search(
+    r"(?:std::)?memset\(\s*this->inbuf(?:\.get\(\))?\s*\+\s*this->offset"
+    r"\s*,\s*pad\s*,\s*pad_size\s*\)",
+    aes_cc_final,
+    flags=re.S,
+):
+    raise RuntimeError(
+        "F2 final validation: AES finish() padding write must use pad_size bytes"
+    )
+if "this->crypto->rijndael_process_buffer(" not in aes_cc_final:
+    raise RuntimeError(
+        "F2 final validation: bulk provider call is missing"
+    )
+if re.search(
+    r"rijndael_process_buffer\(\s*this->inbuf\.get\(\),\s*"
+    r"this->outbuf\.get\(\),\s*this->buf_size\s*\)",
+    aes_cc_final,
+    flags=re.S,
+):
+    raise RuntimeError(
+        "F2 final validation: bulk provider call still uses buf_size "
+        "instead of the actual flush byte count"
+    )
+if not re.search(r"size_t\s+bytes\s*=\s*this->offset\s*;", aes_cc_final):
+    raise RuntimeError(
+        "F2 final validation: flush() does not derive encrypted length from offset"
+    )
+
+print("SafePDFHub F2 source patch applied successfully.")
+print("SafePDFHub F2 deterministic finalization: PASS")

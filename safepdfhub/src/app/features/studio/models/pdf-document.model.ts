@@ -6,6 +6,10 @@ export interface StudioPdfDocument {
   size: number;
   type: string;
   pageCount: number;
+  /** File currently used for Studio export. Protected sources are decrypted locally first. */
   file: File;
+  /** Original user-selected file, retained only for in-memory security actions. */
+  sourceFile?: File;
+  sourceWasProtected?: boolean;
   pdf: PDFDocumentProxy;
 }

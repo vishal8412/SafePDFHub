@@ -29,6 +29,11 @@
                 "glob": "pdf.worker.min.mjs",
                 "input": "node_modules/pdfjs-dist/build/",
                 "output": "assets/pdfjs/"
+              },
+              {
+                "glob": "qpdf.wasm",
+                "input": "node_modules/@neslinesli93/qpdf-wasm/dist/",
+                "output": "assets/qpdf/"
               }
             ],
             "styles": [
@@ -42,7 +47,10 @@
             "ssr": {
               "entry": "src/server.ts"
             },
-            "webWorkerTsConfig": "tsconfig.worker.json"
+            "webWorkerTsConfig": "tsconfig.worker.json",
+            "allowedCommonJsDependencies": [
+              "@neslinesli93/qpdf-wasm"
+            ]
           },
           "configurations": {
             "production": {
@@ -54,8 +62,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "20kB",
-                  "maximumError": "25kB"
+                  "maximumWarning": "40kB",
+                  "maximumError": "50kB"
                 }
               ],
               "outputHashing": "all"

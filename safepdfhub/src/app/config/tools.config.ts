@@ -3,11 +3,28 @@ export interface Tool {
   title: string;
   description: string;
   keywords: string;
-  category: 'merge' | 'compress' | 'convert' | 'split';
+  category: 'merge' | 'compress' | 'convert' | 'split' | 'security';
   nextTools?: string[]; // slugs of recommended tools
 }
 
 export const TOOLS: Tool[] = [
+
+  {
+    slug: 'protect-pdf',
+    title: 'Protect PDF with Password Online Free',
+    description: 'Password-protect a PDF locally in your browser with optional permissions.',
+    keywords: 'protect pdf, password protect pdf, encrypt pdf',
+    category: 'security',
+    nextTools: ['unlock-pdf']
+  },
+  {
+    slug: 'unlock-pdf',
+    title: 'Unlock PDF Online Free',
+    description: 'Remove PDF password protection locally when you know the document password.',
+    keywords: 'unlock pdf, decrypt pdf, remove pdf password',
+    category: 'security',
+    nextTools: ['protect-pdf']
+  },
   {
     slug: 'compress-pdf',
     title: 'Compress PDF Online Free | Reduce PDF Size',

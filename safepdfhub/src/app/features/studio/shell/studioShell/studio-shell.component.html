@@ -12,6 +12,7 @@
       [canRedo]="canRedo()"
       [pdfLoaded]="pdfLoaded()"
       (exportPdf)="onExportPdf()"
+      (security)="openSecurityMenu()"
       (openPdf)="openPdfPicker()"
       (undo)="onUndo()"
       (redo)="onRedo()"
@@ -108,6 +109,71 @@
     (zoomChanged)="onZoomChanged($event)"
     (viewModeChanged)="onViewModeChanged($event)"
   />
+
+
+  @if (passwordPromptOpen()) {
+    <div class="studio-security-dialog" role="presentation">
+      <section class="studio-security-dialog__panel" role="dialog" aria-modal="true" aria-labelledby="studio-password-title">
+        <header class="studio-security-dialog__header">
+          <div>
+            <span class="studio-security-dialog__eyebrow">Protected PDF</span>
+            <h2 id="studio-password-title">Enter PDF password</h2>
+            <p>{{ passwordPromptFileName() }}</p>
+          </div>
+          <button type="button" class="studio-security-dialog__close" (click)="cancelPasswordPrompt()" aria-label="Cancel password prompt">×</button>
+        </header>
+
+        <label class="studio-security-dialog__field">
+          <span>Password</span>
+          <input
+            type="password"
+            [(ngModel)]="passwordInput"
+            autocomplete="current-password"
+            (keydown.enter)="submitPassword()"
+            placeholder="Enter PDF password"
+          />
+        </label>
+
+        @if (passwordPromptError()) {
+          <div class="studio-security-dialog__error" role="alert">{{ passwordPromptError() }}</div>
+        }
+
+        <div class="studio-security-dialog__actions">
+          <button type="button" class="studio-security-dialog__secondary" (click)="cancelPasswordPrompt()">Cancel</button>
+          <button type="button" class="studio-security-dialog__primary" [disabled]="!passwordInput.trim() || isLoading()" (click)="submitPassword()">Open PDF</button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (securityDialogOpen()) {
+    <div class="studio-security-dialog" role="presentation">
+      <section class="studio-security-dialog__panel studio-security-dialog__panel--security" role="dialog" aria-modal="true" aria-labelledby="studio-security-title">
+        <header class="studio-security-dialog__header">
+          <div>
+            <span class="studio-security-dialog__eyebrow">PDF Security</span>
+            <h2 id="studio-security-title">Protect or remove PDF password</h2>
+            <p>Security operations run locally on this device.</p>
+          </div>
+          <button type="button" class="studio-security-dialog__close" [disabled]="securityDialogBusy()" (click)="closeSecurityDialog()" aria-label="Close security dialog">×</button>
+        </header>
+
+        <div class="studio-security-dialog__modes">
+          <button type="button" [class.is-active]="securityDialogMode() === 'protect'" [disabled]="securityDialogBusy()" (click)="selectSecurityMode('protect')">Protect PDF</button>
+          <button type="button" [class.is-active]="securityDialogMode() === 'unlock'" [disabled]="securityDialogBusy()" (click)="selectSecurityMode('unlock')">Unlock PDF</button>
+        </div>
+
+        <app-pdf-security-form
+          [mode]="securityDialogMode()"
+          [fileName]="projectName()"
+          [busy]="securityDialogBusy()"
+          [errorMessage]="securityDialogError()"
+          (submitted)="submitSecurityRequest($event)"
+          (cancelled)="closeSecurityDialog()"
+        />
+      </section>
+    </div>
+  }
 
 
 

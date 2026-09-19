@@ -13,6 +13,9 @@ import { StudioHeader } from '../../header/studio-header/studio-header';
 import { StudioToolbar } from '../../toolbar/studio-toolbar/studio-toolbar';
 import { StudioStatusBar, StudioViewMode } from '../../status-bar/studio-status-bar/studio-status-bar';
 import { StudioWorkspace } from '../../workspace/studio-workspace/studio-workspace';
+import { FormsModule } from '@angular/forms';
+import { PdfSecurityFormComponent } from '../../../../shared/components/pdf-security-form/pdf-security-form.component';
+import type { PdfSecurityRequest } from '../../../../core/security/pdf-security.types';
 
 import { StudioFacade } from '../../facade/studio.facade';
 import type {
@@ -26,7 +29,9 @@ import type {
     StudioHeader,
     StudioToolbar,
     StudioStatusBar,
-    StudioWorkspace
+    StudioWorkspace,
+    FormsModule,
+    PdfSecurityFormComponent
   ],
   templateUrl: './studio-shell.component.html',
   styleUrls: ['./studio-shell.component.scss'],
@@ -69,6 +74,16 @@ export class StudioShellComponent {
   readonly canUndo = this.facade.canUndo;
 
   readonly canRedo = this.facade.canRedo;
+
+  readonly passwordPromptOpen = this.facade.passwordPromptOpen;
+  readonly passwordPromptFileName = this.facade.passwordPromptFileName;
+  readonly passwordPromptError = this.facade.passwordPromptError;
+  readonly securityDialogOpen = this.facade.securityDialogOpen;
+  readonly securityDialogMode = this.facade.securityDialogMode;
+  readonly securityDialogBusy = this.facade.securityDialogBusy;
+  readonly securityDialogError = this.facade.securityDialogError;
+
+  passwordInput = '';
 
   /**
    * Independent Studio chrome state.
@@ -717,6 +732,34 @@ onToolSelected(
 /**
  * Export the current Studio PDF.
  */
+openSecurityMenu(): void {
+  if (!this.facade.hasDocument()) return;
+  this.facade.openSecurityDialog('protect');
+}
+
+selectSecurityMode(mode: 'protect' | 'unlock' | 'remove-password'): void {
+  this.facade.openSecurityDialog(mode);
+}
+
+closeSecurityDialog(): void {
+  this.facade.closeSecurityDialog();
+}
+
+submitSecurityRequest(request: PdfSecurityRequest): void {
+  void this.facade.runSecurityOperation(request);
+}
+
+submitPassword(): void {
+  const value = this.passwordInput;
+  this.passwordInput = '';
+  this.facade.submitPdfPassword(value);
+}
+
+cancelPasswordPrompt(): void {
+  this.passwordInput = '';
+  this.facade.cancelPdfPasswordPrompt();
+}
+
 async onExportPdf(): Promise<void> {
   await this.facade.exportPdf();
 }

@@ -1,6 +1,7 @@
 import { Type } from '@angular/core';
 import { CompressWorkspaceComponent } from '../features/tools/compress/compress-workspace/compress-workspace.component';
 import { MergeWorkspaceComponent } from '../features/tools/merge/merge-workspace/merge-workspace.component';
+import { SecurityWorkspaceComponent } from '../features/tools/security/security-workspace/security-workspace.component';
 
 
 // ========================================
@@ -80,6 +81,27 @@ export const TOOL_ENGINES: ToolEngineConfig[] = [
     supportsPageOperations: false,
 
     supportsDownload: true
-  }
+  },
 
+
+  {
+    slug: 'protect-pdf',
+    workspaceComponent: SecurityWorkspaceComponent,
+    engine: 'pdf-security-engine',
+    supportsPreview: false,
+    supportsBatch: false,
+    supportsRealtimeAnalysis: false,
+    supportsPageOperations: false,
+    supportsDownload: true
+  },
+  {
+    slug: 'unlock-pdf',
+    workspaceComponent: SecurityWorkspaceComponent,
+    engine: 'pdf-security-engine',
+    supportsPreview: false,
+    supportsBatch: false,
+    supportsRealtimeAnalysis: false,
+    supportsPageOperations: false,
+    supportsDownload: true
+  },
 ];

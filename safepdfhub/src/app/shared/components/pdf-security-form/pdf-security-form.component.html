@@ -1,0 +1,161 @@
+<section class="security-form" aria-labelledby="pdf-security-title">
+  <header class="security-form__header">
+    <div class="security-form__icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <rect x="5" y="10" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="12" cy="15" r="1.2" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="security-form__heading">
+      <span class="security-form__eyebrow">SECURE YOUR PDF</span>
+      <h2 id="pdf-security-title">{{ title }}</h2>
+      <p>{{ description }}</p>
+    </div>
+    <span class="security-form__local-badge"><i></i> Local only</span>
+  </header>
+
+  @if (fileName) {
+    <div class="security-form__file" aria-label="Selected PDF">
+      <span class="security-form__file-icon" aria-hidden="true">PDF</span>
+      <div>
+        <strong>Selected PDF</strong>
+        <span>{{ fileName }}</span>
+      </div>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+    </div>
+  }
+
+  @if (mode === 'protect') {
+    <div class="security-form__section-heading">
+      <div>
+        <strong>Create your password</strong>
+        <span>Use a password that only the intended recipient should know.</span>
+      </div>
+    </div>
+  }
+
+  <div class="security-form__field" [class.has-error]="passwordValidationMessage">
+    <label for="security-password">{{ passwordLabel }}</label>
+    <div class="security-form__input-wrap">
+      <span class="security-form__input-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      </span>
+      <input
+        id="security-password"
+        [type]="showPassword ? 'text' : 'password'"
+        [(ngModel)]="password"
+        (ngModelChange)="onPasswordChanged()"
+        [autocomplete]="passwordAutocomplete"
+        [disabled]="busy"
+        maxlength="128"
+        aria-describedby="security-password-help security-password-error"
+        placeholder="{{ mode === 'protect' ? 'Enter a strong password' : 'Enter the current PDF password' }}"
+      />
+      <button type="button" class="security-form__show" [disabled]="busy" (click)="showPassword = !showPassword">
+        {{ showPassword ? 'Hide' : 'Show' }}
+      </button>
+    </div>
+    @if (mode === 'protect') {
+      <div class="security-form__strength" [class]="'security-form__strength security-form__strength--' + passwordStrength">
+        <div><span></span><span></span><span></span><span></span></div>
+        <small>{{ passwordStrengthLabel }}</small>
+      </div>
+    }
+    @if (passwordValidationMessage) {
+      <span id="security-password-error" class="security-form__validation" role="alert">{{ passwordValidationMessage }}</span>
+    } @else {
+      <span id="security-password-help" class="security-form__field-help">
+        {{ mode === 'protect' ? '8–128 characters • use at least 3 character types' : 'Enter the password that currently protects this PDF' }}
+      </span>
+    }
+  </div>
+
+  @if (mode === 'protect') {
+    <div class="security-form__field" [class.has-error]="confirmValidationMessage">
+      <label for="security-confirm-password">Confirm password</label>
+      <div class="security-form__input-wrap">
+        <span class="security-form__input-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="m5 12 4 4L19 6"/></svg>
+        </span>
+        <input
+          id="security-confirm-password"
+          [type]="showConfirmPassword ? 'text' : 'password'"
+          [(ngModel)]="confirmPassword"
+          (ngModelChange)="onConfirmChanged()"
+          autocomplete="new-password"
+          [disabled]="busy"
+          maxlength="128"
+          aria-describedby="security-confirm-error"
+          placeholder="Re-enter your password"
+        />
+        <button type="button" class="security-form__show" [disabled]="busy" (click)="showConfirmPassword = !showConfirmPassword">
+          {{ showConfirmPassword ? 'Hide' : 'Show' }}
+        </button>
+      </div>
+      @if (confirmValidationMessage) {
+        <span id="security-confirm-error" class="security-form__validation" role="alert">{{ confirmValidationMessage }}</span>
+      } @else if (confirmPassword && confirmPassword === password) {
+        <span class="security-form__field-success">Passwords match</span>
+      }
+    </div>
+
+    <fieldset class="security-form__permissions">
+      <legend>
+        <strong>Permissions</strong>
+        <span>Choose what recipients can do</span>
+      </legend>
+
+      <label class="permission-card" [class.permission-card--enabled]="permissions.allowPrinting">
+        <span class="permission-card__icon">▣</span>
+        <span><strong>Printing</strong><small>Print this PDF</small></span>
+        <input type="checkbox" [(ngModel)]="permissions.allowPrinting" [disabled]="busy" />
+      </label>
+      <label class="permission-card" [class.permission-card--enabled]="permissions.allowCopying">
+        <span class="permission-card__icon">T</span>
+        <span><strong>Copying</strong><small>Copy text &amp; graphics</small></span>
+        <input type="checkbox" [(ngModel)]="permissions.allowCopying" [disabled]="busy" />
+      </label>
+      <label class="permission-card" [class.permission-card--enabled]="permissions.allowModifying">
+        <span class="permission-card__icon">↗</span>
+        <span><strong>Editing</strong><small>Modify the document</small></span>
+        <input type="checkbox" [(ngModel)]="permissions.allowModifying" [disabled]="busy" />
+      </label>
+      <label class="permission-card" [class.permission-card--enabled]="permissions.allowAnnotations">
+        <span class="permission-card__icon">⌁</span>
+        <span><strong>Annotations</strong><small>Add comments &amp; marks</small></span>
+        <input type="checkbox" [(ngModel)]="permissions.allowAnnotations" [disabled]="busy" />
+      </label>
+      <label class="permission-card" [class.permission-card--enabled]="permissions.allowForms">
+        <span class="permission-card__icon">☷</span>
+        <span><strong>Form filling</strong><small>Complete PDF forms</small></span>
+        <input type="checkbox" [(ngModel)]="permissions.allowForms" [disabled]="busy" />
+      </label>
+      <label class="permission-card" [class.permission-card--enabled]="permissions.allowAssembly">
+        <span class="permission-card__icon">Ⅱ</span>
+        <span><strong>Page assembly</strong><small>Insert &amp; rearrange pages</small></span>
+        <input type="checkbox" [(ngModel)]="permissions.allowAssembly" [disabled]="busy" />
+      </label>
+    </fieldset>
+  }
+
+  <div class="security-form__privacy" role="note">
+    <span class="security-form__privacy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5c0 4.5-2.8 8.1-7 10-4.2-1.9-7-5.5-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+    </span>
+    <div><strong>Private by design</strong><span>{{ passwordHint }}</span></div>
+  </div>
+
+  @if (errorMessage) {
+    <div class="security-form__error" role="alert">
+      <span>!</span>{{ errorMessage }}
+    </div>
+  }
+
+  <footer class="security-form__actions">
+    <button type="button" class="security-form__secondary" [disabled]="busy" (click)="cancelled.emit()">Cancel</button>
+    <button type="button" class="security-form__primary" [disabled]="busy || !formValid" (click)="submit()">
+      @if (busy) { <span class="security-form__spinner" aria-hidden="true"></span> Processing… } @else { {{ actionLabel }} <span>→</span> }
+    </button>
+  </footer>
+</section>

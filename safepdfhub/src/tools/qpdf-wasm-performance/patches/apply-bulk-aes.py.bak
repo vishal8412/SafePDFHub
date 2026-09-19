@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""Apply the SafePDFHub F2 bulk AES-CBC optimization to qpdf 12.4.x.
+
+The patch is intentionally applied at build time against the pinned qpdf source.
+Every transformation has an anchor check so a qpdf source-layout change fails the
+Docker build instead of silently producing a partially patched crypto engine.
+"""
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+ROOT = Path('/src/qpdf')
+
+
+def read(rel: str) -> str:
+    return (ROOT / rel).read_text(encoding='utf-8')
+
+
+def write(rel: str, text: str) -> None:
+    (ROOT / rel).write_text(text, encoding='utf-8')
+
+
+def replace_once(text: str, old: str, new: str, label: str) -> str:
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f'{label}: expected exactly one anchor, found {count}')
+    return text.replace(old, new, 1)
+
+
+def regex_once(text: str, pattern: str, repl: str, label: str, flags: int = 0) -> str:
+    text2, count = re.subn(pattern, repl, text, count=1, flags=flags)
+    if count != 1:
+        raise RuntimeError(f'{label}: expected exactly one regex anchor, found {count}')
+    return text2
+
+
+buffer_size = int(os.environ.get('QPDF_AES_BULK_BUFFER_SIZE', '262144'))
+allowed = {16384, 65536, 262144, 1048576, 4194304}
+if buffer_size not in allowed:
+    raise RuntimeError(
+        f'Unsupported QPDF_AES_BULK_BUFFER_SIZE={buffer_size}; '
+        f'allowed values are {sorted(allowed)}'
+    )
+if buffer_size % 16:
+    raise RuntimeError('QPDF_AES_BULK_BUFFER_SIZE must be a multiple of 16')
+
+print(f'SafePDFHub F2 bulk AES buffer: {buffer_size} bytes')
+
+# ---------------------------------------------------------------------------
+# QPDFCryptoImpl: add a bulk primitive with the existing 16-byte primitive as
+# the compatibility contract. Providers can override it for true bulk crypto.
+# ---------------------------------------------------------------------------
+path = 'include/qpdf/QPDFCryptoImpl.hh'
+s = read(path)
+s = replace_once(
+    s,
+    '    virtual void rijndael_process(unsigned char* in_data, unsigned char* out_data) = 0;\n',
+    '    virtual void rijndael_process(unsigned char* in_data, unsigned char* out_data) = 0;\n'
+    '    // Process a multiple of AES blocks in one provider call. The default\n'
+    '    // implementation preserves the original 16-byte API semantics.\n'
+    '    virtual void rijndael_process_buffer(\n'
+    '        unsigned char const* in_data, unsigned char* out_data, size_t len) = 0;\n',
+    'QPDFCryptoImpl bulk API',
+)
+write(path, s)
+
+# ---------------------------------------------------------------------------
+# Native provider: safe compatibility implementation. It deliberately loops
+# through 16-byte blocks because the performance decision is made by the
+# OpenSSL provider; native remains available for A/B validation.
+# ---------------------------------------------------------------------------
+path = 'libqpdf/qpdf/QPDFCrypto_native.hh'
+s = read(path)
+s = replace_once(
+    s,
+    '    void rijndael_process(unsigned char* in_data, unsigned char* out_data) final;\n',
+    '    void rijndael_process(unsigned char* in_data, unsigned char* out_data) final;\n'
+    '    void rijndael_process_buffer(\n'
+    '        unsigned char const* in_data, unsigned char* out_data, size_t len) final;\n',
+    'native bulk declaration',
+)
+write(path, s)
+
+path = 'libqpdf/QPDFCrypto_native.cc'
+s = read(path)
+if '#include <stdexcept>' not in s:
+    s = '#include <stdexcept>\n' + s
+if '#include <cstring>' not in s:
+    s = '#include <cstring>\n' + s
+s = regex_once(
+    s,
+    r'(void\s+QPDFCrypto_native::rijndael_process\s*\(unsigned char\* in_data,\s*unsigned char\* out_data\)\s*\{.*?\n\})\n\n(void\s+QPDFCrypto_native::rijndael_finalize\s*\()',
+    r'\1\n\nvoid\nQPDFCrypto_native::rijndael_process_buffer(\n    unsigned char const* in_data, unsigned char* out_data, size_t len)\n{\n    if ((len % QPDFCryptoImpl::rijndael_buf_size) != 0) {\n        throw std::logic_error("QPDFCrypto_native: AES bulk length is not block aligned");\n    }\n    unsigned char block[QPDFCryptoImpl::rijndael_buf_size];\n    for (size_t offset = 0; offset < len; offset += QPDFCryptoImpl::rijndael_buf_size) {\n        std::memcpy(block, in_data + offset, QPDFCryptoImpl::rijndael_buf_size);\n        this->rijndael_process(block, out_data + offset);\n    }\n}\n\n\2',
+    'native bulk implementation',
+    flags=re.S,
+)
+write(path, s)
+
+# ---------------------------------------------------------------------------
+# OpenSSL provider: one EVP_Update call for a large contiguous buffer. This is
+# the primary F2 performance path and keeps one CBC context across the stream.
+# ---------------------------------------------------------------------------
+path = 'libqpdf/qpdf/QPDFCrypto_openssl.hh'
+s = read(path)
+if '#include <cstddef>' not in s and '#include <stddef.h>' not in s:
+    s = '#include <cstddef>\n' + s
+s = replace_once(
+    s,
+    '    void rijndael_process(unsigned char* in_data, unsigned char* out_data) override;\n',
+    '    void rijndael_process(unsigned char* in_data, unsigned char* out_data) override;\n'
+    '    void rijndael_process_buffer(\n'
+    '        unsigned char const* in_data, unsigned char* out_data, size_t len) override;\n',
+    'OpenSSL bulk declaration',
+)
+s = replace_once(
+    s,
+    '    EVP_CIPHER_CTX* const cipher_ctx;\n',
+    '    EVP_CIPHER_CTX* const cipher_ctx;\n'
+    '    bool rijndael_encrypt = false;\n',
+    'OpenSSL AES direction state',
+)
+write(path, s)
+
+path = 'libqpdf/QPDFCrypto_openssl.cc'
+s = read(path)
+# Store direction once per AES initialization. The exact function body is stable
+# across qpdf 12.4.x, but the regex intentionally only anchors the function.
+s = regex_once(
+    s,
+    r'(void\s+QPDFCrypto_openssl::rijndael_init\s*\([^\)]*\)\s*\{)',
+    r'\1\n    this->rijndael_encrypt = encrypt;',
+    'OpenSSL AES direction assignment',
+    flags=re.S,
+)
+s = regex_once(
+    s,
+    r'(void\s+QPDFCrypto_openssl::rijndael_process\s*\(unsigned char\* in_data,\s*unsigned char\* out_data\)\s*\{.*?\n\})\n\n(void\s+QPDFCrypto_openssl::rijndael_finalize\s*\()',
+    r'\1\n\nvoid\nQPDFCrypto_openssl::rijndael_process_buffer(\n    unsigned char const* in_data, unsigned char* out_data, size_t len)\n{\n    if (len == 0) {\n        return;\n    }\n    if ((len % QPDFCryptoImpl::rijndael_buf_size) != 0) {\n        throw std::logic_error("QPDFCrypto_openssl: AES bulk length is not block aligned");\n    }\n    int out_len = 0;\n    int const int_len = QIntC::to_int(len);\n    if (this->rijndael_encrypt) {\n        check_openssl(EVP_EncryptUpdate(\n            this->cipher_ctx, out_data, &out_len, in_data, int_len));\n    } else {\n        check_openssl(EVP_DecryptUpdate(\n            this->cipher_ctx, out_data, &out_len, in_data, int_len));\n    }\n    if (out_len != int_len) {\n        throw std::logic_error("QPDFCrypto_openssl: AES bulk update changed output length");\n    }\n}\n\n\2',
+    'OpenSSL bulk implementation',
+    flags=re.S,
+)
+write(path, s)
+
+# ---------------------------------------------------------------------------
+# Pl_AES_PDF: enlarge only the streaming input/output buffers. The AES IV/CBC
+# state remains exactly one 16-byte block. Flush invokes the provider's bulk
+# primitive once per configured buffer instead of once per 16-byte block.
+# ---------------------------------------------------------------------------
+path = 'libqpdf/qpdf/Pl_AES_PDF.hh'
+s = read(path)
+if '#include <memory>' not in s:
+    s = '#include <memory>\n' + s
+s = regex_once(
+    s,
+    r'(class\s+Pl_AES_PDF(?:\s+final)?\s*:\s*public\s+Pipeline\s*\{)',
+    r'\1\n    static size_t constexpr block_size = QPDFCryptoImpl::rijndael_buf_size;\n'
+    f'    static size_t constexpr buf_size = {buffer_size};\n',
+    'Pl_AES_PDF buffer constants',
+    flags=re.S,
+)
+# Replace the old fixed arrays. Keep CBC state and IV at AES block size.
+s = regex_once(
+    s,
+    r'\s*unsigned char inbuf\[buf_size\];\s*\n\s*unsigned char outbuf\[buf_size\];\s*\n\s*unsigned char cbc_block\[buf_size\];',
+    '\n    std::unique_ptr<unsigned char[]> inbuf;\n'
+    '    std::unique_ptr<unsigned char[]> outbuf;\n'
+    '    unsigned char cbc_block[block_size];',
+    'Pl_AES_PDF streaming buffers',
+    flags=re.S,
+)
+s = regex_once(
+    s,
+    r'unsigned char specified_iv\[buf_size\];',
+    'unsigned char specified_iv[block_size];',
+    'Pl_AES_PDF IV buffer',
+)
+write(path, s)
+
+path = 'libqpdf/Pl_AES_PDF.cc'
+s = read(path)
+# Allocate the heap buffers before the existing memset calls.
+s = replace_once(
+    s,
+    '    std::memset(this->inbuf, 0, this->buf_size);\n',
+    '    this->inbuf = std::make_unique<unsigned char[]>(this->buf_size);\n'
+    '    this->outbuf = std::make_unique<unsigned char[]>(this->buf_size);\n'
+    '    std::memset(this->inbuf.get(), 0, this->buf_size);\n',
+    'Pl_AES_PDF heap buffer allocation',
+)
+s = s.replace('this->outbuf', 'this->outbuf.get()')
+s = s.replace('this->inbuf', 'this->inbuf.get()')
+# The replacement above changes the allocation expressions too; restore the
+# unique_ptr member assignment form.
+s = s.replace('this->inbuf.get() = std::make_unique<unsigned char[]>(this->buf_size);',
+              'this->inbuf = std::make_unique<unsigned char[]>(this->buf_size);')
+s = s.replace('this->outbuf.get() = std::make_unique<unsigned char[]>(this->buf_size);',
+              'this->outbuf = std::make_unique<unsigned char[]>(this->buf_size);')
+
+# CBC/IV state is still exactly one AES block, not the bulk buffer.
+s = s.replace('std::memset(this->cbc_block, 0, this->buf_size);',
+              'std::memset(this->cbc_block, 0, this->block_size);')
+s = s.replace('std::memcpy(this->cbc_block, this->outbuf.get(), this->buf_size);',
+              'std::memcpy(this->cbc_block, this->outbuf.get(), this->block_size);')
+s = s.replace('std::memcpy(this->specified_iv, this->cbc_block, this->buf_size);',
+              'std::memcpy(this->specified_iv, this->cbc_block, this->block_size);')
+s = s.replace('std::memcpy(this->cbc_block, this->specified_iv, this->buf_size);',
+              'std::memcpy(this->cbc_block, this->specified_iv, this->block_size);')
+# setIV checks the IV length, not the bulk buffer length.
+s = s.replace('bytes != this->buf_size', 'bytes != this->block_size')
+# initializeVector creates exactly one AES IV.
+s = regex_once(
+    s,
+    r'(void\s+Pl_AES_PDF::initializeVector\s*\(\)\s*\{.*?)(for\s*\(unsigned int i = 0; i < )this->buf_size(\s*;\s*\+\+i\))',
+    r'\1\2this->block_size\3',
+    'Pl_AES_PDF IV loop size',
+    flags=re.S,
+)
+# The old implementation loops over 16-byte AES blocks. Replace that loop with
+# one provider bulk call. The exact loop is deliberately matched structurally.
+s = regex_once(
+    s,
+    r'for\s*\(size_t i = 0; i < this->buf_size; i \+= QPDFCryptoImpl::rijndael_buf_size\)\s*\{\s*this->crypto->rijndael_process\(this->inbuf.get\(\) \+ i, this->outbuf.get\(\) \+ i\);\s*\}',
+    'this->crypto->rijndael_process_buffer(\n        this->inbuf.get(), this->outbuf.get(), this->buf_size);',
+    'Pl_AES_PDF bulk flush loop',
+    flags=re.S,
+)
+write(path, s)
+
+# ---------------------------------------------------------------------------
+# qpdf 12.4.x CMake still needs the native provider compiled so the artifact
+# exposes an A/B choice. The Dockerfile turns REQUIRE_CRYPTO_NATIVE on.
+# ---------------------------------------------------------------------------
+
+print('SafePDFHub F2 source patch applied successfully.')

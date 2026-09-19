@@ -33,6 +33,8 @@ export class SplitWorkspaceComponent {
   @Input() resultDuration = '';
   @Input() showResult = false;
   @Input() generatedFiles: File[] = [];
+  @Input() validationBlocked = false;
+  @Input() validationMessage = '';
 
   mode: SplitMode = 'range';
   pageRanges = '';
@@ -272,6 +274,7 @@ export class SplitWorkspaceComponent {
   }
 
   get canSplit(): boolean {
+    if (this.validationBlocked) return false;
     switch (this.mode) {
       case 'range': return !this.rangeValidation;
       case 'every-n': return !this.everyNValidation;

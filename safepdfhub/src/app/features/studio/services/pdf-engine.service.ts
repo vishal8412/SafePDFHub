@@ -14,6 +14,7 @@ import type {
 import type {
   StudioPdfDocument
 } from '../models/pdf-document.model';
+import { PdfSecurityService } from '../../../core/security/pdf-security.service';
 
 @Injectable({
   providedIn: 'root'
@@ -25,6 +26,8 @@ export class PdfEngineService {
 
   private readonly workerPath =
     '/assets/pdfjs/pdf.worker.min.mjs';
+
+  private readonly pdfSecurity = inject(PdfSecurityService);
 
   /**
    * Load the PDF.js library lazily.
@@ -70,60 +73,77 @@ export class PdfEngineService {
 
   /**
    * Load a PDF from a File.
+   *
+   * Protected PDFs are first decrypted locally through the shared security
+   * engine when a password is supplied. The decrypted in-memory copy is then
+   * used by Studio so the existing pdf-lib export pipeline can remain intact.
    */
   async loadFile(
-  file: File
-): Promise<StudioPdfDocument> {
+    file: File,
+    password?: string
+  ): Promise<StudioPdfDocument> {
+    if (password?.trim()) {
+      const unlocked = await this.pdfSecurity.unlock(file, password);
+      const buffer = await unlocked.file.arrayBuffer();
 
-  const buffer =
-    await file.arrayBuffer();
+      return this.loadData(
+        new Uint8Array(buffer),
+        file.name,
+        unlocked.file.size,
+        'application/pdf',
+        unlocked.file,
+        file,
+        true
+      );
+    }
 
-  return this.loadData(
-    new Uint8Array(buffer),
-    file.name,
-    file.size,
-    file.type,
-    file
-  );
-}
+    const buffer = await file.arrayBuffer();
+
+    return this.loadData(
+      new Uint8Array(buffer),
+      file.name,
+      file.size,
+      file.type,
+      file,
+      file,
+      false
+    );
+  }
 
   /**
    * Load a PDF from raw binary data.
    */
   async loadData(
-  data: Uint8Array,
-  name = 'Untitled.pdf',
-  size = data.byteLength,
-  type = 'application/pdf',
-  file?: File
-): Promise<StudioPdfDocument> {
+    data: Uint8Array,
+    name = 'Untitled.pdf',
+    size = data.byteLength,
+    type = 'application/pdf',
+    file?: File,
+    sourceFile?: File,
+    sourceWasProtected = false
+  ): Promise<StudioPdfDocument> {
+    const pdfjs = await this.getPdfJs();
 
-  const pdfjs =
-    await this.getPdfJs();
-
-  const loadingTask =
-    pdfjs.getDocument({
+    const loadingTask = pdfjs.getDocument({
       data,
-      // Source-font fidelity is a first-class editor requirement. Keep PDF.js
-      // native font-face conversion enabled and retain parsed font properties
-      // so the editor can register the same OpenType face for its edit layer.
       disableFontFace: false,
       fontExtraProperties: true
     });
 
-  const pdf =
-    await loadingTask.promise;
+    const pdf = await loadingTask.promise;
 
-  return {
-    id: this.createDocumentId(),
-    name,
-    size,
-    type,
-    pageCount: pdf.numPages,
-    file: file ?? new File([this.toArrayBuffer(data)], name, { type }),
-    pdf
-  };
-}
+    return {
+      id: this.createDocumentId(),
+      name,
+      size,
+      type,
+      pageCount: pdf.numPages,
+      file: file ?? new File([this.toArrayBuffer(data)], name, { type }),
+      sourceFile: sourceFile ?? file,
+      sourceWasProtected,
+      pdf
+    };
+  }
 
   /**
    * Return a single PDF page.

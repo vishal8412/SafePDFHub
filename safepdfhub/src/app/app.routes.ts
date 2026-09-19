@@ -10,6 +10,13 @@ export const routes: Routes = [
         .then(m => m.QpdfBenchmarkComponent)
   },
   {
+    path: '__dev/large-pdf-security-benchmark',
+    canMatch: [() => isDevMode()],
+    loadComponent: () =>
+      import('./pages/dev/large-pdf-security-benchmark/large-pdf-security-benchmark.component')
+        .then(m => m.LargePdfSecurityBenchmarkComponent)
+  },
+  {
     path: '__dev/qpdf-smoke',
     canMatch: [() => isDevMode()],
     loadComponent: () =>
@@ -55,6 +62,11 @@ export const routes: Routes = [
   {
     path: 'donate',
     redirectTo: 'support',
+    pathMatch: 'full'
+  },
+  {
+    path: 'remove-password',
+    redirectTo: 'unlock-pdf',
     pathMatch: 'full'
   },
   // Studio routes

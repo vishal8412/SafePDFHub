@@ -1,5 +1,9 @@
 <div class="compress-v2">
 
+  <div class="validation-error" *ngIf="validationBlocked">
+    ⚠️ {{ validationMessage || 'This PDF cannot be processed reliably.' }}
+  </div>
+
   <!-- LEFT -->
   <div class="preview-section">
 
@@ -56,7 +60,7 @@
 </div>
 
   <!-- ACTION -->
-<button class="compress-v2-btn" (click)="startCompress()" [disabled]="compressing">
+<button class="compress-v2-btn" (click)="startCompress()" [disabled]="compressing || validationBlocked">
   <ng-container *ngIf="!compressing">
     Compress PDF
   </ng-container>

@@ -1,13 +1,39 @@
 import { Injectable } from '@angular/core';
 import { LocalProcessingCapabilityService } from './local-processing-capability.service';
-import { PdfWorkload, WorkloadAssessment, WorkloadRisk } from './local-processing-capability.model';
+import { PdfWorkload, WorkloadAssessment, WorkloadRisk, ProcessingBudget } from './local-processing-capability.model';
+import { LargePdfSecurityCapabilityService } from '../security/large-file/large-pdf-security-capability.service';
 
 @Injectable({ providedIn: 'root' })
 export class PdfWorkloadAnalyzerService {
-  constructor(private readonly capabilityService: LocalProcessingCapabilityService) {}
+  constructor(
+    private readonly capabilityService: LocalProcessingCapabilityService,
+    private readonly securityCapability: LargePdfSecurityCapabilityService
+  ) {}
 
   assess(files: readonly File[], pageCounts: readonly number[] = []): WorkloadAssessment {
-    const budget = this.capabilityService.budget;
+    return this.assessWithBudget(files, pageCounts, this.capabilityService.budget);
+  }
+
+  assessSecurity(files: readonly File[], pageCounts: readonly number[] = []): WorkloadAssessment {
+    const security = this.securityCapability.current;
+    const budget: ProcessingBudget = {
+      maxFileBytes: security.maxFileBytes,
+      maxTotalBytes: security.maxTotalBytes,
+      maxFiles: security.maxFiles,
+      // Page capacity remains benchmark-gated for the large engine; do not invent
+      // a page ceiling that has not been measured.
+      maxPages: Number.MAX_SAFE_INTEGER,
+      largeWorkloadBytes: 8 * 1024 * 1024,
+      largeWorkloadPages: Number.MAX_SAFE_INTEGER
+    };
+    return this.assessWithBudget(files, pageCounts, budget);
+  }
+
+  private assessWithBudget(
+    files: readonly File[],
+    pageCounts: readonly number[],
+    budget: ProcessingBudget
+  ): WorkloadAssessment {
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
     const maxFileBytes = files.reduce((max, file) => Math.max(max, file.size), 0);
     const knownCounts = pageCounts.filter(pageCount => Number.isFinite(pageCount) && pageCount > 0);

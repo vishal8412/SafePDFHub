@@ -1,0 +1,39 @@
+<section class="security-result" aria-labelledby="security-result-title">
+  <div class="security-result__check" aria-hidden="true">
+    <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15"/><path d="m9 16 4.5 4.5L23 11"/></svg>
+  </div>
+
+  <span class="security-result__eyebrow">PROCESSING COMPLETE</span>
+  <h2 id="security-result-title">{{ title }}</h2>
+  <p class="security-result__description">{{ description }}</p>
+
+  <div class="security-result__file">
+    <div class="security-result__file-icon">PDF</div>
+    <div class="security-result__file-copy">
+      <strong>{{ result.file.name }}</strong>
+      <span>{{ operationLabel }} • {{ sizeLabel }}</span>
+    </div>
+    <span class="security-result__ready">Ready</span>
+  </div>
+
+  <div class="security-result__meta">
+    <div><span>Processed</span><strong>On this device</strong></div>
+    <div><span>Processing time</span><strong>{{ durationLabel }}</strong></div>
+    <div><span>Original file</span><strong>{{ originalFileName || 'Your PDF' }}</strong></div>
+  </div>
+
+  <div class="security-result__privacy">
+    <span class="security-result__privacy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5c0 4.5-2.8 8.1-7 10-4.2-1.9-7-5.5-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+    </span>
+    <div><strong>Your PDF stayed on this device.</strong><span>SafePDFHub did not upload or receive the document or password.</span></div>
+  </div>
+
+  <div class="security-result__actions">
+    <button type="button" class="security-result__primary" (click)="download.emit()">{{ actionLabel }} <span>↓</span></button>
+    @if (result.mode !== 'protect') {
+      <button type="button" class="security-result__secondary" (click)="protectAgain.emit()">Protect this PDF again →</button>
+    }
+    <button type="button" class="security-result__secondary" (click)="processAnother.emit()">Process another PDF</button>
+  </div>
+</section>

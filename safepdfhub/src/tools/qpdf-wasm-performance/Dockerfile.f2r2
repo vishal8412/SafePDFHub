@@ -1,0 +1,124 @@
+# SafePDFHub F2-R.2 isolated qpdf PDF-pipeline candidate build.
+# This image intentionally uses the already validated F2-R.1 image as its
+# dependency/toolchain base. The pristine /src/qpdf tree remains the reference;
+# the experimental bulk pipeline is built only from /src/qpdf-f2r2-candidate.
+FROM safepdfhub-qpdf-wasm-performance-build:latest AS build
+
+ARG QPDF_VERSION=12.4.1
+ARG QPDF_AES_BULK_BUFFER_SIZE=262144
+ENV QPDF_AES_BULK_BUFFER_SIZE=${QPDF_AES_BULK_BUFFER_SIZE}
+ENV PREFIX=/opt/safepdfhub
+ENV OPENSSL_PREFIX=/opt/safepdfhub/openssl
+ENV CFLAGS="-O3 -flto -msimd128"
+ENV CXXFLAGS="-O3 -flto -msimd128"
+ENV LDFLAGS="-O3 -flto"
+ENV PKG_CONFIG_PATH=/opt/safepdfhub/lib/pkgconfig:/opt/safepdfhub/openssl/lib/pkgconfig
+ENV EM_PKG_CONFIG_PATH=/opt/safepdfhub/lib/pkgconfig:/opt/safepdfhub/openssl/lib/pkgconfig
+ENV PKG_CONFIG_LIBDIR=/opt/safepdfhub/lib/pkgconfig:/opt/safepdfhub/openssl/lib/pkgconfig
+
+WORKDIR /src
+COPY patches/apply-f2r2-candidate.py /src/safepdfhub-patches/apply-f2r2-candidate.py
+COPY patches/legacy-frozen/apply-bulk-aes.py.frozen /src/safepdfhub-patches/apply-bulk-aes.py.frozen
+COPY safepdfhub-f3-crypto-benchmark.cc /src/safepdfhub-patches/safepdfhub-f3-crypto-benchmark.cc
+COPY safepdfhub-f2r-raw-aes-compare.cc /src/safepdfhub-patches/safepdfhub-f2r-raw-aes-compare.cc
+COPY validate-wasm-exports.py /src/safepdfhub-patches/validate-wasm-exports.py
+
+RUN set -eux; \
+    python3 -m py_compile /src/safepdfhub-patches/apply-f2r2-candidate.py; \
+    python3 /src/safepdfhub-patches/apply-f2r2-candidate.py; \
+    test -f /src/qpdf/libqpdf/qpdf/Pl_AES_PDF.hh; \
+    test -f /src/qpdf/libqpdf/Pl_AES_PDF.cc; \
+    test -f /src/qpdf-f2r2-candidate/libqpdf/qpdf/Pl_AES_PDF.hh; \
+    test -f /src/qpdf-f2r2-candidate/libqpdf/Pl_AES_PDF.cc; \
+    grep -q 'rijndael_process_buffer' /src/qpdf-f2r2-candidate/libqpdf/Pl_AES_PDF.cc; \
+    echo 'F2-R.2 source isolation validation PASSED.'
+
+RUN set -eux; \
+    echo '============================================================'; \
+    echo 'Configuring isolated F2-R.2 candidate qpdf'; \
+    echo '============================================================'; \
+    cd /src/qpdf-f2r2-candidate; \
+    emcmake cmake \
+      -S . -B build -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+      -DCMAKE_PREFIX_PATH="${PREFIX};${OPENSSL_PREFIX}" \
+      -DCMAKE_FIND_ROOT_PATH="${PREFIX};${OPENSSL_PREFIX}" \
+      -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
+      -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
+      -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
+      -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
+      -DBUILD_DOC=OFF -DINSTALL_MANUAL=OFF -DINSTALL_EXAMPLES=OFF \
+      -DINSTALL_PKGCONFIG=OFF -DINSTALL_CMAKE_PACKAGE=OFF \
+      -DUSE_IMPLICIT_CRYPTO=OFF -DREQUIRE_CRYPTO_OPENSSL=ON \
+      -DREQUIRE_CRYPTO_NATIVE=ON -DDEFAULT_CRYPTO=openssl \
+      -DSTATIC_OPENSSL=ON -DSTATIC_JPEG=ON \
+      -DZLIB_ROOT="${PREFIX}" \
+      -DZLIB_INCLUDE_DIR="${PREFIX}/include" \
+      -DZLIB_LIBRARY="${PREFIX}/lib/libz.a" \
+      -DZLIB_H_PATH="${PREFIX}/include" \
+      -DZLIB_LIB_PATH="${PREFIX}/lib/libz.a" \
+      -DJPEG_ROOT="${PREFIX}" \
+      -DJPEG_INCLUDE_DIR="${PREFIX}/include" \
+      -DJPEG_LIBRARY="${PREFIX}/lib/libjpeg.a" \
+      -DLIBJPEG_H_PATH="${PREFIX}/include" \
+      -DLIBJPEG_LIB_PATH="${PREFIX}/lib/libjpeg.a" \
+      -DOPENSSL_ROOT_DIR="${OPENSSL_PREFIX}" \
+      -DOPENSSL_INCLUDE_DIR="${OPENSSL_PREFIX}/include" \
+      -DOPENSSL_CRYPTO_LIBRARY="${OPENSSL_PREFIX}/lib/libcrypto.a" \
+      -DOPENSSL_SSL_LIBRARY="${OPENSSL_PREFIX}/lib/libssl.a" \
+      -DOPENSSL_LIBRARIES="${OPENSSL_PREFIX}/lib/libssl.a;${OPENSSL_PREFIX}/lib/libcrypto.a" \
+      -DOPENSSL_H_PATH="${OPENSSL_PREFIX}/include" \
+      -DOPENSSL_LIB_PATH="${OPENSSL_PREFIX}/lib/libcrypto.a" \
+      -DCMAKE_C_FLAGS="${CFLAGS} -I${PREFIX}/include -I${OPENSSL_PREFIX}/include" \
+      -DCMAKE_CXX_FLAGS="${CXXFLAGS} -I${PREFIX}/include -I${OPENSSL_PREFIX}/include" \
+      -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS} -L${PREFIX}/lib -L${OPENSSL_PREFIX}/lib" \
+      >/tmp/f2r2-candidate-cmake.log 2>&1; \
+    cat /tmp/f2r2-candidate-cmake.log
+
+RUN set -eux; \
+    cd /src/qpdf-f2r2-candidate; \
+    cmake --build build -j2 --target libqpdf; \
+    test -s build/libqpdf/libqpdf.a; \
+    ls -lh build/libqpdf/libqpdf.a
+
+RUN set -eux; \
+    mkdir -p /out/f2r2-reference /out/f2r2-candidate; \
+    cp /out/qpdf-performance.js /out/f2r2-reference/qpdf-reference.js; \
+    cp /out/qpdf-performance.wasm /out/f2r2-reference/qpdf-reference.wasm; \
+    cd /src/qpdf-f2r2-candidate; \
+    emcc ${LDFLAGS} ${CFLAGS} \
+      -I"${PREFIX}/include" -I"${OPENSSL_PREFIX}/include" -I"${PWD}/include" \
+      -L"${PREFIX}/lib" -L"${OPENSSL_PREFIX}/lib" \
+      --closure 0 -s WASM_BIGINT=1 -s ALLOW_MEMORY_GROWTH=1 \
+      -s FORCE_FILESYSTEM=1 -s ENVIRONMENT='web,worker' -s MODULARIZE=1 \
+      -s EXPORT_NAME='SafePDFHubQpdfF2R2CandidateFactory' \
+      -s EXPORTED_RUNTIME_METHODS='["callMain","FS","WORKERFS","ENV"]' \
+      -s EXPORTED_FUNCTIONS='["_main","_safepdfhubF3RawAesBenchmark","_safepdfhubF3RawAesChecksum","_safepdfhubF2RRawAesCompare"]' \
+      -s INCOMING_MODULE_JS_API='["noInitialRun","locateFile","preRun","print","printErr"]' \
+      -s NO_DISABLE_EXCEPTION_CATCHING=1 \
+      -o /out/f2r2-candidate/qpdf-f2r2-candidate.js \
+      /src/qpdf-f2r2-candidate/qpdf/qpdf.cc \
+      /src/safepdfhub-patches/safepdfhub-f3-crypto-benchmark.cc \
+      /src/safepdfhub-patches/safepdfhub-f2r-raw-aes-compare.cc \
+      /src/qpdf-f2r2-candidate/build/libqpdf/libqpdf.a \
+      -lworkerfs.js -lssl -lcrypto -lz -ljpeg; \
+    printf '\nexport { SafePDFHubQpdfF2R2CandidateFactory };\n' >> /out/f2r2-candidate/qpdf-f2r2-candidate.js; \
+    test -s /out/f2r2-candidate/qpdf-f2r2-candidate.js; \
+    test -s /out/f2r2-candidate/qpdf-f2r2-candidate.wasm; \
+    grep -q 'SafePDFHubQpdfF2R2CandidateFactory' /out/f2r2-candidate/qpdf-f2r2-candidate.js; \
+    grep -q 'safepdfhubF2RRawAesCompare' /out/f2r2-candidate/qpdf-f2r2-candidate.js
+
+RUN set -eux; \
+    python3 -c "from pathlib import Path; specs=[(Path('/out/f2r2-reference'),'SafePDFHubQpdfFactory'),(Path('/out/f2r2-candidate'),'SafePDFHubQpdfF2R2CandidateFactory')]; [(lambda w,j,f,b,t: (_ for _ in ()).throw(AssertionError((w,b[:8]))) if b[:8] != bytes([0,97,115,109,1,0,0,0]) or any(x not in t or ('_'+x) not in t for x in ('safepdfhubF3RawAesBenchmark','safepdfhubF3RawAesChecksum','safepdfhubF2RRawAesCompare')) or f not in t else print(f'Validated {j.name}: {len(b):,} byte WASM; factory={f}'))(next(r.glob('*.wasm')),next(r.glob('*.js')),f,next(r.glob('*.wasm')).read_bytes(),next(r.glob('*.js')).read_text(encoding='utf-8')) for r,f in specs]"
+
+RUN set -eux; \
+    echo '============================================================'; \
+    echo 'SafePDFHub F2-R.2 isolated build PASSED'; \
+    echo 'Reference: pristine qpdf + F2-R.1 provider optimization'; \
+    echo 'Candidate: isolated qpdf bulk AES-CBC pipeline'; \
+    echo 'The reference /src/qpdf tree was never modified by the candidate patch.'; \
+    echo '============================================================'
+
+FROM scratch AS output
+COPY --from=build /out /out

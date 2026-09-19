@@ -296,6 +296,16 @@
 
     <button
       type="button"
+      class="secondary-btn security-btn"
+      [disabled]="!pdfLoaded"
+      (click)="security.emit()"
+      aria-label="PDF security">
+
+      <span>Security</span>
+    </button>
+
+    <button
+      type="button"
       class="primary-btn"
       [disabled]="!pdfLoaded"
       (click)="exportPdf.emit()"

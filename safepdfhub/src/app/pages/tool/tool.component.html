@@ -15,7 +15,7 @@
        UPLOAD AREA
   ===================== -->
 
-  <div *ngIf="!(isCompressTool && isWorkspaceMode)" 
+  <div *ngIf="!(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode)" 
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
     [class.compress-toolbar]="isWorkspaceMode && !isCompressTool"
@@ -43,7 +43,7 @@
   </ng-container>
 
   <!-- 🔥 COMPACT MODE -->
-  <ng-container *ngIf="isWorkspaceMode && !isCompressTool && !isSplitTool">
+  <ng-container *ngIf="isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
     <div class="upload-compact" (click)="addMoreFiles()">
       <span>+ Add more files</span>
       <input #fileInput type="file" 
@@ -61,19 +61,25 @@
 
 <div class="workspace" *ngIf="isWorkspaceMode">
 
-  <div
-    class="capacity-status"
-    [class.capacity-status--large]="workloadIsLarge"
-    [class.capacity-status--blocked]="hasBlockedWorkload"
-  >
-    <div class="capacity-status__icon">
-      {{ hasBlockedWorkload ? '⚠' : workloadIsLarge ? '◐' : '✓' }}
-    </div>
-    <div class="capacity-status__content">
-      <strong>Local processing capacity</strong>
-      <span>{{ workloadMessage }}</span>
-    </div>
-  </div>
+  <!-- =========================
+     PDF SECURITY WORKSPACE
+  ========================= -->
+  <app-security-workspace
+    *ngIf="isWorkspaceMode && isSecurityTool"
+    [mode]="securityMode"
+    [file]="workspace.files[0] || null"
+    [busy]="workspace.loading"
+    [progress]="securityProgress"
+    [errorMessage]="securityErrorMessage"
+    [result]="securityResult"
+    [encryptionStatus]="securityEncryptionStatus"
+    (replaceFile)="triggerUpload()"
+    (submit)="runSecurityOperation($event)"
+    (unlockFirst)="openUnlockForCurrentFile()"
+    (downloadResult)="downloadSecurityResult()"
+    (processAnother)="processAnotherSecurityPdf()"
+    (protectAgain)="protectSecurityResult()"
+  />
 
   <!-- =========================
      MERGE WORKSPACE
@@ -123,6 +129,8 @@
   [showResult]="showSplitResult"
 
   [generatedFiles]="generatedSplitFiles"
+  [validationBlocked]="hasInvalidFiles || hasBlockedWorkload"
+  [validationMessage]="workspace.workspaceFiles[0]?.validationMessage || workloadMessage"
 
   (changePdf)="splitPdfUpload()"
   (downloadZip)="downloadZipAgain()"
@@ -146,6 +154,8 @@
   [estimatedFinalSize]="compressionState.estimatedFinalSize"
 
   [compressionLevel]="compressionState.compressionLevel"
+  [validationBlocked]="hasInvalidFiles || hasBlockedWorkload"
+  [validationMessage]="workspace.workspaceFiles[0]?.validationMessage || workloadMessage"
   [pdfInsights]="compressionState.pdfInsights"
 
   (compressionLevelChange)="compressionState.compressionLevel = $event; analyzeCompression();"
@@ -171,7 +181,7 @@
     <button
       class="merge-btn"
       (click)="mergePdf()"
-      [disabled]="workspace.loading || workspace.files.length < 2 || hasBlockedWorkload"
+      [disabled]="!canProcessWorkspace || workspace.files.length < 2"
     >
       {{ workspace.loading ? 'Merging...' : 'Merge ' + workspace.files.length + ' PDFs' }}
     </button>
@@ -187,7 +197,7 @@
 <!-- =====================
       SMART SUGGESTIONS
   ===================== -->
-<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool">
+<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
  
   <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
 
@@ -220,7 +230,7 @@
   ===================== -->
 
 <app-action-panel
-  *ngIf="(!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode"
+  *ngIf="((!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode) && !isSecurityTool"
 
   [title]="'What do you want to do?'"
 

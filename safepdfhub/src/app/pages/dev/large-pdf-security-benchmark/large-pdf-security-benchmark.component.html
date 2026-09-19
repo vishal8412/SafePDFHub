@@ -1,0 +1,215 @@
+<div class="shell">
+  <h1>SafePDFHub Large-PDF Security Browser Benchmark</h1>
+  <p>
+    Development-only Phase 1.5 validation. This page exercises the same dedicated Worker + WORKERFS + qpdf WASM + OPFS
+    engine used by Protect PDF, without routing the PDF through the Angular main thread as a large ArrayBuffer.
+  </p>
+
+  <section class="panel">
+    <h2>Capability</h2>
+    <div class="metric-grid">
+      <div class="metric"><span>Engine</span><strong [class.pass]="engineAvailable" [class.fail]="!engineAvailable">{{ engineAvailable ? 'AVAILABLE' : 'UNAVAILABLE' }}</strong></div>
+      <div class="metric"><span>Target</span><strong>1 GiB / file</strong></div>
+      <div class="metric"><span>Worker</span><strong>{{ capability.current.worker ? 'YES' : 'NO' }}</strong></div>
+      <div class="metric"><span>OPFS</span><strong>{{ capability.current.opfs ? 'YES' : 'NO' }}</strong></div>
+    </div>
+    <p class="note">{{ capabilitySummary }}</p>
+  </section>
+
+  <section class="panel">
+    <h2>Large PDF security benchmark input</h2>
+    <p>
+      Use the supplied 15 MB regression PDF first, then repeat the benchmark with larger real PDFs. This screen reports
+      the selected workload size dynamically; a PASS for one PDF is not a universal 1 GiB production guarantee.
+    </p>
+    <p class="note warn">
+      Large-file benchmark mode: <strong>{{ largeFilePerformance === 'fast' ? 'Fast' : 'Balanced / AES-256' }}</strong>. Fast mode uses AES-128 for PDFs >=64 MiB when no key length is explicitly forced, plus stream-data preservation. AES-256 remains the production balanced/default profile.
+    </p>
+    <div style="margin-top:12px">
+      <button type="button" [class.secondary]="largeFilePerformance !== 'fast'" (click)="setBenchmarkPerformanceMode('fast')" [disabled]="running">Fast large-file mode</button>
+      <button type="button" class="secondary" (click)="setBenchmarkPerformanceMode('balanced')" [disabled]="running">Balanced AES-256 mode</button>
+    </div>
+    <input id="large-security-benchmark-file" data-testid="large-security-benchmark-file" type="file" accept="application/pdf,.pdf" (change)="onFileSelected($event)" [disabled]="running" />
+
+    <div class="grid">
+      <div class="metric"><span>Selected file</span><strong>{{ selectedFile?.name || '—' }}</strong></div>
+      <div class="metric"><span>Selected size</span><strong>{{ selectedFile ? formatFileSize(selectedFile.size) : '—' }}</strong></div>
+    </div>
+
+    <div style="margin-top:16px">
+      <button data-testid="large-security-benchmark-run" type="button" (click)="run()" [disabled]="running || !selectedFile || !engineAvailable">
+        {{ running ? 'Benchmarking…' : 'Run browser Protect benchmark' }}
+      </button>
+      <button data-testid="large-security-f3-run" type="button" class="secondary" (click)="runF3Diagnostics()" [disabled]="running || f3DiagnosticsRunning || !engineAvailable">
+        {{ f3DiagnosticsRunning ? 'Running F3 diagnostics…' : 'Run F3 crypto diagnostics' }}
+      </button>
+      <button data-testid="large-security-f2r2-run" type="button" class="secondary" (click)="runF2R2()" [disabled]="running || f3DiagnosticsRunning || f2r2Running || !selectedFile || !f2r2Engine.supported || (selectedFile && selectedFile.size > 100 * 1024 * 1024)">
+        {{ f2r2Running ? 'Running F2-R.2…' : 'Run F2-R.2 PDF pipeline validation' }}
+      </button>
+      <button data-testid="large-security-benchmark-cancel" type="button" class="secondary" (click)="cancel()" [disabled]="!running">Cancel</button>
+    </div>
+
+    <div class="progress" aria-hidden="true"><div [style.width.%]="progress"></div></div>
+    <p data-testid="large-security-benchmark-status" aria-live="polite">{{ statusMessage }}</p>
+
+    @if (running && selectedFile) {
+      <div class="live-grid" data-testid="large-security-benchmark-live">
+        <div class="metric"><span>Live input</span><strong>{{ formatFileSize(selectedFile.size) }}</strong></div>
+        <div class="metric"><span>Elapsed</span><strong>{{ formatMs(elapsedMs) }}</strong></div>
+        <div class="metric"><span>Phase</span><strong>{{ phaseLabel(currentPhase) }}</strong></div>
+        <div class="metric"><span>Progress</span><strong>{{ progress }}%</strong></div>
+        <div class="metric"><span>Max event-loop gap</span><strong>{{ formatMs(maxEventLoopGap) }}</strong></div>
+        <div class="metric"><span>Current JS heap</span><strong>{{ formatBytes(currentJsHeapBytes) }}</strong></div>
+        <div class="metric"><span>JS heap total</span><strong>{{ formatBytes(currentJsHeapTotalBytes) }}</strong></div>
+        <div class="metric"><span>Output</span><strong>{{ liveOutputBytes === null ? 'Waiting for Worker' : formatFileSize(liveOutputBytes) }}</strong><small style="display:block;color:#9eb4c7;margin-top:5px">{{ liveOutputBytesWritten === null ? 'Waiting for output transfer' : formatFileSize(liveOutputBytesWritten) + ' written' }}{{ liveOutputName ? ' • ' + liveOutputName : '' }}</small></div>
+      </div>
+    }
+  </section>
+
+  @if (f2r2Result || f2r2Error) {
+    <section class="panel" data-testid="large-security-f2r2-report">
+      <h2 [class.pass]="!!f2r2Result?.encryptedOutputsByteExact && !!f2r2Result?.referenceCheckPassed && !!f2r2Result?.candidateCheckPassed" [class.fail]="!!f2r2Error || (!!f2r2Result && (!f2r2Result.encryptedOutputsByteExact || !f2r2Result.referenceCheckPassed || !f2r2Result.candidateCheckPassed))">
+        F2-R.2 isolated PDF-pipeline validation
+      </h2>
+      <p class="note">This is an experimental A/B gate. The reference artifact keeps qpdf's original <code>Pl_AES_PDF</code>; the candidate is a separate build artifact. Candidate output must be byte-for-byte identical under deterministic test IV/ID and pass qpdf checks before any production integration is considered.</p>
+      @if (f2r2Error) { <p class="fail">{{ f2r2Error }}</p> }
+      @if (f2r2Result; as r) {
+        <div class="metric-grid">
+          <div class="metric"><span>Input</span><strong>{{ formatBytes(r.inputBytes) }}</strong></div>
+          <div class="metric"><span>AES</span><strong>AES-{{ r.bits }}</strong></div>
+          <div class="metric"><span>Reference</span><strong>{{ formatMs(r.referenceElapsedMs) }}</strong></div>
+          <div class="metric"><span>Bulk candidate</span><strong>{{ formatMs(r.candidateElapsedMs) }}</strong></div>
+          <div class="metric"><span>Speedup</span><strong>{{ r.speedup.toFixed(2) }}×</strong></div>
+          <div class="metric"><span>Reference output</span><strong>{{ formatBytes(r.referenceOutputBytes) }}</strong></div>
+          <div class="metric"><span>Candidate output</span><strong>{{ formatBytes(r.candidateOutputBytes) }}</strong></div>
+          <div class="metric"><span>Encrypted bytes</span><strong [class.pass]="r.encryptedOutputsByteExact" [class.fail]="!r.encryptedOutputsByteExact">{{ r.encryptedOutputsByteExact ? 'EXACT MATCH' : 'MISMATCH' }}</strong></div>
+          <div class="metric"><span>Reference qpdf check</span><strong [class.pass]="r.referenceCheckPassed" [class.fail]="!r.referenceCheckPassed">{{ r.referenceCheckPassed ? 'PASS' : 'FAIL' }}</strong></div>
+          <div class="metric"><span>Candidate qpdf check</span><strong [class.pass]="r.candidateCheckPassed" [class.fail]="!r.candidateCheckPassed">{{ r.candidateCheckPassed ? 'PASS' : 'FAIL' }}</strong></div>
+          <div class="metric"><span>First mismatch</span><strong>{{ r.firstMismatchOffset === null ? 'None' : r.firstMismatchOffset.toLocaleString('en-US') + ' bytes' }}</strong></div>
+          <div class="metric"><span>qpdf</span><strong>{{ r.qpdfVersion }}</strong></div>
+        </div>
+        <ul class="note">
+          @for (note of r.notes; track note) { <li>{{ note }}</li> }
+        </ul>
+      }
+    </section>
+  }
+
+  @if (f3DiagnosticsResults.length > 0 || f3DiagnosticsError) {
+    <section class="panel" data-testid="large-security-f3-report">
+      <h2>F3 crypto diagnostics</h2>
+      <p class="note">Raw AES tests isolate the crypto provider from PDF parsing/writing. The concurrency probe measures independent WASM-worker scaling only; it is not used as PDF stream parallelism.</p>
+      @if (f3DiagnosticsError) { <p class="fail">{{ f3DiagnosticsError }}</p> }
+      @if (f3DiagnosticsResults.length > 0) {
+        <div class="profile-table-wrap">
+          <table>
+            <thead><tr><th>Provider</th><th>AES</th><th>Mode</th><th>Buffer</th><th>Time</th><th>Throughput</th><th>Checksum</th></tr></thead>
+            <tbody>
+              @for (item of f3DiagnosticsResults; track item.provider + '-' + item.bits + '-' + item.bulk) {
+                <tr><td>{{ item.provider }}</td><td>AES-{{ item.bits }}</td><td>{{ item.bulk ? 'bulk' : '16-byte' }}</td><td>{{ formatBytes(item.bufferBytes) }}</td><td>{{ formatMs(item.elapsedMs) }}</td><td>{{ item.throughputMiBPerSecond.toFixed(2) }} MiB/s</td><td>{{ item.checksum }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      @if (f3ConcurrencyResults.length > 0) {
+        <div class="profile-table-wrap">
+          <table>
+            <thead><tr><th>Independent WASM workers</th><th>Elapsed</th><th>Aggregate throughput</th></tr></thead>
+            <tbody>
+              @for (item of f3ConcurrencyResults; track item.concurrency) {
+                <tr><td>{{ item.concurrency }}</td><td>{{ formatMs(item.elapsedMs) }}</td><td>{{ item.throughputMiBPerSecond.toFixed(2) }} MiB/s</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+      <p class="note warn">F3.5 PDF stream-level parallelism remains disabled by default. CBC blocks are sequential, and this diagnostic deliberately does not pretend that independent crypto workers are equivalent to safely parallelizing qpdf's ordered PDF writer.</p>
+    </section>
+  }
+
+  @if (report; as r) {
+    <section class="panel" data-testid="large-security-benchmark-report">
+      <h2 [class.pass]="r.status === 'passed'" [class.fail]="r.status === 'failed'">
+        {{ r.status === 'passed' ? (isRegressionReport(r) ? 'PASS — 15 MB regression completed' : 'PASS — benchmark completed') : 'REVIEW / FAIL' }}
+      </h2>
+
+      <div class="metric-grid">
+        <div class="metric"><span>Input</span><strong>{{ formatBytes(r.inputBytes) }}</strong></div>
+        <div class="metric"><span>Output</span><strong>{{ r.outputBytes === null ? '—' : formatBytes(r.outputBytes) }}</strong></div>
+        <div class="metric"><span>Engine time</span><strong>{{ formatMs(r.engineDurationMs) }}</strong></div>
+        <div class="metric"><span>Wall-clock</span><strong>{{ formatMs(r.wallClockDurationMs) }}</strong></div>
+        <div class="metric"><span>Max event-loop gap</span><strong>{{ formatMs(r.maxEventLoopGapMs) }}</strong></div>
+        <div class="metric"><span>Peak JS heap</span><strong>{{ formatBytes(r.peakJsHeapBytes) }}</strong></div>
+        <div class="metric"><span>JS heap delta</span><strong>{{ formatBytes(r.jsHeapDeltaBytes) }}</strong></div>
+        <div class="metric"><span>Performance profile</span><strong>{{ performanceProfileLabel(r.performanceProfile) }}</strong></div>
+        <div class="metric"><span>qpdf WASM runtime</span><strong>{{ wasmRuntimeLabel(r.wasmRuntime) }}</strong></div>
+        <div class="metric"><span>Encryption bits</span><strong>AES-{{ r.encryptionBits }}</strong></div>
+        <div class="metric"><span>Runtime validation</span><strong>{{ runtimeValidationLabel(r.runtimeInfo) }}</strong></div>
+        <div class="metric"><span>F2 bulk AES</span><strong>{{ bulkAesLabel(r.runtimeInfo) }}</strong></div>
+        <div class="metric"><span>F3 AES profile</span><strong>{{ f3ProfileLabel(r.runtimeInfo) }}</strong></div>
+        <div class="metric"><span>F3 AES throughput</span><strong>{{ f3ThroughputLabel(r.runtimeInfo) }}</strong></div>
+        <div class="metric"><span>F3 non-crypto encrypt</span><strong>{{ f3NonCryptoLabel(r.runtimeInfo) }}</strong></div>
+        <div class="metric"><span>F3 stream parallelism</span><strong>{{ f3ParallelismLabel(r.runtimeInfo) }}</strong></div>
+        <div class="metric"><span>Output header</span><strong [class.pass]="r.outputHeaderValid" [class.fail]="!r.outputHeaderValid">{{ r.outputHeaderValid ? 'VALID %PDF-' : 'INVALID' }}</strong></div>
+      </div>
+
+      <dl style="margin-top:20px">
+        <dt>Input filename</dt><dd>{{ r.inputName }}</dd>
+        <dt>Output filename</dt><dd>{{ r.outputName || '—' }}</dd>
+        <dt>Device memory hint</dt><dd>{{ r.deviceMemoryGb === null ? 'Not exposed' : r.deviceMemoryGb + ' GB' }}</dd>
+        <dt>Hardware concurrency</dt><dd>{{ r.hardwareConcurrency ?? '—' }}</dd>
+        <dt>Error</dt><dd [class.fail]="!!r.errorMessage">{{ r.errorMessage || 'None' }}</dd>
+      </dl>
+
+      <section class="profile-panel" data-testid="large-security-benchmark-profile">
+        <h3>Phase timing profile</h3>
+        <p class="note">
+          Worker time measures the dedicated qpdf Worker phases. Main-thread time measures the browser-side interval
+          between phase callbacks and includes any main-thread blocking observed during that interval.
+        </p>
+        <div class="profile-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Phase</th>
+                <th>Worker</th>
+                <th>Main thread</th>
+                <th>Max gap</th>
+                <th>Peak heap</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (phase of profilePhases(r); track phase) {
+                <tr>
+                  <td>{{ phaseLabelShort(phase) }}</td>
+                  <td>{{ formatMs(workerPhaseDuration(r, phase)) }}</td>
+                  <td>{{ formatMs(mainThreadPhaseDuration(r, phase)) }}</td>
+                  <td>{{ formatMs(mainThreadPhaseProfile(r, phase)?.maxEventLoopGapMs ?? null) }}</td>
+                  <td>{{ formatBytes(mainThreadPhaseProfile(r, phase)?.peakJsHeapBytes ?? null) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Encryption profile: <strong>AES-{{ r.encryptionBits }}</strong>.
+          Unaccounted Worker time:
+          <strong>{{ formatMs(unaccountedWorkerMs(r)) }}</strong>.
+          Unaccounted main-thread wall time:
+          <strong>{{ formatMs(unaccountedWallClockMs(r)) }}</strong>.
+          The per-phase gap/heap columns are the primary diagnostic signals for correlating a UI freeze with a phase. The large-file fast profile disables generalized stream decoding and preserves existing stream data. The AES-128 variant is an explicit benchmark speed profile; it is not silently applied to normal Protect operations. The runtime row reports whether the custom performance WASM actually loaded. Phase 1.5F-F1.1 is strict: a requested performance runtime cannot silently fall back to the published runtime. Runtime validation checks the WASM binary header, qpdf version 12.4.1, and default OpenSSL crypto provider.
+        </p>
+      </section>
+
+      @if (outputFile) {
+        <button data-testid="large-security-benchmark-download" type="button" (click)="downloadResult()">Save benchmark output</button>
+        <p class="note">For browsers with the File System Access API, the result is streamed directly to the selected disk location without creating a large ArrayBuffer. Other browsers use the standard Blob URL download path.</p>
+      }
+
+      <ul>
+        @for (note of r.notes; track note) { <li>{{ note }}</li> }
+      </ul>
+    </section>
+  }
+</div>

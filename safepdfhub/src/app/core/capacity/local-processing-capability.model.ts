@@ -42,6 +42,24 @@ export interface WorkloadAssessment {
 
 export interface FileValidationResult {
   valid: boolean;
-  code: 'ok' | 'invalid-type' | 'duplicate' | 'file-too-large' | 'total-too-large' | 'too-many-files';
+  code: PdfValidationCode;
   message?: string;
 }
+
+export type PdfValidationCode =
+  | 'ok'
+  | 'invalid-type'
+  | 'empty-file'
+  | 'invalid-header'
+  | 'missing-eof'
+  | 'duplicate'
+  | 'file-too-large'
+  | 'total-too-large'
+  | 'too-many-files'
+  | 'invalid-pdf'
+  | 'damaged-pdf'
+  | 'unsupported-pdf'
+  | 'encrypted'
+  | 'not-encrypted'
+  | 'page-limit'
+  | 'engine-unavailable';

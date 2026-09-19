@@ -35,6 +35,37 @@ export interface ToolBehavior {
 export const TOOL_BEHAVIORS: ToolBehavior[] = [
 
   // =========================
+  // PDF SECURITY
+  // =========================
+  {
+    slug: 'protect-pdf',
+    allowMultiple: false,
+    replaceOnUpload: true,
+    acceptedTypes: '.pdf,application/pdf',
+    heroTitle: 'Protect your PDF with a password',
+    heroDescription: 'Encrypt and protect your PDF locally in your browser.',
+    uploadTitle: 'Drop your PDF here',
+    uploadButtonText: 'Select PDF',
+    uploadHint: 'Your PDF and password stay on your device',
+    showQuickActions: false,
+    primaryActionText: 'Protect PDF'
+  },
+  {
+    slug: 'unlock-pdf',
+    allowMultiple: false,
+    replaceOnUpload: true,
+    acceptedTypes: '.pdf,application/pdf',
+    heroTitle: 'Unlock a password-protected PDF',
+    heroDescription: 'Remove PDF password protection locally when you know its password.',
+    uploadTitle: 'Drop your protected PDF here',
+    uploadButtonText: 'Select PDF',
+    uploadHint: 'The password is used only in your browser',
+    showQuickActions: false,
+    primaryActionText: 'Unlock PDF'
+  },
+
+
+  // =========================
   // MERGE PDF
   // =========================
   {

@@ -28,17 +28,23 @@ import { CompressionState } from '../../core/compression/compression.state';
 import { CompressionFacade } from '../../core/compression/compress.facade';
 import { WorkspaceOutputService } from '../../core/workflow/workspace-output.service';
 import { WorkspaceUploadService } from '../../core/workflow/workspace-upload.service';
+import { PdfFileTransferService } from '../../core/services/pdf-file-transfer.service';
 import { LocalProcessingCapabilityService } from '../../core/capacity/local-processing-capability.service';
 import { PdfValidationService } from '../../core/capacity/pdf-validation.service';
+import type { PdfEncryptionHint } from '../../core/capacity/pdf-validation.service';
 import { PdfWorkloadAnalyzerService } from '../../core/capacity/pdf-workload-analyzer.service';
 import { LocalProcessingCapability, WorkloadAssessment } from '../../core/capacity/local-processing-capability.model';
+import { SecurityWorkspaceComponent } from '../../features/tools/security/security-workspace/security-workspace.component';
+import { PdfSecurityService } from '../../core/security/pdf-security.service';
+import { LargePdfSecurityCapabilityService } from '../../core/security/large-file/large-pdf-security-capability.service';
+import type { PdfSecurityMode, PdfSecurityRequest, PdfSecurityResult } from '../../core/security/pdf-security.types';
 
 type WorkflowStep = 'merge' | 'compress' | 'split';
 
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent,
+  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent,
     DialogComponent, BottomSheetComponent, ActionPanelComponent],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
@@ -86,6 +92,10 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   lastZipBlob: Blob | null = null;
   lastZipName = '';
+  securityProgress = 0;
+  securityResult: PdfSecurityResult | null = null;
+  securityErrorMessage: string | null = null;
+  securityEncryptionStatus: PdfEncryptionHint = 'unknown';
 
   get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
@@ -110,9 +120,12 @@ export class ToolComponent implements OnInit, OnDestroy {
     public workspace: WorkspaceStateService,
     private workspaceOps: WorkspaceOperationsService,
     private workspaceUpload: WorkspaceUploadService,
+    private pdfFileTransfer: PdfFileTransferService,
     private localProcessingCapability: LocalProcessingCapabilityService,
     private pdfValidation: PdfValidationService,
     private pdfWorkloadAnalyzer: PdfWorkloadAnalyzerService,
+    private largePdfSecurityCapability: LargePdfSecurityCapabilityService,
+    private pdfSecurity: PdfSecurityService,
     private ngZone: NgZone,
     @Inject(PLATFORM_ID) private platformId: Object
   ) { }
@@ -132,9 +145,11 @@ export class ToolComponent implements OnInit, OnDestroy {
 
       // READ NAVIGATION STATE
       const navigation = this.isBrowser ? window.history.state : {};
-      const filesFromState = navigation?.files;
-      const autoAction = navigation?.autoAction;
-      const shouldPreserve = Array.isArray(filesFromState) && filesFromState.length > 0;
+      const transferId = navigation?.pdfFileTransferId;
+      const legacyFilesFromState = navigation?.files;
+      const legacyAutoAction = navigation?.autoAction;
+      const hasTransfer = typeof transferId === 'string' && transferId.length > 0;
+      const hasLegacyFiles = Array.isArray(legacyFilesFromState) && legacyFilesFromState.length > 0;
 
       // ALWAYS RESET FIRST
       this.resetWorkspaceState();
@@ -151,23 +166,15 @@ export class ToolComponent implements OnInit, OnDestroy {
         content: this.tool.description
       });
 
-      // RESTORE FILES IF PROVIDED
-      if (shouldPreserve) {
-        this.onFileSelect({
-          target: {
-            files: filesFromState
-          }
-        });
-        if (autoAction === 'compress') {
-          setTimeout(() => {
-            this.compressPdf();
-          }, 300);
-        }
-        if (autoAction === 'merge') {
-          setTimeout(() => {
-            this.mergePdf();
-          }, 300);
-        }
+      // RESTORE FILES IF PROVIDED. Large File objects are transferred through
+      // PdfFileTransferService rather than Router history state so navigation
+      // never attempts to clone/serialize a 100+ MB PDF.
+      if (hasTransfer) {
+        void this.restoreTransferredFiles(transferId);
+      } else if (hasLegacyFiles) {
+        // Backward compatibility for an older in-flight navigation. New
+        // navigations never use this path.
+        void this.restoreTransferredFilesFromLegacyState(legacyFilesFromState, legacyAutoAction);
       }
     });
   }
@@ -178,6 +185,18 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   get isSplitTool(): boolean {
     return this.tool?.slug === 'split-pdf';
+  }
+
+  get isSecurityTool(): boolean {
+    return this.tool?.category === 'security';
+  }
+
+  get securityMode(): PdfSecurityMode {
+    switch (this.tool?.slug) {
+      case 'unlock-pdf': return 'unlock';
+      case 'remove-password': return 'remove-password';
+      default: return 'protect';
+    }
   }
 
   private resetWorkspaceState() {
@@ -194,6 +213,10 @@ export class ToolComponent implements OnInit, OnDestroy {
     }
     // clear workspace
     this.workspaceOps.clear();
+    this.securityResult = null;
+    this.securityErrorMessage = null;
+    this.securityProgress = 0;
+    this.securityEncryptionStatus = 'unknown';
     // reset ui state
     this.workspace.activeIndex = -1;
     this.workspace.hasMerged = false;
@@ -215,18 +238,22 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get maxFileMB(): number {
+    if (this.isSecurityTool && this.largePdfSecurityCapability.supported) return 1024;
     return Math.round(this.localCapability.budget.maxFileBytes / (1024 * 1024));
   }
 
   get maxTotalMB(): number {
+    if (this.isSecurityTool && this.largePdfSecurityCapability.supported) return 1024;
     return Math.round(this.localCapability.budget.maxTotalBytes / (1024 * 1024));
   }
 
   get maxFiles(): number {
+    if (this.isSecurityTool && this.largePdfSecurityCapability.supported) return 1;
     return this.localCapability.budget.maxFiles;
   }
 
   get maxPages(): number {
+    if (this.isSecurityTool && this.largePdfSecurityCapability.supported) return Number.MAX_SAFE_INTEGER;
     return this.localCapability.budget.maxPages;
   }
 
@@ -240,6 +267,9 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get capacitySummary(): string {
+    if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {
+      return 'Up to 1 GB per file • processed locally';
+    }
     if (this.behavior?.allowMultiple) {
       return `Up to ${this.maxFileMB} MB per file • ${this.maxTotalMB} MB total`;
     }
@@ -250,6 +280,14 @@ export class ToolComponent implements OnInit, OnDestroy {
     return this.workloadAssessment?.risk === 'blocked';
   }
 
+  get hasInvalidFiles(): boolean {
+    return this.workspace.workspaceFiles.some(file => file.validationState === 'blocked');
+  }
+
+  get canProcessWorkspace(): boolean {
+    return !this.hasBlockedWorkload && !this.hasInvalidFiles && !this.workspace.loading;
+  }
+
   get workloadIsLarge(): boolean {
     return this.workloadAssessment?.risk === 'large' || this.workloadAssessment?.risk === 'high-risk';
   }
@@ -257,19 +295,21 @@ export class ToolComponent implements OnInit, OnDestroy {
   get workloadMessage(): string {
     const assessment = this.workloadAssessment;
     if (!assessment || !this.workspace.files.length) return '';
+    if (this.isSecurityTool && !assessment.workload.knownPageCount) return 'Ready for local PDF security processing; large files use the dedicated browser engine.';
     if (!assessment.workload.knownPageCount) return 'Checking PDF workload; page limits will be verified before processing.';
     if (assessment.risk === 'blocked') return assessment.reasons[0] ?? 'This workload cannot be processed locally on this device.';
     if (assessment.risk === 'large' || assessment.risk === 'high-risk') {
-      return 'Large PDF workload. Processing may use significant device memory.';
+      return this.isSecurityTool
+        ? 'Large PDF workload. The dedicated local security engine is being used.'
+        : 'Large PDF workload. Processing may use significant device memory.';
     }
     return 'Ready for local processing.';
   }
 
   private refreshWorkloadAssessment(): void {
-    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess(
-      this.workspace.files,
-      this.workspace.pageCounts
-    );
+    this.workloadAssessment = this.isSecurityTool
+      ? this.pdfWorkloadAnalyzer.assessSecurity(this.workspace.files, this.workspace.pageCounts)
+      : this.pdfWorkloadAnalyzer.assess(this.workspace.files, this.workspace.pageCounts);
     this.applyWorkspaceValidationState();
   }
 
@@ -277,10 +317,19 @@ export class ToolComponent implements OnInit, OnDestroy {
     const assessment = this.workloadAssessment;
     this.workspace.workspaceFiles = this.workspace.workspaceFiles.map((item, index) => {
       const pageCount = this.workspace.pageCounts[index] || 0;
+
+      if (item.validationState === 'blocked' && item.validationCode && item.validationCode !== 'ok') {
+        return item;
+      }
+
       let state: 'checking' | 'ready' | 'large' | 'blocked' = 'checking';
       let message: string | undefined;
+      let validationCode: import('../../core/capacity/local-processing-capability.model').PdfValidationCode | undefined;
 
-      if (assessment.risk === 'blocked') {
+      if (this.isSecurityTool) {
+        state = 'ready';
+      } else if (assessment.risk === 'blocked') {
+        validationCode = 'file-too-large';
         state = 'blocked';
         message = assessment.reasons[0];
       } else if (pageCount > this.maxPages) {
@@ -296,7 +345,7 @@ export class ToolComponent implements OnInit, OnDestroy {
         state = 'ready';
       }
 
-      return { ...item, validationState: state, validationMessage: message };
+      return { ...item, validationState: state, validationMessage: message, validationCode };
     });
   }
 
@@ -308,8 +357,85 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   goToTool(slug: string, autoAction?: string, preserveFiles = false) {
-    const navigationState = preserveFiles ? { files: this.workspace.files, autoAction } : undefined;
-    this.router.navigate(['/tool', slug], { state: navigationState });
+    if (preserveFiles && this.workspace.files.length) {
+      this.goToToolWithFiles(slug, this.workspace.files, autoAction);
+      return;
+    }
+
+    void this.router.navigate(['/', slug]);
+  }
+
+  private goToToolWithFiles(slug: string, files: readonly File[], autoAction?: string): void {
+    if (!files.length) {
+      void this.router.navigate(['/', slug]);
+      return;
+    }
+
+    const transferId = this.pdfFileTransfer.put(files, autoAction);
+    void this.router.navigate(['/', slug], {
+      state: { pdfFileTransferId: transferId }
+    });
+  }
+
+  private async restoreTransferredFiles(transferId: string): Promise<void> {
+    const transfer = this.pdfFileTransfer.take(transferId);
+    if (!transfer?.files.length) return;
+
+    this.loader.show(
+      transfer.files[0].size >= 100 * 1024 * 1024
+        ? 'Opening your large PDF locally…'
+        : 'Opening your PDF…'
+    );
+    this.loader.setProgress?.(10);
+
+    try {
+      await this.addFilesToWorkspace(transfer.files);
+      this.loader.setProgress?.(100);
+      this.loader.setText(
+        this.workspace.files.length
+          ? 'PDF ready ✓'
+          : 'PDF could not be opened'
+      );
+    } catch (error) {
+      console.error('Failed to restore transferred PDF', error);
+      this.toast.show('The PDF could not be opened. Please select it again.', 'error');
+      this.loader.setText('Could not open PDF');
+    } finally {
+      this.loader.hide();
+      this.cd.markForCheck();
+    }
+  }
+
+  private async restoreTransferredFilesFromLegacyState(
+    files: unknown,
+    autoAction?: string
+  ): Promise<void> {
+    if (!Array.isArray(files) || !files.length || !files.every(file => file instanceof File)) return;
+
+    this.loader.show('Opening your PDF…');
+    this.loader.setProgress?.(10);
+    try {
+      await this.addFilesToWorkspace(files as File[]);
+      if (autoAction === 'compress') {
+        setTimeout(() => void this.compressPdf(), 300);
+      } else if (autoAction === 'merge') {
+        setTimeout(() => void this.mergePdf(), 300);
+      }
+    } finally {
+      this.loader.setProgress?.(100);
+      this.loader.hide();
+      this.cd.markForCheck();
+    }
+  }
+
+  /** Route the currently selected PDF directly to Unlock PDF. */
+  openUnlockForCurrentFile(): void {
+    const file = this.workspace.files[0];
+    if (!file) {
+      this.goToTool('unlock-pdf');
+      return;
+    }
+    this.goToToolWithFiles('unlock-pdf', [file]);
   }
 
   private updateWorkflow() {
@@ -321,7 +447,10 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   async runWorkflow() {
-    if (!this.workspace.files.length || this.workspace.loading) return;
+    if (!this.workspace.files.length || this.workspace.loading || this.hasInvalidFiles) {
+      if (this.hasInvalidFiles) this.toast.show(this.workspace.workspaceFiles.find(f => f.validationState === 'blocked')?.validationMessage || 'One or more PDFs cannot be processed.', 'error');
+      return;
+    }
     setTimeout(() => {
       this.loader.show();
       this.loader.setText('Optimizing PDF...');
@@ -393,13 +522,20 @@ export class ToolComponent implements OnInit, OnDestroy {
   // FILE INPUT
   // =====================
 
-  private prepareUpload(files: File[]): File[] {
+  private async prepareUpload(files: File[]): Promise<File[]> {
     if (this.behavior.replaceOnUpload) {
       this.workspaceOps.clear();
       this.workspace.activeIndex = -1;
     }
 
-    const selected = this.validateFiles(files);
+    if (this.isSecurityTool) {
+      this.securityResult = null;
+      this.securityErrorMessage = null;
+      this.securityProgress = 0;
+      this.securityEncryptionStatus = 'unknown';
+    }
+
+    const selected = await this.validateFiles(files);
     if (this.workspace.files.length && this.workspace.activeIndex === -1) {
       this.workspace.activeIndex = 0;
     }
@@ -407,7 +543,14 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   private async addFilesToWorkspace(files: File[]): Promise<void> {
-    const selected = this.validateFiles(files);
+    if (this.isSecurityTool) {
+      this.securityResult = null;
+      this.securityErrorMessage = null;
+      this.securityProgress = 0;
+      this.securityEncryptionStatus = 'unknown';
+    }
+
+    const selected = await this.validateFiles(files);
     if (!selected.length) {
       return;
     }
@@ -418,18 +561,20 @@ export class ToolComponent implements OnInit, OnDestroy {
 
     this.handlePostUploadProcessing();
     this.refreshWorkloadAssessment();
-    this.queueInitialPreviews(startIndex);
+    if (!this.isSecurityTool) {
+      this.queueInitialPreviews(startIndex);
+    }
     this.updateActiveFileAfterUpload(startIndex);
   }
 
-  onFileSelect(event: any) {
-    this.addFilesToWorkspace(Array.from(event.target.files || []) as File[]);
+  async onFileSelect(event: any) {
+    await this.addFilesToWorkspace(Array.from(event.target.files || []) as File[]);
     event.target.value = '';
   }
 
-  onDropFiles(event: DragEvent) {
+  async onDropFiles(event: DragEvent) {
     event.preventDefault();
-    this.addFilesToWorkspace(Array.from(event.dataTransfer?.files || []) as File[]);
+    await this.addFilesToWorkspace(Array.from(event.dataTransfer?.files || []) as File[]);
   }
 
   allowDrop(event: DragEvent) {
@@ -498,20 +643,70 @@ export class ToolComponent implements OnInit, OnDestroy {
   // =====================
   //     VALIDATIONS
   // =====================
-  private validateFiles(newFiles: File[]): File[] {
+  private async validateFiles(newFiles: File[]): Promise<File[]> {
     const valid: File[] = [];
     const existing = [...this.workspace.files];
 
     for (const file of newFiles) {
-      const result = this.pdfValidation.validateSelection(
-        file,
-        [...existing, ...valid],
-        this.behavior.allowMultiple
-      );
+      const result = this.isSecurityTool
+        ? this.pdfValidation.validateSecuritySelection(file)
+        : this.pdfValidation.validateSelection(
+            file,
+            [...existing, ...valid],
+            this.behavior.allowMultiple
+          );
 
       if (!result.valid) {
         const level = result.code === 'duplicate' ? 'info' : 'error';
         if (result.message) this.toast.show(result.message, level);
+        continue;
+      }
+
+      // Upload admission must stay lightweight. Do not parse the complete PDF,
+      // run qpdf --check, count pages, or validate stream structure here. Those
+      // checks belong to the operation/preview engine. The only content read at
+      // upload time is the small trailer tail needed to route password-protected
+      // PDFs before they enter a tool that cannot process them.
+      const header = await this.pdfValidation.validateUploadHeader(file);
+      if (!header.valid) {
+        if (header.message) this.toast.show(header.message, 'error');
+        continue;
+      }
+
+      const encryptionStatus = await this.pdfValidation.inspectEncryptionHint(file);
+
+      if (this.isSecurityTool) {
+        this.securityEncryptionStatus = encryptionStatus;
+
+        // Protect PDF has the same admission policy as Merge/Split/Compress:
+        // an already-protected input is not added to the workspace. Give the
+        // user a direct path to Unlock PDF and preserve the selected File.
+        if (this.securityMode === 'protect' && encryptionStatus === 'encrypted') {
+          this.toast.show(
+            'This PDF is already password-protected. Unlock it first before using Protect PDF.',
+            'error',
+            7000,
+            {
+              actions: [{
+                label: 'Unlock PDF',
+                action: () => this.goToToolWithFiles('unlock-pdf', [file])
+              }]
+            }
+          );
+          continue;
+        }
+      } else if (encryptionStatus === 'encrypted') {
+        this.toast.show(
+          'This PDF is password-protected. Unlock it first before using this tool.',
+          'error',
+          7000,
+          {
+            actions: [{
+              label: 'Unlock PDF',
+              action: () => this.goToToolWithFiles('unlock-pdf', [file])
+            }]
+          }
+        );
         continue;
       }
 
@@ -533,6 +728,10 @@ export class ToolComponent implements OnInit, OnDestroy {
   // ===================== 
   async splitPdf(request: SplitRequest) {
     const startedAt = performance.now();
+    if (this.hasInvalidFiles || this.hasBlockedWorkload) {
+      this.toast.show(this.workspace.workspaceFiles.find(f => f.validationState === 'blocked')?.validationMessage || this.workloadMessage || 'This PDF cannot be processed reliably.', 'error');
+      return;
+    }
     const totalPages = this.workspace.pageCounts[0];
     let groups: SplitGroup[] = [];
     switch (request.mode) {
@@ -757,10 +956,60 @@ export class ToolComponent implements OnInit, OnDestroy {
       console.error(e);
       item.previewError = true;
       item.previewLoading = false;
-      this.toast.show('Preview failed', 'error');
+
+      // Preview is a presentation enhancement, not the PDF-processing
+      // authority. A CDN/rendering/worker problem must never make a valid PDF
+      // look corrupt or block Merge/Split/Compress. Only errors that clearly
+      // identify a PDF/password problem become a hard validation failure;
+      // infrastructure/rendering failures leave processing available.
+      const definitiveCode = this.classifyPreviewValidationError(e);
+      if (this.isDefinitivePreviewFailure(e)) {
+        item.validationState = 'blocked';
+        item.validationCode = definitiveCode;
+        item.validationMessage = this.previewValidationMessage(definitiveCode);
+        this.toast.show(item.validationMessage, 'error');
+      } else {
+        item.validationState = 'ready';
+        item.validationCode = undefined;
+        item.validationMessage = 'Preview is unavailable, but the PDF can still be processed.';
+        this.toast.show('PDF added. Preview is unavailable, but processing can continue.', 'info');
+      }
     }
 
     this.cd.markForCheck();
+  }
+
+  private isDefinitivePreviewFailure(error: unknown): boolean {
+    const name = error && typeof error === 'object' && 'name' in error
+      ? String((error as { name?: unknown }).name || '').toLowerCase()
+      : '';
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+    return name.includes('invalidpdfexception')
+      || name.includes('missingpdfexception')
+      || name.includes('passwordexception')
+      || message.includes('invalid pdf')
+      || message.includes('password')
+      || message.includes('encrypted')
+      || message.includes('unsupported pdf')
+      || message.includes('not a pdf');
+  }
+
+  private classifyPreviewValidationError(error: unknown): import('../../core/capacity/local-processing-capability.model').PdfValidationCode {
+    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    if (message.includes('password') || message.includes('encrypted')) return 'encrypted';
+    if (message.includes('not a pdf') || message.includes('invalid pdf') || message.includes('invalidpdf')) return 'invalid-pdf';
+    if (message.includes('unsupported') || message.includes('not supported')) return 'unsupported-pdf';
+    return 'damaged-pdf';
+  }
+
+  private previewValidationMessage(code: import('../../core/capacity/local-processing-capability.model').PdfValidationCode): string {
+    switch (code) {
+      case 'encrypted': return 'This PDF is password-protected and cannot be used by this tool without unlocking it first.';
+      case 'unsupported-pdf': return 'This PDF uses a structure or feature that this browser tool cannot process reliably.';
+      case 'invalid-pdf': return 'This file is not a valid PDF.';
+      default: return 'This PDF appears damaged or malformed and cannot be processed reliably.';
+    }
   }
 
   retryPreview(i: number) {
@@ -971,7 +1220,10 @@ export class ToolComponent implements OnInit, OnDestroy {
   // MERGE
   // =====================
   async mergePdf() {
-    if (this.workspace.loading) return;
+    if (this.workspace.loading || this.hasInvalidFiles) {
+      if (this.hasInvalidFiles) this.toast.show(this.workspace.workspaceFiles.find(f => f.validationState === 'blocked')?.validationMessage || 'One or more PDFs cannot be processed.', 'error');
+      return;
+    }
     if (this.workspace.files.length < 2) {
       this.toast.show('Please add at least 2 PDFs to merge', 'error');
       return;
@@ -1026,6 +1278,125 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.cd.markForCheck();
     }
   }
+
+  async runSecurityOperation(request: PdfSecurityRequest): Promise<void> {
+    if (this.workspace.loading || !this.workspace.files.length || !this.isSecurityTool) {
+      return;
+    }
+
+    this.refreshWorkloadAssessment();
+    if (this.hasBlockedWorkload) {
+      this.toast.show(this.workloadMessage, 'error');
+      return;
+    }
+
+    const file = this.workspace.files[0];
+    if (this.securityMode === 'protect' && this.securityEncryptionStatus === 'encrypted') {
+      const message = 'This PDF is already password-protected. Unlock it first, then protect the unlocked copy with a new password.';
+      this.securityErrorMessage = message;
+      this.toast.show(message, 'error');
+      this.cd.markForCheck();
+      return;
+    }
+    if ((this.securityMode === 'unlock' || this.securityMode === 'remove-password') && this.securityEncryptionStatus === 'not-encrypted') {
+      const message = 'This PDF does not appear to be password-protected. Use Protect PDF if you want to add a password.';
+      this.securityErrorMessage = message;
+      this.toast.show(message, 'error');
+      this.cd.markForCheck();
+      return;
+    }
+    this.workspace.loading = true;
+    this.loader.show();
+    this.securityProgress = 0;
+    this.securityErrorMessage = null;
+    this.securityResult = null;
+    this.loader.setProgress?.(0);
+    this.loader.setText('Preparing PDF security operation...');
+
+    this.unregisterLoaderCancellation?.();
+    this.unregisterLoaderCancellation = this.loader.registerCancellationHandler(() => {
+      this.loader.setText('Cancelling PDF security operation...');
+      void this.pdfSecurity.cancel();
+    });
+
+    try {
+      const result = request.mode === 'protect'
+        ? await this.pdfSecurity.protect(
+            file,
+            {
+              userPassword: request.password,
+              permissions: request.permissions ?? {
+                allowPrinting: true,
+                allowCopying: true,
+                allowModifying: false,
+                allowAnnotations: true,
+                allowForms: true,
+                allowAssembly: false
+              },
+              bits: 256
+            },
+            progress => {
+              this.securityProgress = progress;
+              this.loader.setProgress?.(progress);
+              this.loader.setText('Encrypting PDF locally...');
+            }
+          )
+        : await this.pdfSecurity.removePassword(
+            file,
+            request.password,
+            progress => {
+              this.securityProgress = progress;
+              this.loader.setProgress?.(progress);
+              this.loader.setText('Removing PDF password locally...');
+            },
+            request.mode
+          );
+
+      this.securityResult = result;
+      this.loader.setText('Done ✨');
+      this.toast.show('PDF security operation completed.', 'success');
+    } catch (error: unknown) {
+      const message = error instanceof Error
+        ? error.message
+        : 'PDF security operation failed. Please try again.';
+      this.securityErrorMessage = message;
+      if (error && typeof error === 'object' && 'code' in error && (error as { code?: unknown }).code === 'INPUT_ENCRYPTED') {
+        this.securityEncryptionStatus = 'encrypted';
+      }
+      this.loader.setText('PDF security operation could not be completed');
+      this.toast.show(message, 'error');
+    } finally {
+      this.unregisterLoaderCancellation?.();
+      this.unregisterLoaderCancellation = null;
+      this.workspace.loading = false;
+      setTimeout(() => this.loader.hide(), 250);
+      this.cd.markForCheck();
+    }
+  }
+
+  downloadSecurityResult(): void {
+    if (!this.securityResult) return;
+    this.downloadFile(this.securityResult.file);
+  }
+
+  protectSecurityResult(): void {
+    if (this.workspace.loading || !this.securityResult?.file) return;
+    this.goToToolWithFiles('protect-pdf', [this.securityResult.file]);
+  }
+
+  processAnotherSecurityPdf(): void {
+    if (this.workspace.loading) return;
+    this.securityResult = null;
+    this.securityErrorMessage = null;
+    this.securityProgress = 0;
+    this.securityEncryptionStatus = 'unknown';
+    this.workspaceOps.clear();
+    this.workspace.activeIndex = -1;
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
+    this.cd.markForCheck();
+    setTimeout(() => this.triggerUpload());
+  }
+
 
   resetAfterMerge() {
     this.workspaceOps.replaceAll([]);
@@ -1119,6 +1490,10 @@ export class ToolComponent implements OnInit, OnDestroy {
   async compressPdf() {
     if (!this.workspace.files.length) {
       this.toast.show('Please add a PDF first', 'error');
+      return;
+    }
+    if (this.hasInvalidFiles || this.hasBlockedWorkload) {
+      this.toast.show(this.workspace.workspaceFiles.find(f => f.validationState === 'blocked')?.validationMessage || this.workloadMessage || 'This PDF cannot be processed reliably.', 'error');
       return;
     }
 
@@ -1221,7 +1596,11 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.unregisterLoaderCancellation?.();
     this.unregisterLoaderCancellation = null;
     if (this.workspace.loading) {
-      this.mergeEngine.cancel();
+      if (this.isSecurityTool) {
+        void this.pdfSecurity.cancel();
+      } else {
+        this.mergeEngine.cancel();
+      }
     }
     if (this.workspace.lastMergedUrl) {
       URL.revokeObjectURL(this.workspace.lastMergedUrl);
