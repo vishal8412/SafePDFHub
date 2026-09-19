@@ -1,54 +1,45 @@
 <div class="smart-panel">
 
-  <!-- HEADER -->
   <div class="panel-header">
-
-    <div class="panel-icon">⚡</div>
-
     <h2>{{ title }}</h2>
-
-    <p class="panel-sub">
-      {{ subtitle }}
-    </p>
-
+    <p class="panel-sub">{{ subtitle }}</p>
   </div>
 
-  <!-- ACTIONS -->
-  <div class="action-grid">
-
-    <div
-      *ngFor="let action of actions"
-
+  <div class="action-grid" *ngIf="actions.length">
+    <button
+      *ngFor="let action of actions; trackBy: trackByActionId"
+      type="button"
       class="action-card"
-
       [class.primary]="action.primary"
-
       (click)="actionClick.emit(action.id)"
     >
-
-      <div class="icon">
-        {{ action.icon }}
+      <div class="action-top">
+        <span class="action-icon" aria-hidden="true">
+          <lucide-icon [img]="action.icon" size="20"></lucide-icon>
+        </span>
       </div>
-
-      <div class="title">
-        {{ action.title }}
+      <div class="action-copy">
+        <div class="title">{{ action.title }}</div>
+        <div class="desc">{{ action.desc }}</div>
       </div>
-
-      <div class="desc">
-        {{ action.desc }}
-      </div>
-
-    </div>
-
+      <span class="action-open">Open tool <b aria-hidden="true">↗</b></span>
+    </button>
   </div>
 
-  <!-- TRUST STRIP -->
-  <div class="trust-strip">
+  <button
+    type="button"
+    class="view-all-tools"
+    (click)="viewAllClick.emit()"
+  >
+    <span>{{ viewAllLabel }}</span>
+    <span aria-hidden="true">→</span>
+  </button>
 
-    <div *ngFor="let item of trustItems">
-      {{ item }}
+  <div class="trust-strip" *ngIf="trustItems.length">
+    <div class="trust-item" *ngFor="let item of trustItems; trackBy: trackByTrustIcon">
+      <span class="trust-icon" [class]="'trust-icon--' + item.icon" aria-hidden="true"></span>
+      <span>{{ item.title }}</span>
     </div>
-
   </div>
 
 </div>

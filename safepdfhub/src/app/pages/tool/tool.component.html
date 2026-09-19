@@ -1,9 +1,12 @@
 <section class="tool-page" [class.workspace-mode]="isWorkspaceMode">
  
   <div class="hero" *ngIf="!isWorkspaceMode">
-    <div class="hero-badge">
-        🔒 Files never leave your browser
-      </div>
+    <div class="privacy-signal" aria-label="Private browser processing">
+      <span class="privacy-signal__mark" aria-hidden="true"></span>
+      <span class="privacy-signal__eyebrow">Private by design</span>
+      <span class="privacy-signal__divider" aria-hidden="true"></span>
+      <span class="privacy-signal__detail">Your PDF stays on your device</span>
+    </div>
     <h1>{{ behavior.heroTitle }}</h1>
     <p class="hero-sub">
       {{ behavior.heroDescription }}
@@ -15,18 +18,46 @@
        UPLOAD AREA
   ===================== -->
 
-  <div *ngIf="!(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode)" 
+  <div *ngIf="!(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode)"
+    #uploadDropZone
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
     [class.compress-toolbar]="isWorkspaceMode && !isCompressTool"
+    [class.drag-over]="isDragOver && !isWorkspaceMode"
     (drop)="onDropFiles($event)"
+    (dragenter)="onDragEnter($event)"
+    (dragleave)="onDragLeave($event)"
     (dragover)="allowDrop($event)">
 
   <ng-container *ngIf="!isWorkspaceMode">
-    <p class="upload-text">{{ behavior.uploadTitle }}</p>
+    <div class="upload-icon" aria-hidden="true">
+      <svg viewBox="0 0 48 48" role="presentation">
+        <path class="upload-icon-arrow" d="M24 31V11" />
+        <path class="upload-icon-arrow" d="M17 18l7-7 7 7" />
+        <path class="upload-icon-tray" d="M11 29v8a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4v-8" />
+        <path class="upload-icon-tray" d="M17 29h14" />
+      </svg>
+    </div>
+
+    <p class="upload-text">
+      <span *ngIf="!isDragOver">Drop your PDF here</span>
+      <span *ngIf="isDragOver">Release PDF here</span>
+    </p>
+
+    <p class="upload-drag-hint" [class.active]="isDragOver">
+      <span *ngIf="!isDragOver">or choose a file from your device</span>
+      <span *ngIf="isDragOver">Your file stays on your device</span>
+    </p>
 
     <label class="upload-btn">
-      {{ behavior.uploadButtonText }}
+      <span class="upload-btn-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" role="presentation">
+          <path d="M10 13V4" />
+          <path d="M6.5 7.5 10 4l3.5 3.5" />
+          <path d="M4 12.5v2A1.5 1.5 0 0 0 5.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-2" />
+        </svg>
+      </span>
+      <span>{{ behavior.uploadButtonText }}</span>
       <input
        type="file"
        [accept]="behavior.acceptedTypes"
@@ -225,15 +256,16 @@
 <app-action-panel
   *ngIf="((!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode) && !isSecurityTool"
 
-  [title]="'What do you want to do?'"
+  [title]="'More ways to work with PDFs'"
 
-  [subtitle]="'Choose a tool to get started instantly'"
+  [subtitle]="'Explore tools for your next PDF task'"
 
   [actions]="quickActions"
 
   [trustItems]="trustItems"
 
   (actionClick)="handleQuickAction($event)"
+  (viewAllClick)="openAllTools()"
 >
 </app-action-panel>
 

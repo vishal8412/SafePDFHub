@@ -20,6 +20,7 @@ import { WorkspaceStateService } from '../../core/services/workspace-state.servi
 import { WorkspaceOperationsService } from '../../core/services/workspace-operations.service';
 import { NgZone } from '@angular/core';
 import { TOOL_BEHAVIORS, ToolBehavior } from '../../config/tool-behavior.config';
+import type { ActionPanelTrustItem } from '../../shared/components/action-panel/action-panel.component';
 import { SplitEngine } from '../../core/engines/split.engine';
 import { SplitGroup } from '../../core/split/split.types';
 import { SplitExportService } from '../../core/split/split-export.service';
@@ -51,6 +52,7 @@ type WorkflowStep = 'merge' | 'compress' | 'split';
 export class ToolComponent implements OnInit, OnDestroy {
 
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('uploadDropZone') uploadDropZone!: ElementRef<HTMLElement>;
   @ViewChild(MergeWorkspaceComponent) mergeWorkspace!: MergeWorkspaceComponent;
 
   tool!: Tool;
@@ -80,6 +82,24 @@ export class ToolComponent implements OnInit, OnDestroy {
   private analysisRequestId = 0;
   private lastPositions = new Map<number, DOMRect>();
   private isBrowser = false;
+  isDragOver = false;
+  private dragDepth = 0;
+
+  @HostListener('document:dragover', ['$event'])
+  preventBrowserFileNavigation(event: DragEvent): void {
+    // Browsers navigate to a dropped file unless dragover is cancelled at the
+    // document level. The upload zone still handles the actual drop below.
+    if (event.dataTransfer?.types?.includes('Files')) {
+      event.preventDefault();
+    }
+  }
+
+  @HostListener('document:drop', ['$event'])
+  preventBrowserDropNavigation(event: DragEvent): void {
+    if (event.dataTransfer?.types?.includes('Files')) {
+      event.preventDefault();
+    }
+  }
 
   // Split PDF
   splitResultFiles = 0;
@@ -474,13 +494,56 @@ export class ToolComponent implements OnInit, OnDestroy {
     event.target.value = '';
   }
 
-  onDropFiles(event: DragEvent) {
+  onDragEnter(event: DragEvent): void {
     event.preventDefault();
-    this.addFilesToWorkspace(Array.from(event.dataTransfer?.files || []) as File[]);
+    event.stopPropagation();
+
+    if (!event.dataTransfer?.types?.includes('Files')) return;
+
+    this.dragDepth += 1;
+    this.isDragOver = true;
   }
 
-  allowDrop(event: DragEvent) {
+  onDragLeave(event: DragEvent): void {
     event.preventDefault();
+    event.stopPropagation();
+
+    // Moving between children of the drop zone can fire dragleave/dragenter
+    // pairs. Ignore those internal transitions so the visual state does not
+    // flicker while the user is positioning a file.
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && this.uploadDropZone?.nativeElement.contains(relatedTarget)) {
+      return;
+    }
+
+    this.dragDepth = Math.max(0, this.dragDepth - 1);
+    if (this.dragDepth === 0) {
+      this.isDragOver = false;
+    }
+  }
+
+  onDropFiles(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const files = Array.from(event.dataTransfer?.files || []) as File[];
+
+    this.dragDepth = 0;
+    this.isDragOver = false;
+
+    if (files.length) {
+      void this.addFilesToWorkspace(files);
+    }
+  }
+
+  allowDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.dataTransfer?.types?.includes('Files')) {
+      event.dataTransfer.dropEffect = 'copy';
+      this.isDragOver = true;
+    }
   }
 
   addMoreFiles() {
@@ -711,62 +774,51 @@ export class ToolComponent implements OnInit, OnDestroy {
   // =====================
 
   get quickActions() {
-    return [
-      {
-        id: 'merge',
-        icon: '📄',
-        title: 'Merge PDFs',
-        desc: 'Combine multiple PDFs into one',
-        active: this.isMergeTool
-      },
-      {
-        id: 'compress',
-        icon: '⚡',
-        title: 'Compress',
-        desc: 'Reduce file size',
-        active: this.isCompressTool
-      },
-      {
-        id: 'split',
-        icon: '✂️',
-        title: 'Split',
-        desc: 'Extract pages',
-        active: this.isSplitTool
-      },
-      {
-        id: 'convert',
-        icon: '📄➡️📝',
-        title: 'Convert',
-        desc: 'PDF to Word',
-        active: false
-      }
+    const currentSlug = this.tool?.slug;
+
+    const fallbackActions = [
+      { id: 'merge-pdf', icon: AppIcons.Files, title: 'Merge PDFs', desc: 'Combine multiple PDFs into one' },
+      { id: 'compress-pdf', icon: AppIcons.Zap, title: 'Compress PDF', desc: 'Reduce PDF file size' },
+      { id: 'split-pdf', icon: AppIcons.Scissors, title: 'Split PDF', desc: 'Extract pages from a PDF' },
+      { id: 'protect-pdf', icon: AppIcons.Shield, title: 'Protect PDF', desc: 'Add password protection' },
+      { id: 'unlock-pdf', icon: AppIcons.Lock, title: 'Unlock PDF', desc: 'Remove password protection' },
+      { id: 'pdf-to-word', icon: AppIcons.FileText, title: 'PDF to Word', desc: 'Convert PDF to an editable document' }
     ];
+
+    const preferredSlugs = this.tool?.nextTools ?? [];
+    const preferred = preferredSlugs
+      .filter(slug => slug !== currentSlug)
+      .map(slug => fallbackActions.find(action => action.id === slug))
+      .filter((action): action is typeof fallbackActions[number] => !!action);
+
+    const remaining = fallbackActions.filter(action =>
+      action.id !== currentSlug && !preferred.some(item => item.id === action.id)
+    );
+
+    return [...preferred, ...remaining].slice(0, 4);
   }
 
-  trustItems = [
-    '🔒 100% Private',
-    '⚡ Instant Processing',
-    '☁️ No Upload'
+  trustItems: ActionPanelTrustItem[] = [
+    { icon: 'local', title: 'Local processing' },
+    { icon: 'speed', title: 'Fast processing' },
+    { icon: 'device', title: 'No server upload' }
   ];
 
-  handleQuickAction(action: string) {
-    switch (action) {
-      case 'merge':
-        this.triggerUpload();
-        break;
-
-      case 'compress':
-        this.goToTool('compress-pdf', 'compress', true);
-        break;
-
-      case 'split':
-        this.goToTool('split-pdf');
-        break;
-
-      case 'convert':
-        this.goToTool('pdf-to-word');
-        break;
+  handleQuickAction(actionSlug: string) {
+    if (!actionSlug || actionSlug === this.tool?.slug) {
+      return;
     }
+
+    if (actionSlug === 'compress-pdf') {
+      this.goToTool('compress-pdf', 'compress', true);
+      return;
+    }
+
+    this.goToTool(actionSlug);
+  }
+
+  openAllTools() {
+    this.router.navigate(['/'], { fragment: 'tools' });
   }
 
   // =====================
@@ -1363,6 +1415,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.dragDepth = 0;
+    this.isDragOver = false;
     this.unregisterLoaderCancellation?.();
     this.unregisterLoaderCancellation = null;
     if (this.workspace.loading) {

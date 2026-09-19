@@ -45,7 +45,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
     heroTitle: 'Protect your PDF with a password',
     heroDescription: 'Encrypt and protect your PDF locally in your browser.',
     uploadTitle: 'Drop your PDF here',
-    uploadButtonText: 'Select PDF',
+    uploadButtonText: 'Choose a PDF',
     uploadHint: 'Your PDF and password stay on your device',
     showQuickActions: false,
     primaryActionText: 'Protect PDF'
@@ -58,7 +58,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
     heroTitle: 'Unlock a password-protected PDF',
     heroDescription: 'Remove PDF password protection locally when you know its password.',
     uploadTitle: 'Drop your protected PDF here',
-    uploadButtonText: 'Select PDF',
+    uploadButtonText: 'Choose a PDF',
     uploadHint: 'The password is used only in your browser',
     showQuickActions: false,
     primaryActionText: 'Unlock PDF'
@@ -84,7 +84,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
 
     uploadTitle: 'Drag & drop PDFs here',
 
-    uploadButtonText: 'Select PDF files',
+    uploadButtonText: 'Choose a PDF',
 
     uploadHint:
       'Capacity is adjusted for your device • PDF files stay on your device',
@@ -115,7 +115,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
 
     uploadTitle: 'Drop your PDF here',
 
-    uploadButtonText: 'Select PDF File',
+    uploadButtonText: 'Choose a PDF',
 
     uploadHint:
       'Capacity is adjusted for your device • PDF stays on your device',
@@ -148,7 +148,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
 
     uploadTitle: 'Drop your PDF here',
 
-    uploadButtonText: 'Select PDF',
+    uploadButtonText: 'Choose a PDF',
 
     uploadHint:
       'Capacity is adjusted for your device • PDF stays on your device',
