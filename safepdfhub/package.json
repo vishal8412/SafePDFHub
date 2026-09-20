@@ -8,7 +8,10 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "serve:ssr:safepdfhub": "node dist/safepdfhub/server/server.mjs",
-    "benchmark:large-pdf:browser": "python scripts/phase1.5-browser-benchmark.py --start-server"
+    "benchmark:large-pdf:browser": "python scripts/phase1.5-browser-benchmark.py --start-server",
+    "prebuild": "node scripts/generate-seo-assets.mjs",
+    "seo:audit": "node scripts/seo-architecture-audit.mjs",
+    "seo:generate": "node scripts/generate-seo-assets.mjs"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

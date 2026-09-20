@@ -28,6 +28,54 @@ $muted: #8FA3B8;
   opacity: 0.03;
 }
 
+.tool-breadcrumbs {
+  width: min(100%, 1320px);
+  margin: 8px auto 0;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+.tool-breadcrumbs ol {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-breadcrumbs li {
+  color: rgba(171, 197, 212, 0.70);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tool-breadcrumbs a {
+  color: rgba(166, 199, 218, 0.78);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+.tool-breadcrumbs a:hover {
+  color: #19ead3;
+}
+
+.tool-breadcrumbs a:focus-visible {
+  outline: 2px solid rgba(25, 234, 211, 0.78);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.tool-breadcrumbs__separator {
+  color: rgba(112, 143, 160, 0.48) !important;
+}
+
+.tool-breadcrumbs__current {
+  color: rgba(235, 243, 248, 0.92) !important;
+  font-weight: 600;
+}
+
 .hero {
   text-align: center;
   margin-bottom: 28px;

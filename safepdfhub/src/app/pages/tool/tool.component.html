@@ -1,4 +1,20 @@
 <section class="tool-page" [class.workspace-mode]="isWorkspaceMode">
+
+  <nav class="tool-breadcrumbs" aria-label="Breadcrumb" *ngIf="tool">
+    <ol>
+      <li>
+        <a routerLink="/">Home</a>
+      </li>
+      <li class="tool-breadcrumbs__separator" aria-hidden="true">/</li>
+      <li>
+        <a href="/#tools" (click)="navigateToHomeSection($event, 'tools')">PDF Tools</a>
+      </li>
+      <li class="tool-breadcrumbs__separator" aria-hidden="true">/</li>
+      <li class="tool-breadcrumbs__current" aria-current="page">
+        {{ breadcrumbLabel }}
+      </li>
+    </ol>
+  </nav>
  
   <div class="hero" *ngIf="!isWorkspaceMode">
     <div class="privacy-signal" aria-label="Private browser processing">
@@ -254,7 +270,7 @@
   ===================== -->
 
 <app-action-panel
-  *ngIf="((!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode) && !isSecurityTool"
+  *ngIf="(!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode"
 
   [title]="'More ways to work with PDFs'"
 
@@ -264,8 +280,6 @@
 
   [trustItems]="trustItems"
 
-  (actionClick)="handleQuickAction($event)"
-  (viewAllClick)="openAllTools()"
 >
 </app-action-panel>
 

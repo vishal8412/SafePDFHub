@@ -4,11 +4,20 @@ export interface Tool {
   description: string;
   keywords: string;
   category: 'merge' | 'compress' | 'convert' | 'split' | 'security';
-  nextTools?: string[]; // slugs of recommended tools
+  nextTools?: string[]; // slugs of implemented recommended tools
 }
 
+/**
+ * Public, implemented PDF tools are the source of truth for:
+ * - tool routes
+ * - sitemap generation
+ * - footer/internal links
+ * - related-tool recommendations
+ *
+ * Do not add a tool here until its public page and processing workflow are
+ * implemented. This prevents SEO from advertising an unfinished page.
+ */
 export const TOOLS: Tool[] = [
-
   {
     slug: 'protect-pdf',
     title: 'Protect PDF with Password Online Free',
@@ -31,7 +40,7 @@ export const TOOLS: Tool[] = [
     description: 'Compress PDF files online for free. Reduce file size without losing quality. 100% secure and private.',
     keywords: 'compress pdf, reduce pdf size, pdf compressor online',
     category: 'compress',
-    nextTools: ['merge-pdf', 'pdf-to-word']
+    nextTools: ['merge-pdf', 'split-pdf']
   },
   {
     slug: 'merge-pdf',
@@ -39,7 +48,7 @@ export const TOOLS: Tool[] = [
     description: 'Combine multiple PDF files into one. Fast, secure, and works in your browser.',
     keywords: 'merge pdf, combine pdf files, join pdf',
     category: 'merge',
-    nextTools: ['compress-pdf', 'split-pdf', 'pdf-to-word']
+    nextTools: ['compress-pdf', 'split-pdf']
   },
   {
     slug: 'split-pdf',
@@ -47,14 +56,6 @@ export const TOOLS: Tool[] = [
     description: 'Split PDF into multiple pages instantly. No upload required.',
     keywords: 'split pdf, extract pdf pages',
     category: 'split',
-    nextTools: ['merge-pdf', 'compress-pdf', 'pdf-to-word']
-  },
-  {
-    slug: 'pdf-to-word',
-    title: 'Convert PDF to Word Online',
-    description: 'Convert PDF to editable Word documents quickly and securely.',
-    keywords: 'pdf to word, convert pdf to doc',
-    category: 'convert',
-    nextTools: ['compress-pdf', 'split-pdf', 'pdf-to-word']
+    nextTools: ['merge-pdf', 'compress-pdf']
   }
 ];

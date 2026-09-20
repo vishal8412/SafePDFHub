@@ -34,6 +34,16 @@
                 "glob": "qpdf.wasm",
                 "input": "node_modules/@neslinesli93/qpdf-wasm/dist/",
                 "output": "assets/qpdf/"
+              },
+              {
+                "glob": "robots.txt",
+                "input": "src/seo",
+                "output": "/"
+              },
+              {
+                "glob": "sitemap.xml",
+                "input": "src/seo",
+                "output": "/"
               }
             ],
             "styles": [

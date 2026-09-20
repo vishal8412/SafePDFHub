@@ -16,7 +16,7 @@
         <span class="footer-action-arrow" aria-hidden="true">→</span>
       </a>
     </div>
-    <div class="footer-col"><h4>Popular tools</h4><a *ngFor="let tool of toolsSeo" [routerLink]="['/', tool.slug]">{{ tool.label }}</a></div>
+    <div class="footer-col"><h4>Popular tools</h4><a *ngFor="let tool of toolsSeo" [routerLink]="['/tools', tool.slug]">{{ tool.label }}</a></div>
     <div class="footer-col"><h4>Product</h4><a href="/#features" (click)="navigateToHomeSection($event, 'features')">Why SafePDFHub</a><a href="/#tools" (click)="navigateToHomeSection($event, 'tools')">All PDF tools</a><a href="/#how-it-works" (click)="navigateToHomeSection($event, 'how-it-works')">How it works</a><a routerLink="/studio">PDF Editor</a><a routerLink="/support">Support SafePDFHub</a></div>
     <div class="footer-col"><h4>Company</h4><a routerLink="/about">About us</a><a routerLink="/contact">Contact</a><h4 class="footer-subheading">Legal</h4><a routerLink="/privacy">Privacy Policy</a><a routerLink="/terms">Terms of Service</a></div>
     <div class="footer-col footer-principles"><h4>Principles</h4><span>No uploads</span><span>Browser processing</span><span>No signup required</span><span>Privacy first</span></div>

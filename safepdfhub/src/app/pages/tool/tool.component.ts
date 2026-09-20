@@ -1,7 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
-import { ActivatedRoute, Router } from '@angular/router';
-import { Meta, Title } from '@angular/platform-browser';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { TOOLS, Tool } from '../../config/tools.config';
 import { LoaderService } from '../../shared/services/loader.service';
 import { ToastService } from '../../shared/services/toast.service';
@@ -20,7 +19,7 @@ import { WorkspaceStateService } from '../../core/services/workspace-state.servi
 import { WorkspaceOperationsService } from '../../core/services/workspace-operations.service';
 import { NgZone } from '@angular/core';
 import { TOOL_BEHAVIORS, ToolBehavior } from '../../config/tool-behavior.config';
-import type { ActionPanelTrustItem } from '../../shared/components/action-panel/action-panel.component';
+import type { ActionPanelAction, ActionPanelTrustItem } from '../../shared/components/action-panel/action-panel.component';
 import { SplitEngine } from '../../core/engines/split.engine';
 import { SplitGroup } from '../../core/split/split.types';
 import { SplitExportService } from '../../core/split/split-export.service';
@@ -35,6 +34,8 @@ import { PdfWorkloadAnalyzerService } from '../../core/capacity/pdf-workload-ana
 import { LocalProcessingCapability, WorkloadAssessment } from '../../core/capacity/local-processing-capability.model';
 import { SecurityWorkspaceComponent } from '../../features/tools/security/security-workspace/security-workspace.component';
 import { PdfSecurityService } from '../../core/security/pdf-security.service';
+import { SeoService } from '../../core/services/seo.service';
+import { HomeSectionNavigationService } from '../../shared/services/home-section-navigation.service';
 import { LargePdfSecurityCapabilityService } from '../../core/security/large-file/large-pdf-security-capability.service';
 import type { PdfSecurityMode, PdfSecurityRequest, PdfSecurityResult } from '../../core/security/pdf-security.types';
 
@@ -44,7 +45,7 @@ type WorkflowStep = 'merge' | 'compress' | 'split';
   selector: 'app-tool',
   standalone: true,
   imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent,
-    DialogComponent, BottomSheetComponent, ActionPanelComponent],
+    DialogComponent, BottomSheetComponent, ActionPanelComponent, RouterModule],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
 })
@@ -119,8 +120,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private title: Title,
-    private meta: Meta,
+    private seo: SeoService,
+    private homeSectionNavigation: HomeSectionNavigationService,
     private cd: ChangeDetectorRef,
     private loader: LoaderService,
     private toast: ToastService,
@@ -155,7 +156,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       const slug = params.get('slug');
       const match = TOOLS.find(t => t.slug === slug);
       if (!match) {
-        this.router.navigate(['/']);
+        void this.router.navigate(['/']);
         return;
       }
 
@@ -170,15 +171,18 @@ export class ToolComponent implements OnInit, OnDestroy {
 
       // SET TOOL
       this.tool = match;
-      this.behavior = TOOL_BEHAVIORS.find(b => b.slug === this.tool.slug)!;
+      const behavior = TOOL_BEHAVIORS.find(b => b.slug === this.tool.slug);
+      if (!behavior) {
+        void this.router.navigate(['/']);
+        return;
+      }
+
+      this.behavior = behavior;
+      this.updateBreadcrumbLabel();
 
       this.setRecommendations();
 
-      this.title.setTitle(this.tool.title);
-      this.meta.updateTag({
-        name: 'description',
-        content: this.tool.description
-      });
+      this.seo.updateTool(this.tool);
 
       // RESTORE FILES IF PROVIDED
       if (shouldPreserve) {
@@ -199,6 +203,29 @@ export class ToolComponent implements OnInit, OnDestroy {
         }
       }
     });
+  }
+
+  /**
+   * Human-readable label used by the visible breadcrumb.
+   * Keep this as a concrete component property so Angular template type-checking
+   * does not depend on a getter being present in an older local file.
+   */
+  breadcrumbLabel = 'PDF Tool';
+
+  navigateToHomeSection(event: Event, fragment: string): void {
+    this.homeSectionNavigation.navigateToSection(event, fragment);
+  }
+
+  private updateBreadcrumbLabel(): void {
+    const labels: Record<string, string> = {
+      'compress-pdf': 'Compress PDF',
+      'merge-pdf': 'Merge PDF',
+      'split-pdf': 'Split PDF',
+      'protect-pdf': 'Protect PDF',
+      'unlock-pdf': 'Unlock PDF',
+    };
+
+    this.breadcrumbLabel = labels[this.tool?.slug ?? ''] ?? 'PDF Tool';
   }
 
   get isMergeTool(): boolean {
@@ -362,7 +389,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   goToTool(slug: string, autoAction?: string, preserveFiles = false) {
     const navigationState = preserveFiles ? { files: this.workspace.files, autoAction } : undefined;
-    this.router.navigate(['/tool', slug], { state: navigationState });
+    this.router.navigate(['/tools', slug], { state: navigationState });
   }
 
   private updateWorkflow() {
@@ -773,7 +800,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   // SUGGESTIONS          
   // =====================
 
-  get quickActions() {
+  get quickActions(): ActionPanelAction[] {
     const currentSlug = this.tool?.slug;
 
     const fallbackActions = [
@@ -781,8 +808,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       { id: 'compress-pdf', icon: AppIcons.Zap, title: 'Compress PDF', desc: 'Reduce PDF file size' },
       { id: 'split-pdf', icon: AppIcons.Scissors, title: 'Split PDF', desc: 'Extract pages from a PDF' },
       { id: 'protect-pdf', icon: AppIcons.Shield, title: 'Protect PDF', desc: 'Add password protection' },
-      { id: 'unlock-pdf', icon: AppIcons.Lock, title: 'Unlock PDF', desc: 'Remove password protection' },
-      { id: 'pdf-to-word', icon: AppIcons.FileText, title: 'PDF to Word', desc: 'Convert PDF to an editable document' }
+      { id: 'unlock-pdf', icon: AppIcons.Lock, title: 'Unlock PDF', desc: 'Remove password protection' }
     ];
 
     const preferredSlugs = this.tool?.nextTools ?? [];
@@ -1296,14 +1322,6 @@ export class ToolComponent implements OnInit, OnDestroy {
         label: 'Merge all files',
         action: () => this.mergePdf(),
         priority: 2
-      });
-    }
-
-    if (this.workspace.files.length === 1) {
-      suggestions.push({
-        label: 'Convert to Word',
-        action: () => this.goToTool('pdf-to-word'),
-        priority: 3
       });
     }
 

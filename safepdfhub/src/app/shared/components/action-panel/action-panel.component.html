@@ -6,12 +6,11 @@
   </div>
 
   <div class="action-grid" *ngIf="actions.length">
-    <button
+    <a
       *ngFor="let action of actions; trackBy: trackByActionId"
-      type="button"
       class="action-card"
       [class.primary]="action.primary"
-      (click)="actionClick.emit(action.id)"
+      [routerLink]="['/tools', action.id]"
     >
       <div class="action-top">
         <span class="action-icon" aria-hidden="true">
@@ -23,17 +22,17 @@
         <div class="desc">{{ action.desc }}</div>
       </div>
       <span class="action-open">Open tool <b aria-hidden="true">↗</b></span>
-    </button>
+    </a>
   </div>
 
-  <button
-    type="button"
+  <a
     class="view-all-tools"
-    (click)="viewAllClick.emit()"
+    href="/#tools"
+    (click)="navigateToHomeSection($event, 'tools')"
   >
     <span>{{ viewAllLabel }}</span>
     <span aria-hidden="true">→</span>
-  </button>
+  </a>
 
   <div class="trust-strip" *ngIf="trustItems.length">
     <div class="trust-item" *ngFor="let item of trustItems; trackBy: trackByTrustIcon">
