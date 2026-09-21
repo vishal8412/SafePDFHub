@@ -1,0 +1,156 @@
+<section class="operation-result" aria-label="Operation complete">
+  <div class="operation-result__success" aria-hidden="true">
+    <span class="operation-result__success-ring operation-result__success-ring--outer"></span>
+    <span class="operation-result__success-ring operation-result__success-ring--inner"></span>
+
+    @switch (icon) {
+      @case ('signature') {
+        <svg class="operation-result__success-mark" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__signature" d="M15 39.5c4.8-11.2 8.4-16.7 10.9-16.7 2.3 0 1.2 7.1-1.2 13.5-1.5 4-1.5 7.1.8 7.1 3.7 0 7.7-6.9 10.8-13.3 2.5-5.1 4.3-8.4 6-8.4 1.6 0 1.5 4.6.1 8.6-1.4 4.1-2.2 7.4.7 7.4 2.1 0 4.5-1.7 7.3-4.9" />
+          <path class="operation-result__check" d="M40.5 42.5 45 47l9.5-11" />
+        </svg>
+      }
+      @case ('protect') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M32 9 49 16v13c0 11-6.8 20.3-17 25-10.2-4.7-17-14-17-25V16z" />
+          <path class="operation-result__check" d="m24 31 5.2 5.2L40.5 25" />
+        </svg>
+      }
+      @case ('unlock') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M20 28v-8a12 12 0 0 1 23.2-4" />
+          <rect class="operation-result__icon-stroke" x="16" y="27" width="34" height="25" rx="6" />
+          <path class="operation-result__check" d="m27 39 5 5 10-11" />
+        </svg>
+      }
+      @case ('merge') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M14 14h17v17H14zM33 33h17v17H33z" />
+          <path class="operation-result__icon-stroke" d="m28 36 8-8M36 36l-8-8" />
+          <path class="operation-result__check" d="m42 18 4 4 7-8" />
+        </svg>
+      }
+      @case ('split') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M14 10h21v44H14z" />
+          <path class="operation-result__icon-stroke" d="M35 22h15M35 42h15" />
+          <path class="operation-result__check" d="m40 31 4 4 7-8" />
+        </svg>
+      }
+      @case ('compress') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M17 17h30v30H17z" />
+          <path class="operation-result__icon-stroke" d="m25 25 6 6-6 6M39 25l-6 6 6 6" />
+          <path class="operation-result__check" d="m39 45 4 4 7-8" />
+        </svg>
+      }
+      @default {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <circle class="operation-result__icon-stroke" cx="32" cy="32" r="22" />
+          <path class="operation-result__check" d="m21 32 7 7 15-16" />
+        </svg>
+      }
+    }
+
+    <span class="operation-result__success-particle operation-result__success-particle--one"></span>
+    <span class="operation-result__success-particle operation-result__success-particle--two"></span>
+  </div>
+
+  <span class="operation-result__eyebrow">
+    <span class="operation-result__eyebrow-dot" aria-hidden="true"></span>
+    {{ eyebrow }}
+  </span>
+
+  <h2>{{ title }}</h2>
+  <p class="operation-result__description">{{ description }}</p>
+
+  <div class="operation-result__file">
+    <div class="operation-result__file-icon" aria-hidden="true">
+      <svg viewBox="0 0 28 28" fill="none" focusable="false">
+        <path d="M7 3.5h9.2L21 8.3v16.2H7z" />
+        <path d="M16 3.5v5h5" />
+        <path d="M10 15h8M10 18.5h8M10 11.5h3" />
+      </svg>
+    </div>
+    <div class="operation-result__file-copy">
+      <strong [title]="file.name">{{ file.name }}</strong>
+      <span>{{ operationLabel }} <i aria-hidden="true">•</i> {{ sizeLabel }}</span>
+    </div>
+    <span class="operation-result__ready">
+      <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8 2.8 2.8L12.5 4.8" /></svg>
+      {{ statusLabel }}
+    </span>
+  </div>
+
+  <div class="operation-result__meta">
+    <div>
+      <span class="operation-result__meta-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M10 2.5 16 5v4.3c0 3.9-2.4 6.9-6 8.2-3.6-1.3-6-4.3-6-8.2V5z"/><path d="m7.2 10 1.8 1.8 3.8-4"/></svg>
+      </span>
+      <span class="operation-result__meta-copy"><small>Processed</small><strong>{{ processedLabel }}</strong></span>
+    </div>
+    <div>
+      <span class="operation-result__meta-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.6 1.7"/></svg>
+      </span>
+      <span class="operation-result__meta-copy"><small>Processing time</small><strong>{{ durationLabel }}</strong></span>
+    </div>
+    <div>
+      <span class="operation-result__meta-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M5 2.8h7l3 3v11.4H5z"/><path d="M12 2.8v3h3M7.5 10h5M7.5 13h5"/></svg>
+      </span>
+      <span class="operation-result__meta-copy"><small>Original file</small><strong [title]="originalFileName || 'Your PDF'">{{ originalFileName || 'Your PDF' }}</strong></span>
+    </div>
+  </div>
+
+  <div class="operation-result__privacy">
+    <span class="operation-result__privacy-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 19 6v5c0 4.5-2.8 8.1-7 10-4.2-1.9-7-5.5-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+    </span>
+    <div>
+      <div class="operation-result__privacy-heading">
+        <strong>{{ privacyHeading }}</strong>
+        @if (showPrivacyBadge) {
+          <span class="operation-result__privacy-badge">{{ privacyBadge }}</span>
+        }
+      </div>
+      <span>{{ privacyDescription }}</span>
+    </div>
+    @if (showPrivacyLocal) {
+      <span class="operation-result__privacy-local"><span aria-hidden="true"></span>{{ privacyLocalLabel }}</span>
+    }
+  </div>
+
+  <div class="operation-result__actions">
+    <button type="button" class="operation-result__primary" (click)="download.emit()">
+      <span class="operation-result__primary-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11"/><path d="m7.5 11.5 4.5 4.5 4.5-4.5"/><path d="M5 19.5h14"/></svg>
+      </span>
+      <span class="operation-result__primary-copy">
+        <strong>{{ actionLabel }}</strong>
+        <small>{{ actionDescription }}</small>
+      </span>
+      <svg class="operation-result__primary-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h13"/><path d="m13 6 6 6-6 6"/></svg>
+    </button>
+
+    <div class="operation-result__secondary-row" [class.single-action]="!showEditAgain">
+      @if (showEditAgain) {
+        <button type="button" class="operation-result__secondary" (click)="editAgain.emit()">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M12.8 4.2 15.8 7.2 8 15H5v-3z"/><path d="M11.7 5.3 14.7 8.3"/></svg>
+          <span>{{ editAgainLabel }}</span>
+        </button>
+      }
+      <button type="button" class="operation-result__secondary" (click)="processAnother.emit()">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 5h8l-2-2M14 15H6l2 2"/><path d="M14 5a5.5 5.5 0 0 1 1.4 6M6 15a5.5 5.5 0 0 1-1.4-6"/></svg>
+        <span>{{ processAnotherLabel }}</span>
+      </button>
+    </div>
+  </div>
+
+  @if (showFooterNote) {
+    <p class="operation-result__footer-note">
+      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2.5 16 5v4.3c0 3.9-2.4 6.9-6 8.2-3.6-1.3-6-4.3-6-8.2V5z"/><path d="m7.2 10 1.8 1.8 3.8-4"/></svg>
+      {{ footerNote }}
+    </p>
+  }
+</section>

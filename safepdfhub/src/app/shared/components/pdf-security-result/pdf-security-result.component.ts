@@ -1,14 +1,15 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import type { PdfSecurityMode, PdfSecurityResult } from '../../../core/security/pdf-security.types';
+import { OperationResultComponent } from '../operation-result/operation-result.component';
+import type { PdfSecurityResult } from '../../../core/security/pdf-security.types';
+import type { OperationResultIcon } from '../operation-result/operation-result.model';
 
 @Component({
   selector: 'app-pdf-security-result',
   standalone: true,
-  imports: [CommonModule],
+  imports: [OperationResultComponent],
   templateUrl: './pdf-security-result.component.html',
   styleUrl: './pdf-security-result.component.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PdfSecurityResultComponent {
   @Input({ required: true }) result!: PdfSecurityResult;
@@ -49,14 +50,14 @@ export class PdfSecurityResultComponent {
     }
   }
 
-  get sizeLabel(): string {
-    const bytes = this.result.file.size;
-    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  get icon(): OperationResultIcon {
+    return this.result.mode === 'protect' ? 'protect' : 'unlock';
   }
 
-  get durationLabel(): string {
-    if (this.result.durationMs < 1000) return `${Math.max(1, Math.round(this.result.durationMs))} ms`;
-    return `${(this.result.durationMs / 1000).toFixed(1)} s`;
+  get privacyDescription(): string {
+    if (this.result.mode === 'protect') {
+      return 'SafePDFHub did not upload or receive the document or password.';
+    }
+    return 'SafePDFHub did not upload or receive the document or password.';
   }
 }

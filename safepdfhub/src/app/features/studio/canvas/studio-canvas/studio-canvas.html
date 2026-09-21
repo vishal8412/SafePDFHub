@@ -76,6 +76,9 @@
               [class.studio-editor-object--image]="
                 object.type === 'image'
               "
+              [class.studio-editor-object--signature]="
+                object.type === 'signature'
+              "
               [class.studio-editor-object--shape]="
                 object.type === 'shape'
               "
@@ -204,6 +207,14 @@
                     @if (object.comment.resolved) { <path d="m8.5 12 2.2 2.2 4.8-5"/> } @else { <path d="M8 10h8M8 14h5"/> }
                   </svg>
                 </button>
+              } @else if (object.type === 'signature' && object.signing) {
+                @if (getSigningAsset(object); as signingAsset) {
+                  <img class="studio-signature-object__image" [src]="signingAsset.dataUrl" [style.opacity]="object.signing.opacity" [alt]="object.signing.kind === 'initials' ? 'Initials' : 'Electronic signature'" draggable="false" />
+                } @else if (object.signing.kind === 'checkbox') {
+                  <span class="studio-signing-checkbox" [class.is-checked]="object.signing.checked" [style.color]="object.signing.color ?? '#0b6c5f'" [style.opacity]="object.signing.opacity" aria-hidden="true"></span>
+                } @else {
+                  <span class="studio-signing-text" [style.color]="object.signing.color ?? '#121923'" [style.opacity]="object.signing.opacity" [style.font-size.px]="object.signing.fontSize ?? 16" [style.font-family]="object.signing.fontFamily ?? 'Inter, Arial, sans-serif'" [style.font-style]="object.signing.fontStyle ?? 'normal'">{{ object.signing.value || (object.signing.kind === 'date' ? 'Date' : 'Text') }}</span>
+                }
               } @else if (object.type === 'image' && object.pdfImage && !object.image) {
                 <div class="studio-pdf-image-overlay" [attr.aria-label]="'Original PDF image'"></div>
               } @else if (

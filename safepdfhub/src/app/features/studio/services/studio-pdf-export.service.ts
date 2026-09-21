@@ -7,6 +7,7 @@ import { isPlatformBrowser } from '@angular/common';
 import {
   PDFDocument,
   PDFFont,
+  PDFImage,
   PDFPage,
   StandardFonts,
   degrees,
@@ -22,6 +23,8 @@ import {
 } from 'pdf-lib';
 import { saveAs } from 'file-saver';
 import fontkit from '@pdf-lib/fontkit';
+import { QpdfWasmPrototypeService } from '../../../core/qpdf/qpdf-wasm-prototype.service';
+import { SigningStateService } from '../../../core/signing/services/signing-state.service';
 
 import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 
@@ -51,10 +54,16 @@ import type {
 })
 export class StudioPdfExportService {
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly qpdf = inject(QpdfWasmPrototypeService);
+  private readonly signingState = inject(SigningStateService);
 
   /**
    * Build a new PDF from the original uploaded bytes and paint all committed
    * Studio text objects on the matching PDF pages.
+   *
+   * Signature-only exports are handled by a qpdf overlay fast path below. This
+   * preserves the original page/resource streams and avoids pdf-lib duplicating
+   * shared page resources across hundreds of pages.
    */
   async exportTextObjects(
     sourceFile: File,
@@ -65,6 +74,16 @@ export class StudioPdfExportService {
       throw new Error(
         'PDF export is available only in the browser.',
       );
+    }
+
+    if (this.canUseSigningOverlay(objects, logicalPages)) {
+      try {
+        return await this.exportSigningOverlay(sourceFile, objects);
+      } catch {
+        // qpdf overlay is an optimization path. If the browser qpdf runtime is
+        // unavailable, fall back to the existing pdf-lib exporter below so the
+        // export remains functional.
+      }
     }
 
     const sourceBytes = new Uint8Array(
@@ -95,10 +114,8 @@ export class StudioPdfExportService {
       }
     }
     const pages = pdfDocument.getPages();
-    const fontCache = new Map<
-      string,
-      PDFFont
-    >();
+    const fontCache = new Map<string, PDFFont>();
+    const signingImageCache = new Map<string, PDFImage>();
 
     // F7.2: Studio comments are review metadata. They remain in Studio state
     // and history but are not flattened into visible PDF content. This avoids
@@ -135,6 +152,10 @@ export class StudioPdfExportService {
           (
             object.type === 'link' &&
             Boolean(object.link)
+          ) ||
+          (
+            object.type === 'signature' &&
+            Boolean(object.signing)
           ) ||
           (
             (
@@ -204,6 +225,35 @@ export class StudioPdfExportService {
         rotation === 90 || rotation === 270
           ? pageWidth
           : pageHeight;
+
+      if (object.type === 'signature' && object.signing) {
+        const signingAsset = this.resolveSigningAsset(object);
+        if (signingAsset) {
+          const asset = signingAsset;
+          let image = signingImageCache.get(asset.id);
+          if (!image) {
+            image = asset.mimeType === 'image/jpeg'
+              ? await pdfDocument.embedJpg(this.dataUrlToUint8Array(asset.dataUrl))
+              : await pdfDocument.embedPng(this.dataUrlToUint8Array(asset.dataUrl));
+            signingImageCache.set(asset.id, image);
+          }
+          this.drawImageAcrossObjectBounds(page, object, image, displayWidth, displayHeight, rotation);
+          continue;
+        }
+
+        const signingBox = this.studioDisplayBox(object, displayWidth, displayHeight, rotation);
+        if (object.signing.kind === 'checkbox') {
+          this.drawStudioCheckbox(page, signingBox, object.signing.checked ?? true, object.signing.color ?? '#0b6c5f', object.signing.opacity);
+        } else {
+          const text = object.signing.value ?? (object.signing.kind === 'date' ? new Date().toLocaleDateString('en-GB') : '');
+          if (text) {
+            const png = await this.renderStudioSigningText(text, object.signing, signingBox);
+            const image = await pdfDocument.embedPng(png);
+            page.drawImage(image, { x: signingBox.x, y: signingBox.y, width: signingBox.width, height: signingBox.height });
+          }
+        }
+        continue;
+      }
 
       if (object.type === 'link' && object.link) {
         this.addLinkAnnotation(
@@ -426,9 +476,176 @@ export class StudioPdfExportService {
 
     new Uint8Array(outputBuffer).set(bytes);
 
-    return new Blob(
+    const generated = new Blob(
       [outputBuffer],
       { type: 'application/pdf' },
+    );
+
+    // pdf-lib has to reconstruct a document when Studio edits it. On large
+    // PDFs that reconstruction can temporarily inflate compressed streams and
+    // object overhead dramatically. Run a browser-local qpdf recompression
+    // pass only when the generated file is materially larger than the source.
+    // If qpdf fails, the already-valid pdf-lib output remains the fallback.
+    const inflationThreshold = Math.max(1.10, sourceBytes.byteLength > 0 ? 1.10 : 1.10);
+    if (generated.size > sourceBytes.byteLength * inflationThreshold && generated.size > 2 * 1024 * 1024) {
+      try {
+        const candidate = await this.qpdf.optimize(
+          new File([generated], 'studio-export.pdf', { type: 'application/pdf' }),
+        );
+        if (candidate.size > 0 && candidate.size < generated.size) {
+          return new Blob([new Uint8Array(await candidate.arrayBuffer())], { type: 'application/pdf' });
+        }
+      } catch {
+        // Keep the valid pdf-lib output when optimization is unavailable or fails.
+      }
+    }
+
+    return generated;
+  }
+
+
+  /**
+   * A signing-only Studio export can be represented as a lightweight overlay
+   * over the untouched source PDF. This is critical for large/image-heavy PDFs:
+   * pdf-lib's copyPages can duplicate shared page resources when rebuilding a
+   * large document, while qpdf can overlay new page content on the original.
+   */
+  private canUseSigningOverlay(
+    objects: readonly StudioObject[],
+    logicalPages?: readonly StudioPage[],
+  ): boolean {
+    if (!objects.length || !objects.every(object => object.type === 'signature' && Boolean(object.signing))) {
+      return false;
+    }
+
+    if (!logicalPages || logicalPages.length === 0) {
+      return true;
+    }
+
+    return logicalPages.every((page, index) =>
+      page.kind === 'source' &&
+      page.sourcePageNumber === index + 1 &&
+      page.rotation === 0
+    );
+  }
+
+  private async exportSigningOverlay(
+    sourceFile: File,
+    objects: readonly StudioObject[],
+  ): Promise<Blob> {
+    const sourcePdf = await PDFDocument.load(
+      new Uint8Array(await sourceFile.arrayBuffer())
+    );
+    const overlayPdf = await PDFDocument.create();
+    const sourcePages = sourcePdf.getPages();
+    const overlayPages: PDFPage[] = [];
+    const imageCache = new Map<string, PDFImage>();
+
+    for (const sourcePage of sourcePages) {
+      const overlayPage = overlayPdf.addPage([
+        sourcePage.getWidth(),
+        sourcePage.getHeight(),
+      ]);
+      overlayPage.setRotation(sourcePage.getRotation());
+      overlayPages.push(overlayPage);
+    }
+
+    for (const object of objects) {
+      if (object.type !== 'signature' || !object.signing) continue;
+
+      const pageIndex = object.pageNumber - 1;
+      const page = overlayPages[pageIndex];
+      const sourcePage = sourcePages[pageIndex];
+      if (!page || !sourcePage) continue;
+
+      const rotation = this.normalizeRotation(sourcePage.getRotation().angle);
+      const displayWidth = rotation === 90 || rotation === 270
+        ? sourcePage.getHeight()
+        : sourcePage.getWidth();
+      const displayHeight = rotation === 90 || rotation === 270
+        ? sourcePage.getWidth()
+        : sourcePage.getHeight();
+
+      const signingAsset = this.resolveSigningAsset(object);
+      if (signingAsset) {
+        const asset = signingAsset;
+        let image = imageCache.get(asset.id);
+        if (!image) {
+          image = asset.mimeType === 'image/jpeg'
+            ? await overlayPdf.embedJpg(this.dataUrlToUint8Array(asset.dataUrl))
+            : await overlayPdf.embedPng(this.dataUrlToUint8Array(asset.dataUrl));
+          imageCache.set(asset.id, image);
+        }
+        this.drawImageAcrossObjectBounds(
+          page,
+          object,
+          image,
+          displayWidth,
+          displayHeight,
+          rotation
+        );
+        continue;
+      }
+
+      const signingBox = this.studioDisplayBox(
+        object,
+        displayWidth,
+        displayHeight,
+        rotation
+      );
+
+      if (object.signing.kind === 'checkbox') {
+        this.drawStudioCheckbox(
+          page,
+          signingBox,
+          object.signing.checked ?? true,
+          object.signing.color ?? '#0b6c5f',
+          object.signing.opacity
+        );
+      } else {
+        const text = object.signing.value ??
+          (object.signing.kind === 'date'
+            ? new Date().toLocaleDateString('en-GB')
+            : '');
+
+        if (text) {
+          const png = await this.renderStudioSigningText(
+            text,
+            object.signing,
+            signingBox
+          );
+          const image = await overlayPdf.embedPng(png);
+          page.drawImage(image, {
+            x: signingBox.x,
+            y: signingBox.y,
+            width: signingBox.width,
+            height: signingBox.height,
+            opacity: Math.max(.05, Math.min(1, object.signing.opacity ?? 1)),
+          });
+        }
+      }
+    }
+
+    const overlayBytes = await overlayPdf.save({
+      useObjectStreams: true,
+      addDefaultPage: false,
+    });
+    const overlayBuffer = new ArrayBuffer(overlayBytes.byteLength);
+    new Uint8Array(overlayBuffer).set(overlayBytes);
+    const overlayFile = new File(
+      [overlayBuffer],
+      'studio-signing-overlay.pdf',
+      { type: 'application/pdf' }
+    );
+
+    const output = await this.qpdf.overlay(
+      sourceFile,
+      overlayFile,
+    );
+
+    return new Blob(
+      [new Uint8Array(await output.arrayBuffer())],
+      { type: 'application/pdf' }
     );
   }
 
@@ -1189,6 +1406,125 @@ export class StudioPdfExportService {
     }
   }
 
+  private resolveSigningAsset(object: StudioObject): import('../../../core/signing/models/signing.models').SigningAsset | null {
+    if (object.type !== 'signature' || !object.signing) return null;
+    if (object.signing.asset) return object.signing.asset;
+    const assetId = object.signing.assetId;
+    return assetId ? this.signingState.assets().find(asset => asset.id === assetId) ?? null : null;
+  }
+
+  private studioDisplayBox(
+    object: StudioObject,
+    displayWidth: number,
+    displayHeight: number,
+    rotation: 0 | 90 | 180 | 270,
+  ): { x: number; y: number; width: number; height: number } {
+    const b = object.bounds;
+    const x = b.x * displayWidth;
+    const yTop = b.y * displayHeight;
+    const w = b.width * displayWidth;
+    const h = b.height * displayHeight;
+    switch (rotation) {
+      case 90: return { x: yTop, y: x, width: h, height: w };
+      case 180: return { x: displayWidth - x - w, y: yTop, width: w, height: h };
+      case 270: return { x: displayHeight - yTop - h, y: displayWidth - x - w, width: h, height: w };
+      default: return { x, y: displayHeight - yTop - h, width: w, height: h };
+    }
+  }
+
+  private drawStudioCheckbox(
+    page: PDFPage,
+    box: { x: number; y: number; width: number; height: number },
+    checked: boolean,
+    color: string,
+    opacity: number,
+  ): void {
+    const c = this.hexToPdfRgb(color);
+    const alpha = Math.max(0.05, Math.min(1, opacity));
+
+    // The Studio preview uses a 1.5px border. At the browser reference DPI
+    // that is 1.125 PDF points. Inset the PDF stroke by half its width so the
+    // stroke stays completely inside the normalized object bounds instead of
+    // being clipped at the edge during export.
+    const borderWidth = 1.125;
+    const inset = borderWidth / 2;
+    const x = box.x + inset;
+    const y = box.y + inset;
+    const width = Math.max(0.5, box.width - borderWidth);
+    const height = Math.max(0.5, box.height - borderWidth);
+
+    page.drawRectangle({
+      x,
+      y,
+      width,
+      height,
+      borderWidth,
+      borderColor: c,
+      color: rgb(1, 1, 1),
+      opacity: Math.min(.92, alpha),
+    });
+
+    if (!checked) return;
+
+    // Match the 1.7px Studio check strokes (≈1.275pt at 96 DPI) while
+    // keeping the endpoints safely inside the checkbox border.
+    const checkThickness = Math.max(0.9, Math.min(1.45, Math.min(width, height) * 0.055));
+    page.drawLine({
+      start: { x: x + width * .17, y: y + height * .50 },
+      end: { x: x + width * .40, y: y + height * .25 },
+      thickness: checkThickness,
+      color: c,
+      opacity: alpha,
+    });
+    page.drawLine({
+      start: { x: x + width * .40, y: y + height * .25 },
+      end: { x: x + width * .83, y: y + height * .75 },
+      thickness: checkThickness,
+      color: c,
+      opacity: alpha,
+    });
+  }
+
+  private async renderStudioSigningText(
+    text: string,
+    signing: NonNullable<Extract<StudioObject, { type: 'signature' }>['signing']>,
+    box: { x: number; y: number; width: number; height: number },
+  ): Promise<Uint8Array> {
+    if (typeof document === 'undefined') throw new Error('Text rendering is available only in the browser.');
+    const scale = 3;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(32, Math.ceil(box.width * scale));
+    canvas.height = Math.max(24, Math.ceil(box.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not create the signing text canvas.');
+    // Studio renders signing text in CSS pixels. PDF points are 96/72 of a
+    // CSS pixel at the browser's reference DPI, so 1 CSS px maps to 0.75 pt.
+    // Keeping this conversion here makes the exported PDF visually match the
+    // live Studio canvas instead of making text ~33% larger after export.
+    const size = Math.max(8, Math.min(96, signing.fontSize ?? 16)) * 0.75 * scale;
+    const family = signing.fontFamily ?? 'Inter, Arial, sans-serif';
+    const style = signing.fontStyle === 'italic' ? 'italic ' : '';
+    const weight = '600 ';
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.font = `${style}${weight}${size}px ${family}`;
+    ctx.fillStyle = signing.color ?? '#121923';
+    ctx.globalAlpha = Math.max(.05, Math.min(1, signing.opacity));
+    ctx.textBaseline = 'middle';
+    const pad = 4 * scale;
+    let fontSize = size;
+    const maxWidth = Math.max(8, canvas.width - pad*2);
+    for (let i=0;i<12;i+=1) {
+      ctx.font = `${style}${weight}${fontSize}px ${family}`;
+      if (ctx.measureText(text).width <= maxWidth || fontSize <= 8*scale) break;
+      fontSize *= .9;
+    }
+    ctx.fillText(text, pad, canvas.height/2);
+    ctx.globalAlpha = 1;
+    const blob = await new Promise<Blob|null>(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('Could not rasterize signing text.');
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+
   /** Draw reconstruction artwork across the exact displayed source box. */
   private drawImageAcrossObjectBounds(
     page: PDFPage,
@@ -1202,19 +1538,35 @@ export class StudioPdfExportService {
     const boxY = object.bounds.y * displayHeight;
     const boxWidth = object.bounds.width * displayWidth;
     const boxHeight = object.bounds.height * displayHeight;
-    const displayBottom = displayHeight - boxY - boxHeight;
+
+    // The live Studio preview uses object-fit: contain for signature artwork.
+    // Export must use the same geometry; stretching the asset to the complete
+    // bounds changes its proportions and is immediately visible in the result.
+    const sourceRatio = Math.max(0.0001, Number(image.width) / Math.max(1, Number(image.height)));
+    const boxRatio = Math.max(0.0001, boxWidth / Math.max(0.0001, boxHeight));
+    let drawWidth = boxWidth;
+    let drawHeight = boxHeight;
+    if (sourceRatio > boxRatio) {
+      drawHeight = boxWidth / sourceRatio;
+    } else {
+      drawWidth = boxHeight * sourceRatio;
+    }
+    const drawX = boxX + (boxWidth - drawWidth) / 2;
+    const drawY = boxY + (boxHeight - drawHeight) / 2;
+    const displayBottom = displayHeight - drawY - drawHeight;
+
     switch (rotation) {
       case 90:
-        page.drawImage(image, { x: boxX, y: displayBottom + boxHeight, width: boxHeight, height: boxWidth, rotate: degrees(-90) });
+        page.drawImage(image, { x: drawX, y: displayBottom + drawHeight, width: drawHeight, height: drawWidth, rotate: degrees(-90) });
         return;
       case 180:
-        page.drawImage(image, { x: displayWidth - (boxX + boxWidth), y: boxY + boxHeight, width: boxWidth, height: boxHeight, rotate: degrees(-180) });
+        page.drawImage(image, { x: displayWidth - (drawX + drawWidth), y: drawY + drawHeight, width: drawWidth, height: drawHeight, rotate: degrees(-180) });
         return;
       case 270:
-        page.drawImage(image, { x: boxX + boxWidth, y: displayBottom, width: boxHeight, height: boxWidth, rotate: degrees(90) });
+        page.drawImage(image, { x: drawX + drawWidth, y: displayBottom, width: drawHeight, height: drawWidth, rotate: degrees(90) });
         return;
       default:
-        page.drawImage(image, { x: boxX, y: displayBottom, width: boxWidth, height: boxHeight });
+        page.drawImage(image, { x: drawX, y: displayBottom, width: drawWidth, height: drawHeight });
     }
   }
 

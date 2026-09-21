@@ -3,7 +3,7 @@ export interface Tool {
   title: string;
   description: string;
   keywords: string;
-  category: 'merge' | 'compress' | 'convert' | 'split' | 'security';
+  category: 'merge' | 'compress' | 'convert' | 'split' | 'security' | 'sign';
   nextTools?: string[]; // slugs of implemented recommended tools
 }
 
@@ -49,6 +49,14 @@ export const TOOLS: Tool[] = [
     keywords: 'merge pdf, combine pdf files, join pdf',
     category: 'merge',
     nextTools: ['compress-pdf', 'split-pdf']
+  },
+  {
+    slug: 'sign-pdf',
+    title: 'Sign PDF Online Free',
+    description: 'Add a signature, initials, text, dates, and checkboxes to a PDF locally in your browser.',
+    keywords: 'sign pdf, electronic signature, e-sign pdf, fill and sign pdf',
+    category: 'sign',
+    nextTools: ['protect-pdf', 'unlock-pdf']
   },
   {
     slug: 'split-pdf',

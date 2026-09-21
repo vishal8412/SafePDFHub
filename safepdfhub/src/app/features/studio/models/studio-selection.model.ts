@@ -1,3 +1,5 @@
+import type { SigningAsset } from '../../../core/signing/models/signing.models';
+
 export type StudioObjectType =
   | 'text'
   | 'image'
@@ -5,7 +7,8 @@ export type StudioObjectType =
   | 'highlight'
   | 'shape'
   | 'comment'
-  | 'link';
+  | 'link'
+  | 'signature';
 
 export type StudioTextAlign =
   | 'left'
@@ -307,6 +310,24 @@ export interface StudioLinkObject extends StudioObjectBase {
   readonly link: StudioLinkData;
 }
 
+export interface StudioSignatureObject extends StudioObjectBase {
+  readonly type: 'signature';
+  readonly signing: {
+    readonly kind: 'signature' | 'initials' | 'text' | 'date' | 'checkbox';
+    readonly asset?: SigningAsset;
+    /** Lightweight reference used by bulk-applied fields to avoid duplicating large data URLs. */
+    readonly assetId?: string;
+    readonly value?: string;
+    readonly fontFamily?: string;
+    readonly fontSize?: number;
+    readonly fontStyle?: 'normal' | 'italic';
+    readonly color?: string;
+    readonly checked?: boolean;
+    readonly opacity: number;
+    readonly bulkGroupId?: string;
+  };
+}
+
 /**
  * Complete Studio object union.
  *
@@ -324,7 +345,8 @@ export type StudioObject =
   | StudioHighlightObject
   | StudioShapeObject
   | StudioCommentObject
-  | StudioLinkObject;
+  | StudioLinkObject
+  | StudioSignatureObject;
 
 /** True when the object is a user-created text object. */
 export function isStudioTextObject(

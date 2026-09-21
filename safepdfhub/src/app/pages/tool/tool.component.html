@@ -15,6 +15,16 @@
       </li>
     </ol>
   </nav>
+
+  <input
+    #fileInput
+    class="global-tool-file-input"
+    type="file"
+    [accept]="behavior.acceptedTypes || '.pdf,application/pdf'"
+    [attr.multiple]="behavior.allowMultiple ? '' : null"
+    (change)="onFileSelect($event)"
+    hidden
+  />
  
   <div class="hero" *ngIf="!isWorkspaceMode">
     <div class="privacy-signal" aria-label="Private browser processing">
@@ -34,7 +44,7 @@
        UPLOAD AREA
   ===================== -->
 
-  <div *ngIf="!(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode)"
+  <div *ngIf="(!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode)"
     #uploadDropZone
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
@@ -93,10 +103,6 @@
   <ng-container *ngIf="isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
     <div class="upload-compact" (click)="addMoreFiles()">
       <span>+ Add more files</span>
-      <input #fileInput type="file" 
-        [attr.multiple]="behavior.allowMultiple ? '' : null"
-        accept=".pdf,application/pdf" 
-         (change)="onFileSelect($event)" hidden />
     </div>
   </ng-container>
 
@@ -106,7 +112,13 @@
        FILE LIST (HORIZONTAL)
   ===================== -->
 
-<div class="workspace" *ngIf="isWorkspaceMode">
+<app-sign-pdf-workspace
+  *ngIf="isWorkspaceMode && isSignTool"
+  [file]="signWorkspaceFile"
+  (replaceFile)="triggerUpload()"
+></app-sign-pdf-workspace>
+
+<div class="workspace" *ngIf="isWorkspaceMode && !isSignTool">
 
   <!-- =========================
      PDF SECURITY WORKSPACE
@@ -203,14 +215,6 @@
   (replaceFile)="triggerUpload()"
 />
 
-<input
-  #fileInput
-  type="file"
-  accept=".pdf,application/pdf"
-  (change)="onFileSelect($event)"
-  hidden
-/> 
-
   <!-- =====================
        ACTION BAR
   ===================== -->
@@ -237,7 +241,7 @@
 <!-- =====================
       SMART SUGGESTIONS
   ===================== -->
-<div class="smart-suggestions" *ngIf="suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
+<div class="smart-suggestions" *ngIf="!isSignTool && suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
  
   <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
 

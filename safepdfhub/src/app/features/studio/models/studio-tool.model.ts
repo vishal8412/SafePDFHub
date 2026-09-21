@@ -13,6 +13,7 @@ export type StudioToolId =
   | 'extract'
   | 'comment'
   | 'link'
+  | 'sign'
   | 'more';
 
 export type StudioToolKind =

@@ -3,6 +3,8 @@ import {
   signal
 } from '@angular/core';
 
+import type { SigningAsset } from '../../../core/signing/models/signing.models';
+
 import type {
   StudioObject,
   StudioObjectBounds,
@@ -25,7 +27,8 @@ import type {
   StudioPdfTextObject,
   StudioImageObject,
   StudioPdfImageObject,
-  StudioLinkObject
+  StudioLinkObject,
+  StudioSignatureObject
 } from '../models/studio-selection.model';
 import type { PdfExistingTextBlock, PdfExistingImageBlock } from '../models/pdf-content-analysis.model';
 
@@ -135,6 +138,19 @@ export class StudioObjectService {
       object.id,
       this.cloneObject(object)
     );
+    this.touch();
+  }
+
+  /**
+   * Batch object insertion/replacement for large operations such as applying
+   * a signing field to hundreds of pages. Clone once per object but notify the
+   * reactive layer only once at the end.
+   */
+  addMany(objects: readonly StudioObject[]): void {
+    if (!objects.length) return;
+    for (const object of objects) {
+      this.objects.set(object.id, this.cloneObject(object));
+    }
     this.touch();
   }
 
@@ -633,6 +649,113 @@ export class StudioObjectService {
     this.touch();
 
     return this.cloneObject(object);
+  }
+
+  createSignatureObject(
+    pageNumber: number,
+    normalizedX: number,
+    normalizedY: number,
+    asset: SigningAsset
+  ): StudioObject {
+    const ratio = asset.naturalWidth > 0
+      ? asset.naturalHeight / asset.naturalWidth
+      : 0.28;
+
+    // Signatures should enter the canvas at a document-friendly size rather
+    // than occupying a large fraction of the page. The existing resize
+    // engine then lets the user scale them precisely.
+    const width = asset.kind === 'initials' ? 0.15 : 0.23;
+    const height = this.clamp(width * ratio, 0.045, 0.14);
+
+    const object: StudioSignatureObject = {
+      id: this.createObjectId(),
+      pageNumber,
+      type: 'signature',
+      bounds: {
+        x: this.clamp(normalizedX - width / 2, 0, 1 - width),
+        y: this.clamp(normalizedY - height / 2, 0, 1 - height),
+        width,
+        height
+      },
+      signing: {
+        kind: asset.kind,
+        asset,
+        assetId: asset.id,
+        opacity: 1
+      }
+    };
+
+    this.objects.set(object.id, object);
+    this.touch();
+    return this.cloneObject(object);
+  }
+
+  createSigningFieldObject(
+    pageNumber: number,
+    normalizedX: number,
+    normalizedY: number,
+    kind: 'text' | 'date' | 'checkbox',
+  ): StudioObject {
+    const width = kind === 'checkbox' ? 0.035 : kind === 'date' ? 0.20 : 0.22;
+    const height = kind === 'checkbox' ? 0.035 : 0.052;
+    const object: StudioSignatureObject = {
+      id: this.createObjectId(),
+      pageNumber,
+      type: 'signature',
+      bounds: {
+        x: this.clamp(normalizedX - width / 2, 0, 1 - width),
+        y: this.clamp(normalizedY - height / 2, 0, 1 - height),
+        width,
+        height,
+      },
+      signing: {
+        kind,
+        value: kind === 'date' ? new Date().toLocaleDateString('en-GB') : kind === 'text' ? 'Text' : undefined,
+        fontFamily: kind === 'date' ? "'Brush Script MT', 'Segoe Script', cursive" : 'Inter, Arial, sans-serif',
+        fontSize: 16,
+        fontStyle: kind === 'date' ? 'italic' : 'normal',
+        color: kind === 'checkbox' ? '#0b6c5f' : '#121923',
+        checked: kind === 'checkbox' ? true : undefined,
+        opacity: 1,
+      },
+    };
+    this.objects.set(object.id, object);
+    this.touch();
+    return this.cloneObject(object);
+  }
+
+  updateSigningFieldStyle(
+    objectId: string,
+    style: { value?: string; fontFamily?: string; fontSize?: number; fontStyle?: 'normal' | 'italic'; color?: string; checked?: boolean; opacity?: number; bulkGroupId?: string },
+  ): StudioObject | null {
+    const object = this.objects.get(objectId);
+    if (!object || object.type !== 'signature' || !object.signing) return null;
+    const updated: StudioObject = {
+      ...object,
+      signing: {
+        ...object.signing,
+        ...style,
+        opacity: Math.max(0.05, Math.min(1, style.opacity ?? object.signing.opacity)),
+      },
+    };
+    this.objects.set(objectId, updated);
+    this.touch();
+    return this.cloneObject(updated);
+  }
+
+  updateSignatureStyle(objectId: string, style: { opacity?: number }): StudioObject | null {
+    const object = this.objects.get(objectId);
+    if (!object || object.type !== 'signature' || !object.signing) return null;
+    const updated: StudioObject = {
+      ...object,
+      signing: {
+        ...object.signing,
+        opacity: Math.max(0.05, Math.min(1, style.opacity ?? object.signing.opacity))
+      }
+    };
+    this.objects.set(objectId, updated);
+    this.touch();
+    return this.cloneObject(updated);
   }
 
   createImageObject(

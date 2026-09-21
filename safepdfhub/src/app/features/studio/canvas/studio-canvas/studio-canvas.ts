@@ -1,3 +1,5 @@
+import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
+import type { SigningAsset } from '../../../../core/signing/models/signing.models';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -73,6 +75,14 @@ interface ObjectInteraction {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StudioCanvas implements AfterViewInit, OnDestroy {
+  readonly signingState = inject(SigningStateService);
+
+  getSigningAsset(object: StudioObject): SigningAsset | null {
+    if (object.type !== 'signature' || !object.signing) return null;
+    if (object.signing.asset) return object.signing.asset;
+    const assetId = object.signing.assetId;
+    return assetId ? this.signingState.assets().find(asset => asset.id === assetId) ?? null : null;
+  }
 
   readonly facade =
     inject(StudioFacade);
@@ -623,6 +633,8 @@ ngAfterViewInit(): void {
         return 'studio-canvas__stage--crosshair';
   
       case 'image':
+        return 'studio-canvas__stage--copy';
+      case 'sign':
         return 'studio-canvas__stage--copy';
 
       case 'comment':
@@ -2587,6 +2599,46 @@ private async render(
     this.facade.clearSelection();
   }
 
+  /** SIGNING TOOL */
+  if (activeTool === 'sign' && event.button === 0 && !this.spacePressed) {
+    const page = this.pageRef?.nativeElement;
+    const rect = page?.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+
+    const point = this.clientToPagePoint(
+      event.clientX,
+      event.clientY,
+      rect
+    );
+
+    // Existing signing objects should behave like normal editable objects.
+    // Clicking one while the Sign tool is active selects it instead of
+    // accidentally creating a second signature on top of it.
+    const existing = this.selectObjectAtPoint(point.x, point.y);
+    if (existing?.type === 'signature') {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    const kind = this.signingState.activeKind();
+    const asset = this.signingState.activeAsset();
+    if ((kind === 'signature' || kind === 'initials') && asset?.kind === kind) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.facade.createSignatureObject(point.x, point.y, asset);
+      return;
+    }
+    if (kind === 'text' || kind === 'date' || kind === 'checkbox') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.facade.createSigningFieldObject(point.x, point.y, kind);
+      return;
+    }
+  }
+
   /** EDIT EXISTING PDF IMAGE TOOL */
   if (activeTool === 'edit-pdf-image' && event.button === 0 && !this.spacePressed) {
     this.handlePdfImageEditPointerDown(event);
@@ -4169,6 +4221,10 @@ setTextAlign(
       return true;
     }
 
+    if (activeTool === 'sign') {
+      return this.facade.selection()?.type === 'signature';
+    }
+
     if (activeTool !== 'comment') {
       return false;
     }
@@ -4227,9 +4283,13 @@ setTextAlign(
       },
       pageWidth: pageRect.width,
       pageHeight: pageRect.height,
+      // Freeform corner resizing is the default. Hold Shift to preserve
+      // the aspect ratio for images/signatures. This keeps width and height
+      // independently resizable and avoids the old height-only feeling when
+      // the pointer moves mostly vertically.
       preserveAspectRatio:
-        object.type === 'image' &&
-        !event.shiftKey
+        (object.type === 'image' || object.type === 'signature') &&
+        event.shiftKey
     };
 
     const captureTarget =

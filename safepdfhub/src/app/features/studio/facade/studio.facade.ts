@@ -20,6 +20,8 @@ import {
 import { StudioToolId } from '../models/studio-tool.model';
 import { StudioObjectService } from '../services/studio-object.service';
 import { StudioSelection } from '../models/studio-selection.model';
+import type { SigningAsset } from '../../../core/signing/models/signing.models';
+
 import type {
   StudioObject,
   StudioImageData,
@@ -28,7 +30,9 @@ import type {
   StudioShapeStyle,
   StudioDrawingStyle,
   StudioPoint,
-  StudioLinkData
+  StudioLinkData,
+  StudioSignatureObject,
+  StudioObjectBounds
 } from '../models/studio-selection.model';
 import { StudioPdfExportService } from '../services/studio-pdf-export.service';
 import { PdfSecurityService } from '../../../core/security/pdf-security.service';
@@ -3174,6 +3178,20 @@ createTextObject(
   return selection;
 }
 
+createSignatureObject(
+  x: number,
+  y: number,
+  asset: SigningAsset
+): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.createSignatureObject(this.currentPage(), x, y, asset);
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  this.state.setSelection(selection);
+  this.commitHistoryMutation('Add signature', before);
+  return selection;
+}
+
 createImageObject(
   x: number,
   y: number,
@@ -3467,6 +3485,187 @@ updateObjectBounds(
     before
   );
 
+  return selection;
+}
+
+createSigningFieldObject(
+  x: number,
+  y: number,
+  kind: 'text' | 'date' | 'checkbox'
+): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.createSigningFieldObject(this.currentPage(), x, y, kind);
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  this.state.setSelection(selection);
+  this.commitHistoryMutation(`Add ${kind}`, before);
+  return selection;
+}
+
+async applySigningObjectToPages(
+  objectId: string,
+  pageNumbers: readonly number[],
+  position: 'same' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' = 'same'
+): Promise<boolean> {
+  if (!this.hasDocument()) return false;
+  const source = this.objectService.get(objectId);
+  if (!source || source.type !== 'signature') return false;
+
+  const pages = [...new Set(pageNumbers)].filter(page => page >= 1 && page <= this.pages().length);
+  if (!pages.length) return false;
+
+  this.loader.show(`Applying ${this.signingLabel(source.signing.kind)} to ${pages.length.toLocaleString()} pages…`);
+  this.loader.setProgress(2);
+  this.loader.setText('Preparing signing pages…');
+
+  try {
+    const before = this.captureHistorySnapshot();
+    const groupId = source.signing.bulkGroupId ?? this.createSigningId();
+    const existingByPage = new Map<number, StudioSignatureObject>();
+    for (const item of this.objectService.snapshot()) {
+      if (item.type === 'signature' && item.signing.bulkGroupId === groupId && item.signing.kind === source.signing.kind) {
+        existingByPage.set(item.pageNumber, item);
+      }
+    }
+
+    const changes: StudioObject[] = [];
+    const total = pages.length;
+    for (let index = 0; index < total; index += 1) {
+      const pageNumber = pages[index];
+      const bounds = this.positionSigningBounds(source.bounds, position);
+      const existing = existingByPage.get(pageNumber);
+
+      if (existing) {
+        changes.push({
+          ...source,
+          id: existing.id,
+          pageNumber,
+          bounds,
+          signing: { ...source.signing, bulkGroupId: groupId },
+        });
+      } else if (pageNumber === source.pageNumber) {
+        changes.push({
+          ...source,
+          bounds,
+          signing: { ...source.signing, bulkGroupId: groupId },
+        });
+      } else {
+        const { asset: _asset, ...signingWithoutAsset } = source.signing;
+        changes.push({
+          ...source,
+          id: this.createSigningId(),
+          pageNumber,
+          bounds,
+          signing: {
+            ...signingWithoutAsset,
+            assetId: source.signing.assetId ?? source.signing.asset?.id,
+            bulkGroupId: groupId,
+          },
+        });
+      }
+
+      if ((index + 1) % 32 === 0 || index === total - 1) {
+        this.loader.setProgress(5 + ((index + 1) / total) * 88);
+        this.loader.setText(`Preparing page ${(index + 1).toLocaleString()} of ${total.toLocaleString()}…`);
+        if (index !== total - 1) await this.yieldToBrowser();
+      }
+    }
+
+    this.objectService.addMany(changes);
+    this.loader.setProgress(94);
+    this.loader.setText('Saving this change to Undo history…');
+    await this.yieldToBrowser();
+    this.commitHistoryMutation('Apply signing field to pages', before);
+    this.loader.setProgress(100);
+    this.loader.setText(`Applied to ${total.toLocaleString()} pages ✓`);
+    return true;
+  } catch (error) {
+    console.error('[SafePDFHub Studio] Bulk signing apply failed:', error);
+    this.toast.show('Could not apply the signing field to all selected pages.', 'error');
+    this.loader.setText('Applying signing field failed');
+    return false;
+  } finally {
+    this.loader.hide();
+  }
+}
+
+private signingLabel(kind: StudioSignatureObject['signing']['kind']): string {
+  switch (kind) {
+    case 'date': return 'date';
+    case 'text': return 'text';
+    case 'checkbox': return 'checkbox';
+    case 'initials': return 'initials';
+    default: return 'signature';
+  }
+}
+
+private yieldToBrowser(): Promise<void> {
+  if (typeof requestAnimationFrame === 'function') {
+    return new Promise(resolve => requestAnimationFrame(() => resolve()));
+  }
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+removeSigningObjectFromPages(objectId: string, pageNumbers: readonly number[]): boolean {
+  if (!this.hasDocument()) return false;
+  const source = this.objectService.get(objectId);
+  if (!source || source.type !== 'signature' || !source.signing.bulkGroupId) return false;
+  const before = this.captureHistorySnapshot();
+  const groupId = source.signing.bulkGroupId;
+  const pages = new Set(pageNumbers);
+  for (const object of this.objectService.snapshot()) {
+    if (object.type === 'signature' && object.signing.bulkGroupId === groupId && pages.has(object.pageNumber)) {
+      this.objectService.remove(object.id);
+    }
+  }
+  this.commitHistoryMutation('Remove signing field from pages', before);
+  this.state.clearSelection();
+  return true;
+}
+
+private positionSigningBounds(
+  bounds: StudioObjectBounds,
+  position: 'same' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
+): StudioObjectBounds {
+  if (position === 'same') return { ...bounds };
+  const margin = 0.06;
+  let x = bounds.x;
+  let y = bounds.y;
+  if (position.includes('left')) x = margin;
+  if (position.includes('right')) x = 1 - margin - bounds.width;
+  if (position.includes('top')) y = margin;
+  if (position.includes('bottom')) y = 1 - margin - bounds.height;
+  if (position === 'center') { x = (1 - bounds.width) / 2; y = (1 - bounds.height) / 2; }
+  return { ...bounds, x: Math.max(0, Math.min(1 - bounds.width, x)), y: Math.max(0, Math.min(1 - bounds.height, y)) };
+}
+
+private createSigningId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `sign-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+updateSigningFieldStyle(
+  objectId: string,
+  style: { value?: string; fontFamily?: string; fontSize?: number; fontStyle?: 'normal' | 'italic'; color?: string; checked?: boolean; opacity?: number; bulkGroupId?: string },
+  historyLabel = 'Change signing field'
+): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.updateSigningFieldStyle(objectId, style);
+  if (!object) return null;
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  this.state.setSelection(selection);
+  this.commitHistoryMutation(historyLabel, before);
+  return selection;
+}
+
+updateSignatureStyle(objectId: string, style: { opacity?: number }): StudioSelection | null {
+  if (!this.hasDocument()) return null;
+  const before = this.captureHistorySnapshot();
+  const object = this.objectService.updateSignatureStyle(objectId, style);
+  if (!object) return null;
+  const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
+  this.state.setSelection(selection);
+  this.commitHistoryMutation('Change signature appearance', before);
   return selection;
 }
 

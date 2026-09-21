@@ -2,6 +2,7 @@ import { Type } from '@angular/core';
 import { CompressWorkspaceComponent } from '../features/tools/compress/compress-workspace/compress-workspace.component';
 import { MergeWorkspaceComponent } from '../features/tools/merge/merge-workspace/merge-workspace.component';
 import { SecurityWorkspaceComponent } from '../features/tools/security/security-workspace/security-workspace.component';
+import { SignPdfWorkspaceComponent } from '../features/tools/sign/sign-pdf-workspace/sign-pdf-workspace.component';
 
 
 // ========================================
@@ -36,6 +37,7 @@ export interface ToolEngineConfig {
 // ========================================
 
 export const TOOL_ENGINES: ToolEngineConfig[] = [
+  { slug: 'sign-pdf', workspaceComponent: SignPdfWorkspaceComponent, engine: 'signing-engine', supportsPreview: true, supportsBatch: false, supportsRealtimeAnalysis: false, supportsPageOperations: false, supportsDownload: true },
 
   // ========================================
   // MERGE PDF

@@ -1,0 +1,158 @@
+@if (resultFile; as result) {
+  <app-sign-pdf-result
+    [file]="result"
+    [originalFileName]="sourceFile?.name || ''"
+    [durationMs]="resultDurationMs"
+    (download)="downloadResult()"
+    (editAgain)="editAgain()"
+    (processAnother)="processAnother()"
+  />
+} @else {
+<section class="sign-workspace" aria-label="Sign PDF workspace">
+  <header class="sign-header">
+    <div class="sign-file">
+      <div class="sign-file__icon" aria-hidden="true">PDF</div>
+      <div class="sign-file__meta">
+        <strong>{{ file?.name }}</strong>
+        <span><i></i>{{ pageCount || '—' }} {{ pageCount === 1 ? 'page' : 'pages' }}<span class="dot">•</span>Private browser processing</span>
+      </div>
+    </div>
+    <div class="sign-header__actions">
+      <button type="button" class="icon-button header-icon" [disabled]="!state.canUndo()" (click)="undo()" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo">↶</button>
+      <button type="button" class="icon-button header-icon" [disabled]="!state.canRedo()" (click)="redo()" title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo">↷</button>
+      <button type="button" class="secondary-button replace-button" (click)="replaceFile.emit()">Replace PDF</button>
+      <button type="button" class="primary-button" [disabled]="exporting || loading || !state.hasFields()" (click)="export()"><span aria-hidden="true">✓</span>{{ exporting ? 'Preparing…' : 'Apply & Prepare PDF' }}</button>
+    </div>
+  </header>
+
+  <div class="sign-toolbar">
+    <div class="sign-toolbar__group">
+      <button type="button" class="tool-button tool-button--select" [class.active]="interactionMode === 'select'" [attr.aria-pressed]="interactionMode === 'select'" (click)="interactionMode='select'">⌖ <span>Select</span></button>
+      <span class="sign-toolbar__label">Add to PDF</span>
+      @for (tool of toolItems; track tool.kind) {
+        <button type="button" class="tool-button" [class.active]="selectedKind === tool.kind && interactionMode === 'place'" [attr.aria-pressed]="selectedKind === tool.kind && interactionMode === 'place'" [attr.title]="'Add ' + tool.label" (click)="chooseKind(tool.kind)">
+          <span class="tool-button__icon">{{ tool.icon }}</span><span>{{ tool.label }}</span>
+        </button>
+      }
+    </div>
+    <div class="sign-toolbar__hint">
+      @if (interactionMode === 'select') {
+        <span class="placement-hint">Select mode · click a field to edit, drag to move, or click the page to clear selection.</span>
+      } @else if (selectedKind === 'signature' || selectedKind === 'initials') {
+        @if (state.activeAsset(); as asset) {
+          <button type="button" class="asset-chip" (click)="openCreateDialog()"><span class="asset-chip__preview"><img [src]="asset.dataUrl" alt="" /></span><span>{{ asset.kind === 'initials' ? 'Initials ready' : 'Signature ready' }}</span><b>Change</b></button>
+        } @else {
+          <button type="button" class="create-link" (click)="openCreateDialog()">Create your {{ selectedKind === 'initials' ? 'initials' : 'signature' }} <span>→</span></button>
+        }
+      } @else {
+        <span class="placement-hint">Click anywhere on the page to place {{ selectedKind }}.</span>
+      }
+    </div>
+  </div>
+
+  <div class="sign-body">
+    <aside class="sign-sidebar sign-sidebar--left" aria-label="Signature library">
+      <div class="sidebar-section">
+        <div class="sidebar-heading"><div><span class="eyebrow">YOUR ASSETS</span><h2>Your signatures</h2></div><button type="button" class="icon-button" title="Create signature" (click)="openCreateDialog()">+</button></div>
+        @if (signatureAssets().length) {
+          <div class="asset-list" role="listbox" aria-label="Saved signatures">
+            @for (asset of signatureAssets(); track asset.id; let i = $index) {
+              <div class="asset-card-wrap" draggable="true" (dragstart)="onAssetDragStart(asset, $event)" (dragend)="draggingAssetId=null" (dragover)="$event.preventDefault()" (drop)="onAssetDrop(i)">
+                <button type="button" class="asset-card" [class.active]="manuallySelectedAssetId === asset.id" (click)="selectAsset(asset)"><span class="asset-card__image"><img [src]="asset.dataUrl" [alt]="asset.kind === 'initials' ? 'Saved initials' : 'Saved signature'" /></span><span class="asset-card__meta"><strong>{{ asset.label || (asset.kind === 'initials' ? 'Initials' : 'Signature') }}</strong><small>{{ asset.source === 'uploaded' ? 'Uploaded' : asset.source === 'typed' ? 'Typed' : 'Drawn' }}</small></span></button>
+                <button type="button" class="asset-delete" title="Delete asset" aria-label="Delete saved asset" (click)="deleteAsset(asset, $event)">×</button>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="asset-empty"><div class="asset-empty__icon">✍</div><strong>No signature yet</strong><span>Create one by drawing, typing or uploading.</span><button type="button" class="secondary-button secondary-button--full" (click)="openCreateDialog()">Create signature</button></div>
+        }
+      </div>
+      <div class="privacy-card"><span class="privacy-card__dot"></span><div><strong>Private by design</strong><p>Your PDF and signature assets stay in this browser session.</p></div></div>
+    </aside>
+
+    <main class="sign-stage" aria-label="PDF page editor">
+      <div class="stage-topbar">
+        <div><span class="stage-title">Page {{ currentPageNumber }}</span><span class="stage-subtitle">of {{ pageCount }}</span></div>
+        <div class="page-controls" aria-label="Page navigation"><button type="button" class="page-control" [disabled]="currentPageNumber <= 1 || loading" (click)="previousPage()" aria-label="Previous page">‹</button><label class="page-jump"><input type="number" min="1" [max]="pageCount" [value]="currentPageNumber" (change)="goToPage(+$any($event.target).value)" aria-label="Current page" /><span>/ {{ pageCount }}</span></label><button type="button" class="page-control" [disabled]="currentPageNumber >= pageCount || loading" (click)="nextPage()" aria-label="Next page">›</button></div>
+      </div>
+
+      <div class="stage-viewport">
+        @if (loading) {
+          <div class="stage-loading" role="status"><div class="spinner"></div><strong>{{ currentPage ? 'Loading page…' : 'Opening your PDF…' }}</strong><span>Only the page you are viewing is rendered.</span></div>
+        } @else if (currentPage) {
+          <article class="sign-page" [attr.data-page]="currentPage.pageNumber" (pointerdown)="placeField($event)" (pointermove)="onFieldPointerMove($event)" (pointerup)="onFieldPointerUp($event)" (pointercancel)="onFieldPointerUp($event)">
+            <img class="sign-page__pdf" [src]="currentPage.imageUrl" [alt]="'PDF page ' + currentPage.pageNumber" draggable="false" />
+            @for (field of state.fields(); track field.id) {
+              @if (field.pageNumber === currentPage.pageNumber) {
+                <div class="sign-field" [class.selected]="selectedFieldId === field.id" [class.sign-field--checkbox]="field.kind === 'checkbox'" [style]="fieldStyle(field)" (pointerdown)="beginFieldMove($event, field)" (click)="selectField($event, field)">
+                  @if (field.kind === 'signature' || field.kind === 'initials') {
+                    <img class="sign-field__image" [src]="field.asset?.dataUrl" [alt]="field.kind === 'initials' ? 'Initials' : 'Signature'" draggable="false" />
+                  } @else if (field.kind === 'checkbox') {
+                    <span class="sign-field__check" [class.is-checked]="field.checked" [style.color]="field.color || '#0b6c5f'" aria-hidden="true"></span>
+                  } @else {
+                    <span class="sign-field__text" [style.font-size.px]="field.fontSize || 16" [style.color]="field.color || '#121923'" [style.font-family]="field.fontFamily || 'Inter, Arial, sans-serif'" [style.font-style]="field.fontStyle || 'normal'">{{ field.value || (field.kind === 'date' ? 'Date' : 'Text') }}</span>
+                  }
+                  @if (selectedFieldId === field.id) {
+                    <span class="field-handle field-handle--nw" (pointerdown)="beginFieldResize($event, field, 'nw')"></span><span class="field-handle field-handle--ne" (pointerdown)="beginFieldResize($event, field, 'ne')"></span><span class="field-handle field-handle--sw" (pointerdown)="beginFieldResize($event, field, 'sw')"></span><span class="field-handle field-handle--se" (pointerdown)="beginFieldResize($event, field, 'se')"></span><button type="button" class="field-delete" (pointerdown)="$event.stopPropagation()" (click)="removeField($event, field)" aria-label="Delete field">×</button>
+                  }
+                </div>
+              }
+            }
+          </article>
+        }
+      </div>
+      <footer class="stage-footer"><div class="stage-tip"><span>✦</span> Click to place · drag to move · use the corner handles to resize</div><div class="field-count">{{ state.fields().length }} field{{ state.fields().length === 1 ? '' : 's' }}</div></footer>
+    </main>
+
+    <aside class="sign-sidebar sign-sidebar--right" [class.is-open]="!!selectedField" aria-label="Field properties">
+      <div class="sidebar-section properties-section">
+        <div class="mobile-properties-header"><span>Field properties</span><button type="button" (click)="selectedFieldId=null" aria-label="Close field properties">×</button></div>
+        <span class="eyebrow">PROPERTIES</span>
+        @if (selectedField; as field) {
+          <div class="properties-heading-row"><h2>{{ field.kind === 'signature' ? 'Signature' : field.kind === 'initials' ? 'Initials' : field.kind === 'checkbox' ? 'Checkbox' : field.kind === 'date' ? 'Date' : 'Text' }}</h2><button type="button" class="clear-selection" (click)="selectedFieldId=null">Clear</button></div>
+          @if (field.kind === 'text' || field.kind === 'date') {
+            <label class="property-field"><span>{{ field.kind === 'date' ? 'Date' : 'Text' }}</span><input [value]="field.value || ''" [placeholder]="field.kind === 'date' ? 'DD/MM/YYYY' : 'Enter text'" (input)="updateSelectedText($any($event.target).value)" /></label>
+            <label class="property-field"><span>Font</span><select class="sign-font-select" [value]="field.fontFamily || textFonts[0].value" (change)="updateSelectedFontFamily($any($event.target).value)">@for (font of textFonts; track font.value) {<option [value]="font.value">{{ font.label }}</option>}</select></label>
+            <label class="range-control property-range"><span>Size <b>{{ field.fontSize || 16 }} px</b></span><input type="range" min="8" max="96" step="1" [value]="field.fontSize || 16" (input)="updateSelectedFontSize($any($event.target).value)"></label>
+            <div class="property-style-block"><span class="property-style-label">Color</span><div class="sign-color-row">@for (color of colors; track color) {<button type="button" class="sign-color-swatch" [class.active]="(field.color || '#121923') === color" [style.background]="color" (click)="updateSelectedColor(color)" [attr.aria-label]="'Use ' + color"></button>}<label class="custom-color" title="Custom color"><input type="color" [value]="field.color || '#121923'" (input)="updateSelectedColor($any($event.target).value)" aria-label="Choose custom color"><span></span></label></div></div>
+            <label class="range-control property-range property-opacity"><span>Opacity <b>{{ opacityPercent(field.opacity) }}%</b></span><input type="range" min="5" max="100" step="1" [value]="(field.opacity ?? 1) * 100" (input)="updateSelectedOpacity($any($event.target).value)"></label>
+          }
+          @if (field.kind === 'checkbox') {
+            <button type="button" class="check-toggle" [class.active]="field.checked" (click)="toggleSelectedCheckbox()"><span class="check-toggle__mark" [class.is-checked]="field.checked" aria-hidden="true"></span>{{ field.checked ? 'Checked' : 'Unchecked' }}</button>
+            <div class="property-style-block"><span class="property-style-label">Color</span><div class="sign-color-row">@for (color of colors; track color) {<button type="button" class="sign-color-swatch" [class.active]="(field.color || '#0b6c5f') === color" [style.background]="color" (click)="updateSelectedColor(color)" [attr.aria-label]="'Use ' + color"></button>}<label class="custom-color" title="Custom color"><input type="color" [value]="field.color || '#0b6c5f'" (input)="updateSelectedColor($any($event.target).value)" aria-label="Choose custom color"><span></span></label></div></div>
+            <label class="range-control property-range property-opacity"><span>Opacity <b>{{ opacityPercent(field.opacity) }}%</b></span><input type="range" min="5" max="100" step="1" [value]="(field.opacity ?? 1) * 100" (input)="updateSelectedOpacity($any($event.target).value)"></label>
+          }
+          @if (field.kind === 'signature' || field.kind === 'initials') {
+            <div class="asset-summary"><span>{{ field.asset?.source === 'typed' ? 'Typed asset' : field.asset?.source === 'uploaded' ? 'Uploaded asset' : 'Drawn asset' }}</span><strong>{{ field.asset?.naturalWidth }} × {{ field.asset?.naturalHeight }} px</strong></div>
+            <p class="field-help">Drag to reposition. Use the corner handles to resize while preserving the signature proportions.</p>
+            <div class="property-color-row"><span>Opacity</span><input type="range" min="5" max="100" step="1" [value]="(field.opacity ?? 1) * 100" (input)="updateSelectedOpacity($any($event.target).value)"></div>
+          }
+          <div class="property-info"><div><span>Page</span><strong>{{ field.pageNumber }}</strong></div><div><span>Width</span><strong>{{ (field.bounds.width * 100).toFixed(1) }}%</strong></div><div><span>Height</span><strong>{{ (field.bounds.height * 100).toFixed(1) }}%</strong></div></div>
+          <div class="property-actions"><button type="button" class="secondary-button secondary-button--full" (click)="openBulkDialog('apply')">Apply to pages…</button>@if (field.bulkGroupId) {<button type="button" class="secondary-button secondary-button--full secondary-button--danger" (click)="openBulkDialog('remove')">Remove from pages…</button>}<button type="button" class="delete-field" (click)="removeSelected()">Delete field</button></div>
+        } @else {
+          <div class="properties-empty"><div>↖</div><strong>Select a field</strong><span>Click a signature, text, date or checkbox to move, resize or edit it.</span></div>
+        }
+      </div>
+      <div class="sidebar-help"><strong>How signing works</strong><ol><li>Create your signature.</li><li>Place it on any PDF page.</li><li>Resize and position it.</li><li>Apply and download the signed PDF.</li></ol></div>
+    </aside>
+  </div>
+
+  @if (error) {<div class="sign-error" role="alert"><span>!</span><p>{{ error }}</p><button type="button" (click)="error=''" aria-label="Dismiss error">×</button></div>}
+  @if (dialog) {<app-signature-builder [kind]="selectedKind === 'initials' ? 'initials' : 'signature'" (closed)="closeDialog()" (created)="onAssetCreated()" />}
+  @if (bulkDialog && selectedField; as field) {
+    <div class="signature-modal" role="dialog" aria-modal="true" [attr.aria-label]="bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages'" (click)="closeBulkDialog()">
+      <section class="signature-dialog bulk-dialog" (click)="$event.stopPropagation()">
+        <header class="signature-dialog__header"><div><span class="eyebrow">MULTI-PAGE PLACEMENT</span><h2>{{ bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages' }}</h2><p>{{ bulkMode === 'remove' ? 'Remove only the selected field copies. Other pages remain unchanged.' : 'Reuse this field across exactly the pages you choose.' }}</p></div><button type="button" class="dialog-close" (click)="closeBulkDialog()" aria-label="Close">×</button></header>
+        <div class="bulk-options">
+          <div class="bulk-scope"><button type="button" [class.active]="bulkScope === 'current'" (click)="bulkScope='current'">Current page</button><button type="button" [class.active]="bulkScope === 'all'" (click)="bulkScope='all'">All pages</button><button type="button" [class.active]="bulkScope === 'range'" (click)="bulkScope='range'">Page range</button><button type="button" [class.active]="bulkScope === 'specific'" (click)="bulkScope='specific'">Specific pages</button></div>
+          @if (bulkScope === 'range') {<div class="bulk-grid"><label>From <input type="number" min="1" [max]="pageCount" [(ngModel)]="bulkFrom"></label><label>To <input type="number" min="1" [max]="pageCount" [(ngModel)]="bulkTo"></label></div>}
+          @if (bulkScope === 'specific') {<label class="bulk-input"><span>Pages</span><input [(ngModel)]="bulkPages" placeholder="1, 3, 5-8, 12"></label>}
+          @if (bulkMode === 'apply') {<label class="bulk-input"><span>Position</span><select [(ngModel)]="bulkPosition"><option value="same">Use current position</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="center">Center</option></select></label>}
+          @if (bulkMode === 'apply') {<p class="bulk-note">For the current page, the chosen position is applied to the selected field too. Other selected pages receive a copy in the chosen position.</p>}
+        </div>
+        <footer class="signature-dialog__footer"><button type="button" class="secondary-button" (click)="closeBulkDialog()">Cancel</button><button type="button" [class.primary-button]="bulkMode === 'apply'" [class.danger-primary]="bulkMode === 'remove'" (click)="bulkMode === 'remove' ? removeAppliedPages() : applyToPages()">{{ bulkMode === 'remove' ? 'Remove from pages' : 'Apply to pages' }}</button></footer>
+      </section>
+    </div>
+  }
+</section>
+}

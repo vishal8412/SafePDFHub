@@ -112,6 +112,105 @@ export class QpdfWasmPrototypeService {
     );
   }
 
+
+
+  /**
+   * Overlay a small generated PDF on top of an existing PDF without rebuilding
+   * the original page content. This is intentionally separate from `optimize`
+   * because signature-only Studio exports should preserve the source streams
+   * instead of asking pdf-lib to copy/rewrite every page resource.
+   */
+  async overlay(
+    sourceFile: File,
+    overlayFile: File,
+    onProgress?: (progress: number) => void,
+    runnerFactory: QpdfWasmRunnerFactory = createBrowserQpdfRunnerFactory()
+  ): Promise<File> {
+    this.cancelled = false;
+    onProgress?.(5);
+
+    const sourceName = this.uniqueName(sourceFile.name || 'input.pdf', 0);
+    const overlayName = this.uniqueName(overlayFile.name || 'overlay.pdf', 1);
+    const outputName = 'overlay-output.pdf';
+
+    const request: QpdfRunRequest = {
+      inputs: {
+        [sourceName]: new Uint8Array(await sourceFile.arrayBuffer()),
+        [overlayName]: new Uint8Array(await overlayFile.arrayBuffer()),
+      },
+      args: [
+        sourceName,
+        '--overlay',
+        overlayName,
+        '--',
+        outputName,
+      ],
+      outputs: [outputName],
+    };
+
+    const result = await this.runtime.run(
+      request,
+      progress => onProgress?.(10 + Math.round(progress * 0.85)),
+      runnerFactory
+    );
+
+    this.throwIfCancelled();
+    if (!result.ok || result.exitCode !== 0) {
+      throw new Error(this.formatQpdfError(result));
+    }
+
+    const output = result.outputs[outputName];
+    if (!output) throw new Error('QPDF overlay did not return an output PDF.');
+
+    onProgress?.(100);
+    return new File([toArrayBuffer(output)], sourceFile.name, { type: 'application/pdf' });
+  }
+
+  /**
+   * Recompress an already-generated PDF without changing its visible content.
+   * This is used as a safety valve after pdf-lib rewrites a large document.
+   */
+  async optimize(
+    file: File,
+    onProgress?: (progress: number) => void,
+    runnerFactory: QpdfWasmRunnerFactory = createBrowserQpdfRunnerFactory()
+  ): Promise<File> {
+    this.cancelled = false;
+    onProgress?.(5);
+
+    const inputName = this.uniqueName(file.name || 'input.pdf', 0);
+    const outputName = 'optimized-output.pdf';
+    const request: QpdfRunRequest = {
+      inputs: { [inputName]: new Uint8Array(await file.arrayBuffer()) },
+      args: [
+        inputName,
+        '--stream-data=compress',
+        '--recompress-flate',
+        '--compression-level=9',
+        '--object-streams=generate',
+        '--',
+        outputName,
+      ],
+      outputs: [outputName],
+    };
+
+    const result = await this.runtime.run(
+      request,
+      progress => onProgress?.(10 + Math.round(progress * 0.85)),
+      runnerFactory
+    );
+
+    this.throwIfCancelled();
+    if (!result.ok || result.exitCode !== 0) {
+      throw new Error(this.formatQpdfError(result));
+    }
+
+    const output = result.outputs[outputName];
+    if (!output) throw new Error('QPDF optimization did not return an output PDF.');
+    onProgress?.(100);
+    return new File([toArrayBuffer(output)], file.name, { type: 'application/pdf' });
+  }
+
   /**
    * qpdf-run's runner is backed by its own Worker.
    * Destroying that runner is our cancellation mechanism.

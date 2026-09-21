@@ -112,6 +112,7 @@ export const routes: Routes = [
     redirectTo: 'tools/protect-pdf',
     pathMatch: 'full'
   },
+  { path: 'sign-pdf', redirectTo: 'tools/sign-pdf', pathMatch: 'full' },
   {
     path: 'unlock-pdf',
     redirectTo: 'tools/unlock-pdf',

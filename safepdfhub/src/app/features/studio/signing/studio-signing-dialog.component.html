@@ -1,0 +1,17 @@
+@if (!showBuilder) {
+  <div class="studio-sign-picker" role="dialog" aria-modal="true" aria-label="Add signing field">
+    <section class="studio-sign-picker__panel" (click)="$event.stopPropagation()">
+      <header>
+        <div><span>SIGN & FILL</span><h2>Add a signing field</h2><p>Choose what you want to place on the PDF.</p></div>
+        <button type="button" (click)="closed.emit()" aria-label="Close">×</button>
+      </header>
+      <div class="studio-sign-picker__grid">
+        @for (item of fieldItems; track item.kind) {
+          <button type="button" (click)="choose(item.kind)"><b>{{ item.icon }}</b><span>{{ item.label }}</span><small>{{ item.description }}</small></button>
+        }
+      </div>
+    </section>
+  </div>
+} @else {
+  <app-signature-builder [kind]="builderKind" (closed)="closed.emit()" (created)="created($event)" />
+}

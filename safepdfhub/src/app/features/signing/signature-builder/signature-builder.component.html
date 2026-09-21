@@ -1,0 +1,83 @@
+<div class="builder-backdrop" role="presentation" (click)="closed.emit()">
+  <section class="builder" role="dialog" aria-modal="true" aria-label="Create signature" (click)="$event.stopPropagation()">
+    <header class="builder__header">
+      <div>
+        <span class="eyebrow">SIGNATURE BUILDER</span>
+        <h2>Create {{ kind === 'initials' ? 'your initials' : 'your signature' }}</h2>
+        <p>Create a reusable signature asset once, then place it wherever you need it.</p>
+      </div>
+      <button type="button" class="close" (click)="closed.emit()" aria-label="Close">×</button>
+    </header>
+
+    <div class="builder__tabs" role="tablist">
+      <button type="button" [class.active]="mode === 'draw'" (click)="setMode('draw')">Draw</button>
+      <button type="button" [class.active]="mode === 'type'" (click)="setMode('type')">Type</button>
+      <button type="button" [class.active]="mode === 'upload'" (click)="setMode('upload')">Upload</button>
+      <button type="button" [class.active]="mode === 'scan'" (click)="setMode('scan')">Scan</button>
+    </div>
+
+    @if (mode === 'draw') {
+      <div class="draw-toolbar">
+        <div class="tool-group">
+          @for (tool of drawTools; track tool.id) {
+            <button type="button" class="draw-tool-button" [class.active]="drawTool === tool.id" (click)="setDrawTool(tool.id)"><span class="draw-tool-button__icon" [attr.data-tool]="tool.id" aria-hidden="true"></span><span>{{ tool.label }}</span></button>
+          }
+        </div>
+        <div class="tool-group history-group">
+          <button type="button" [disabled]="!canUndo" (click)="undoStroke()" title="Undo">↶</button>
+          <button type="button" [disabled]="!canRedo" (click)="redoStroke()" title="Redo">↷</button>
+          <button type="button" (click)="clearPad()">Clear</button>
+        </div>
+      </div>
+      <div class="draw-controls">
+        <div class="control-block"><span>Ink</span><div class="swatches">@for (item of colors; track item) {<button type="button" [style.background]="item" [class.active]="color === item" (click)="setColor(item)" [attr.aria-label]="'Use ' + item"></button>}</div></div>
+        <label class="range-control"><span>Size <b>{{ brushSize }} px</b></span><input type="range" min="1" max="18" step="1" [(ngModel)]="brushSize"></label>
+        <label class="range-control"><span>Opacity <b>{{ (opacity * 100).toFixed(0) }}%</b></span><input type="range" min="0.2" max="1" step="0.05" [(ngModel)]="opacity"></label>
+      </div>
+      <div class="canvas-wrap" [class.canvas-wrap--pen]="drawTool === 'pen'" [class.canvas-wrap--pencil]="drawTool === 'pencil'" [class.canvas-wrap--brush]="drawTool === 'brush'" [class.canvas-wrap--eraser]="drawTool === 'eraser'">
+        <div class="active-draw-tool" [attr.data-tool]="drawTool">
+          <span class="active-draw-tool__icon" [attr.data-tool]="drawTool" aria-hidden="true"></span>
+          <span>{{ activeDrawTool.label }}</span>
+        </div>
+        <canvas #pad width="1200" height="430" [class.canvas--pen]="drawTool === 'pen'" [class.canvas--pencil]="drawTool === 'pencil'" [class.canvas--brush]="drawTool === 'brush'" [class.canvas--eraser]="drawTool === 'eraser'" (pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp()" (pointercancel)="onPointerUp()" (pointerleave)="onPointerLeave()"></canvas>
+        @if (pointerPreviewVisible) {
+          <span class="pointer-size-preview" [class.pointer-size-preview--eraser]="drawTool === 'eraser'" [style.left.px]="pointerPreviewX" [style.top.px]="pointerPreviewY" [style.width.px]="pointerPreviewSize" [style.height.px]="pointerPreviewSize" aria-hidden="true"></span>
+        }
+        <span>Draw naturally · stylus, mouse and touch supported · transparent background</span>
+      </div>
+      <p class="micro-hint">Tip: Pen is precise, Pencil is faint, Brush is expressive, and Eraser removes individual strokes.</p>
+    }
+
+    @if (mode === 'type') {
+      <div class="type-layout">
+        <div class="type-controls">
+          <label><span>Your text</span><input [(ngModel)]="typedValue" placeholder="Type your name" autocomplete="off"></label>
+          <div class="style-grid"><button type="button" *ngFor="let style of typeStyles" [class.active]="typedFont === style.font" (click)="setTypeStyle(style.font)">{{ style.label }}</button></div>
+          <label class="select-field"><span>Font</span><select [(ngModel)]="typedFont"><option *ngFor="let style of typeStyles" [value]="style.font">{{ style.label }}</option></select></label>
+          <label class="range-control"><span>Size <b>{{ typedFontSize }} px</b></span><input type="range" min="80" max="240" step="2" [(ngModel)]="typedFontSize"></label>
+          <div class="color-row"><span>Color</span><div class="swatches">@for (item of colors; track item) {<button type="button" [style.background]="item" [class.active]="typedColor === item" (click)="typedColor = item"></button>}</div></div>
+          <label class="range-control"><span>Opacity <b>{{ (typedOpacity * 100).toFixed(0) }}%</b></span><input type="range" min="0.25" max="1" step="0.05" [(ngModel)]="typedOpacity"></label>
+          <label class="toggle"><input type="checkbox" [(ngModel)]="typedItalic"><span>Italic signature style</span></label>
+        </div>
+        <div class="typed-preview" [style.font-family]="typedFont" [style.font-size.px]="typedFontSize * .55" [style.color]="typedColor" [style.opacity]="typedOpacity" [style.font-style]="typedItalic ? 'italic' : 'normal'">{{ typedValue || 'Your Signature' }}</div>
+      </div>
+    }
+
+    @if (mode === 'upload' || mode === 'scan') {
+      <label class="import-card">
+        <input type="file" [accept]="mode === 'scan' ? 'image/*' : 'image/png,image/jpeg'" [attr.capture]="mode === 'scan' ? 'environment' : null" (change)="onImageSelected($event)">
+        <span class="import-icon">{{ mode === 'scan' ? '⌾' : '↑' }}</span>
+        <strong>{{ mode === 'scan' ? 'Scan with camera' : 'Choose a signature image' }}</strong>
+        <span>{{ mode === 'scan' ? 'On mobile/tablet, your rear camera opens automatically.' : 'PNG or JPEG · maximum 5 MB' }}</span>
+        <small>{{ mode === 'scan' ? 'Capture a clean signature on white paper, then import it.' : 'Transparent PNG works best.' }}</small>
+      </label>
+    }
+
+    @if (error) { <p class="error" role="alert">{{ error }}</p> }
+
+    <footer class="builder__footer">
+      <button type="button" class="secondary" (click)="closed.emit()">Cancel</button>
+      <button type="button" class="primary" [disabled]="creating || mode === 'upload' || mode === 'scan'" (click)="useSignature()">{{ creating ? 'Creating…' : 'Use signature' }}</button>
+    </footer>
+  </section>
+</div>

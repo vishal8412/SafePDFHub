@@ -18,6 +18,9 @@ import { PdfSecurityFormComponent } from '../../../../shared/components/pdf-secu
 import type { PdfSecurityRequest } from '../../../../core/security/pdf-security.types';
 
 import { StudioFacade } from '../../facade/studio.facade';
+import { StudioSigningDialogComponent } from '../../signing/studio-signing-dialog.component';
+import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
+import type { SigningAsset, SigningFieldKind } from '../../../../core/signing/models/signing.models';
 import type {
   StudioToolId
 } from '../../models/studio-tool.model';
@@ -31,7 +34,8 @@ import type {
     StudioStatusBar,
     StudioWorkspace,
     FormsModule,
-    PdfSecurityFormComponent
+    PdfSecurityFormComponent,
+    StudioSigningDialogComponent
   ],
   templateUrl: './studio-shell.component.html',
   styleUrls: ['./studio-shell.component.scss'],
@@ -84,6 +88,8 @@ export class StudioShellComponent {
   readonly securityDialogError = this.facade.securityDialogError;
 
   passwordInput = '';
+  readonly signingDialogOpen = signal(false);
+  readonly signingState = inject(SigningStateService);
 
   /**
    * Independent Studio chrome state.
@@ -715,6 +721,11 @@ onToolSelected(
      * Their actual editing operations are
      * intentionally implemented in later tasks.
      */
+    case 'sign':
+      if (!this.facade.hasDocument()) return;
+      this.signingDialogOpen.set(true);
+      return;
+
     case 'extract':
       this.openExtractPagesDialog();
       return;
@@ -748,6 +759,19 @@ closeSecurityDialog(): void {
 submitSecurityRequest(request: PdfSecurityRequest): void {
   void this.facade.runSecurityOperation(request);
 }
+
+onSignatureCreated(asset: SigningAsset): void {
+    this.signingDialogOpen.set(false);
+    this.signingState.setActiveAsset(asset);
+    this.signingState.setActiveKind(asset.kind);
+    this.facade.setActiveTool('sign');
+  }
+
+  onSigningFieldSelected(kind: SigningFieldKind): void {
+    this.signingDialogOpen.set(false);
+    this.signingState.setActiveKind(kind);
+    this.facade.setActiveTool('sign');
+  }
 
 submitPassword(): void {
   const value = this.passwordInput;

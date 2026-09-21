@@ -472,3 +472,11 @@
     hidden
     (change)="onPdfSelected($event)" />
 </div>
+
+@if (signingDialogOpen()) {
+  <app-studio-signing-dialog
+    (closed)="signingDialogOpen.set(false)"
+    (signed)="onSignatureCreated($event)"
+    (fieldSelected)="onSigningFieldSelected($event)"
+  />
+}

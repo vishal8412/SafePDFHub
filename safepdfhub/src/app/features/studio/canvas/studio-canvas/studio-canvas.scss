@@ -180,6 +180,24 @@
   -webkit-user-drag: none;
 }
 
+/* SIGN-6 — signature artwork must stay inside its normalized object bounds.
+ * Without this rule the browser uses the image's intrinsic dimensions and the
+ * visible signature can overflow the selection box dramatically. */
+.studio-signature-object__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.studio-editor-object--signature {
+  overflow: visible;
+}
 
 .studio-pdf-image-replacement-cover {
   position: absolute;
@@ -1689,3 +1707,48 @@
 .studio-editor-object--pdf-source-text .studio-text-editor {
   padding: 0;
 }
+
+/* Studio scrollbar system — compact, dark, teal-accented and consistent with SafePDFHub. */
+.studio-canvas__viewport,
+.studio-canvas__stage { scrollbar-width: thin; scrollbar-color: rgba(84,225,211,.30) transparent; }
+.studio-canvas__viewport::-webkit-scrollbar { width: 8px; height: 8px; }
+.studio-canvas__viewport::-webkit-scrollbar-track { background: transparent; }
+.studio-canvas__viewport::-webkit-scrollbar-thumb { min-height:38px; border:2px solid transparent; border-radius:999px; background:rgba(84,225,211,.24); background-clip:padding-box; }
+.studio-canvas__viewport::-webkit-scrollbar-thumb:hover { background:rgba(84,225,211,.46); background-clip:padding-box; }
+.studio-canvas__viewport::-webkit-scrollbar-corner { background:transparent; }
+
+.studio-signing-text { display:block; width:100%; overflow:hidden; padding:0 4px; box-sizing:border-box; white-space:nowrap; text-overflow:ellipsis; font-weight:600; line-height:1.05; }
+.studio-signing-checkbox {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+  background: rgba(255,255,255,.92);
+}
+.studio-signing-checkbox.is-checked::before,
+.studio-signing-checkbox.is-checked::after {
+  content: '';
+  position: absolute;
+  height: 1.7px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: left center;
+}
+.studio-signing-checkbox.is-checked::before {
+  width: 31%;
+  left: 17%;
+  top: 53%;
+  transform: rotate(48deg);
+}
+.studio-signing-checkbox.is-checked::after {
+  width: 56%;
+  left: 37%;
+  top: 64%;
+  transform: rotate(-48deg);
+}
+
+.studio-editor-object--signature .studio-signature-object__image{opacity:1;filter:none;mix-blend-mode:normal}
+.studio-editor-object--signature.studio-editor-object--selected{background:transparent}

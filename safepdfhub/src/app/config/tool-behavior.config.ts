@@ -65,6 +65,12 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
   },
 
 
+  {
+    slug: 'sign-pdf', allowMultiple: false, replaceOnUpload: true, acceptedTypes: '.pdf,application/pdf',
+    heroTitle: 'Sign your PDF locally', heroDescription: 'Add a signature and fill common PDF fields without uploading your document.',
+    uploadTitle: 'Choose a PDF', uploadButtonText: 'Choose a PDF', uploadHint: 'Your PDF stays on your device', showQuickActions: false, primaryActionText: 'Sign PDF'
+  },
+
   // =========================
   // MERGE PDF
   // =========================

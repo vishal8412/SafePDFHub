@@ -33,6 +33,7 @@ import { PdfValidationService } from '../../core/capacity/pdf-validation.service
 import { PdfWorkloadAnalyzerService } from '../../core/capacity/pdf-workload-analyzer.service';
 import { LocalProcessingCapability, WorkloadAssessment } from '../../core/capacity/local-processing-capability.model';
 import { SecurityWorkspaceComponent } from '../../features/tools/security/security-workspace/security-workspace.component';
+import { SignPdfWorkspaceComponent } from '../../features/tools/sign/sign-pdf-workspace/sign-pdf-workspace.component';
 import { PdfSecurityService } from '../../core/security/pdf-security.service';
 import { SeoService } from '../../core/services/seo.service';
 import { HomeSectionNavigationService } from '../../shared/services/home-section-navigation.service';
@@ -44,7 +45,7 @@ type WorkflowStep = 'merge' | 'compress' | 'split';
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent,
+  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent,
     DialogComponent, BottomSheetComponent, ActionPanelComponent, RouterModule],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
@@ -76,6 +77,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   zoom = 1;
 
   viewerFile: File | null = null;
+  /** Stable input for the Sign PDF workspace; avoids a getter-backed array changing during a check. */
+  signWorkspaceFile: File | null = null;
 
   private unregisterLoaderCancellation: (() => void) | null = null;
 
@@ -223,6 +226,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       'split-pdf': 'Split PDF',
       'protect-pdf': 'Protect PDF',
       'unlock-pdf': 'Unlock PDF',
+      'sign-pdf': 'Sign PDF',
     };
 
     this.breadcrumbLabel = labels[this.tool?.slug ?? ''] ?? 'PDF Tool';
@@ -235,6 +239,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   get isSplitTool(): boolean {
     return this.tool?.slug === 'split-pdf';
   }
+
+  get isSignTool(): boolean { return this.tool?.slug === 'sign-pdf'; }
 
   get isSecurityTool(): boolean {
     return this.tool?.category === 'security';
@@ -276,6 +282,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     // viewer reset
     this.viewerPages = [];
     this.viewerFile = null;
+    this.signWorkspaceFile = null;
     this.showViewer = false;
   }
 
@@ -318,7 +325,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {
       return 'Up to 1 GB per file • processed locally';
     }
-    if (this.behavior?.allowMultiple) {
+    if (this.behavior.allowMultiple) {
       return `Up to ${this.maxFileMB} MB per file • ${this.maxTotalMB} MB total`;
     }
     return `Up to ${this.maxFileMB} MB per file`;
@@ -506,11 +513,18 @@ export class ToolComponent implements OnInit, OnDestroy {
 
     this.toast.show(`${selected.length} files added`,'success');
 
+    // The Sign PDF workspace is single-file. Set its input before mutating the
+    // workspace collection so Angular sees one stable input during the same
+    // change-detection turn.
+    if (this.isSignTool) {
+      this.signWorkspaceFile = selected[0] ?? null;
+    }
+
     const startIndex = this.workspaceUpload.addFiles(selected,this.behavior.replaceOnUpload);
 
     this.handlePostUploadProcessing();
     this.refreshWorkloadAssessment();
-    if (!this.isSecurityTool) {
+    if (!this.isSecurityTool && !this.isSignTool) {
       this.queueInitialPreviews(startIndex);
     }
     this.updateActiveFileAfterUpload(startIndex);

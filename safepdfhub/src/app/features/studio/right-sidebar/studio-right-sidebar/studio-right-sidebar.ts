@@ -1,3 +1,5 @@
+import { FormsModule } from '@angular/forms';
+
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,6 +11,7 @@ import {
 
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioObjectService } from '../../services/studio-object.service';
+import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
 import type {
   StudioObject,
   StudioObjectBounds,
@@ -35,7 +38,7 @@ type PdfImageFidelityValidation = {
 @Component({
   selector: 'app-studio-right-sidebar',
   standalone: true,
-  imports: [],
+  imports: [FormsModule],
   templateUrl: './studio-right-sidebar.html',
   styleUrl: './studio-right-sidebar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -44,6 +47,7 @@ export class StudioRightSidebar {
 
   readonly facade = inject(StudioFacade);
   private readonly objectService = inject(StudioObjectService);
+  private readonly signingState = inject(SigningStateService);
 
   readonly activeTab = signal<PropertiesTab>('document');
 
@@ -141,6 +145,85 @@ export class StudioRightSidebar {
 
     return this.objectService.get(selection.objectId) ?? null;
   });
+
+  /**
+   * Narrow the generic StudioObject union before the template reads the
+   * signature-specific payload. Angular template type checking does not
+   * retain the narrowing from a sibling @if expression across separate
+   * selectedObject() calls, so exposing the narrowed view here keeps the
+   * inspector type-safe and avoids $any casts in the template.
+   */
+  readonly selectedSignatureObject = computed(() => {
+    const object = this.selectedObject();
+    return object?.type === 'signature' ? object : null;
+  });
+
+  /**
+   * Template-safe signature inspector values. Keeping these as dedicated
+   * computed signals avoids Angular's strict-template diagnostics around
+   * optional chaining followed by non-nullable properties.
+   */
+  readonly selectedSignatureKind = computed<'signature' | 'initials' | 'text' | 'date' | 'checkbox' | null>(() =>
+    this.selectedSignatureObject()?.signing.kind ?? null
+  );
+
+  readonly selectedSignatureAssetSource = computed<'drawn' | 'typed' | 'uploaded' | null>(() => {
+    const object = this.selectedSignatureObject();
+    return this.resolveSigningAsset(object)?.source ?? null;
+  });
+
+  readonly selectedSignatureAssetWidth = computed<number>(() => {
+    const object = this.selectedSignatureObject();
+    return this.resolveSigningAsset(object)?.naturalWidth ?? 0;
+  });
+
+  readonly selectedSignatureAssetHeight = computed<number>(() => {
+    const object = this.selectedSignatureObject();
+    return this.resolveSigningAsset(object)?.naturalHeight ?? 0;
+  });
+
+  readonly selectedSignatureOpacity = computed<number>(() =>
+    this.selectedSignatureObject()?.signing.opacity ?? 1
+  );
+
+  readonly signingFontOptions = [
+    { label: 'Inter', value: 'Inter, Arial, sans-serif' },
+    { label: 'Elegant', value: "'Segoe Script', 'Brush Script MT', cursive" },
+    { label: 'Brush', value: "'Brush Script MT', 'Segoe Script', cursive" },
+    { label: 'Handwritten', value: "'Segoe Print', 'Comic Sans MS', cursive" },
+    { label: 'Serif', value: "Georgia, 'Times New Roman', serif" },
+  ] as const;
+
+  readonly selectedSigningValue = computed<string>(() => this.selectedSignatureObject()?.signing.value ?? '');
+  readonly selectedSigningFontFamily = computed<string>(() => {
+    const value = this.selectedSignatureObject()?.signing.fontFamily;
+    if (!value) return this.signingFontOptions[0].value;
+    // Normalize legacy/default values that predate the current option list.
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (normalized.includes('Segoe Script') && normalized.includes('Segoe Print')) {
+      return this.signingFontOptions[1].value;
+    }
+    return this.signingFontOptions.some(option => option.value === value) ? value : this.signingFontOptions[0].value;
+  });
+  readonly selectedSigningFontSize = computed<number>(() => this.selectedSignatureObject()?.signing.fontSize ?? 16);
+  readonly selectedSigningFontStyle = computed<'normal' | 'italic'>(() => this.selectedSignatureObject()?.signing.fontStyle ?? 'normal');
+  readonly selectedSigningColor = computed<string>(() => this.selectedSignatureObject()?.signing.color ?? '#121923');
+  readonly selectedSigningChecked = computed<boolean>(() => this.selectedSignatureObject()?.signing.checked ?? true);
+
+  resolveSigningAsset(object: StudioObject | null): import('../../../../core/signing/models/signing.models').SigningAsset | null {
+    if (object?.type !== 'signature') return null;
+    if (object.signing.asset) return object.signing.asset;
+    const assetId = object.signing.assetId;
+    return assetId ? this.signingState.assets().find(asset => asset.id === assetId) ?? null : null;
+  }
+  readonly signingColors = ['#121923', '#0f766e', '#2563eb', '#7c3aed', '#be185d', '#b45309', '#000000'] as const;
+
+  readonly signingPagesDialogOpen = signal(false);
+  signingPagesText = '';
+  signingBulkScope: 'current' | 'all' | 'range' | 'specific' = 'current';
+  signingBulkFrom = 1;
+  signingBulkTo = 1;
+  signingBulkPosition: 'same' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' = 'same';
 
   private readonly fidelityValidationEffect = effect(() => {
     const object = this.selectedObject();
@@ -300,7 +383,8 @@ export class StudioRightSidebar {
       draw: 'Drawing',
       highlight: 'Highlight',
       comment: 'Comment',
-      link: 'Link'
+      link: 'Link',
+      signature: 'Signature'
     } as Record<string, string>)[object.type] ?? 'Selection';
   });
 
@@ -641,6 +725,125 @@ export class StudioRightSidebar {
     };
 
     this.facade.updateObjectBounds(object.id, bounds);
+  }
+
+  updateSignatureOpacity(value: string): void {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    const opacity = Math.max(0.05, Math.min(1, Number(value) / 100));
+    this.facade.updateSignatureStyle(object.id, { opacity });
+  }
+
+  openSigningPagesDialog(mode: 'apply' | 'remove' = 'apply'): void {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    this.signingPagesText = String(object.pageNumber);
+    this.signingBulkScope = 'current';
+    this.signingBulkFrom = object.pageNumber;
+    this.signingBulkTo = object.pageNumber;
+    this.signingBulkPosition = 'same';
+    this.signingPagesDialogOpen.set(true);
+    this.signingBulkMode = mode;
+  }
+
+  signingBulkMode: 'apply' | 'remove' = 'apply';
+
+  closeSigningPagesDialog(): void {
+    this.signingPagesDialogOpen.set(false);
+  }
+
+  async applySigningPages(): Promise<void> {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    const pages = this.resolveSigningPages(object.pageNumber);
+    if (!pages.length) return;
+    const applied = await this.facade.applySigningObjectToPages(object.id, pages, this.signingBulkPosition);
+    if (applied) this.signingPagesDialogOpen.set(false);
+  }
+
+  removeSigningPages(): void {
+    const object = this.selectedSignatureObject();
+    if (!object?.signing.bulkGroupId) return;
+    const pages = this.resolveSigningPages(object.pageNumber);
+    if (!pages.length) return;
+    this.facade.removeSigningObjectFromPages(object.id, pages);
+    this.signingPagesDialogOpen.set(false);
+  }
+
+  private resolveSigningPages(currentPage: number): number[] {
+    const max = this.facade.pages().length;
+    if (max < 1) return [];
+
+    if (this.signingBulkScope === 'current') {
+      return [Math.max(1, Math.min(max, currentPage))];
+    }
+
+    if (this.signingBulkScope === 'all') {
+      return Array.from({ length: max }, (_, index) => index + 1);
+    }
+
+    if (this.signingBulkScope === 'range') {
+      const from = Math.max(1, Math.min(max, Math.floor(Number(this.signingBulkFrom) || 1)));
+      const to = Math.max(from, Math.min(max, Math.floor(Number(this.signingBulkTo) || from)));
+      return Array.from({ length: to - from + 1 }, (_, index) => from + index);
+    }
+
+    return this.parseSigningPages(this.signingPagesText);
+  }
+
+  private parseSigningPages(value: string): number[] {
+    const max = this.facade.pages().length;
+    const result = new Set<number>();
+    for (const part of value.split(',')) {
+      const trimmed = part.trim();
+      const range = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (range) {
+        const from = Math.max(1, Math.min(max, Number(range[1])));
+        const to = Math.max(from, Math.min(max, Number(range[2])));
+        for (let page = from; page <= to; page += 1) result.add(page);
+      } else if (/^\d+$/.test(trimmed)) {
+        const page = Number(trimmed);
+        if (page >= 1 && page <= max) result.add(page);
+      }
+    }
+    return [...result].sort((a, b) => a - b);
+  }
+
+  updateSigningValue(value: string): void {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    this.facade.updateSigningFieldStyle(object.id, { value }, 'Edit signing text');
+  }
+
+  updateSigningFontFamily(value: string): void {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    this.facade.updateSigningFieldStyle(object.id, { fontFamily: value }, 'Change signing font');
+  }
+
+  updateSigningFontSize(value: string): void {
+    const object = this.selectedSignatureObject();
+    const fontSize = Number(value);
+    if (!object || !Number.isFinite(fontSize)) return;
+    this.facade.updateSigningFieldStyle(object.id, { fontSize: Math.max(8, Math.min(96, fontSize)) }, 'Change signing size');
+  }
+
+  updateSigningFontStyle(style: 'normal' | 'italic'): void {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    this.facade.updateSigningFieldStyle(object.id, { fontStyle: style }, 'Change signing style');
+  }
+
+  updateSigningColor(value: string): void {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    this.facade.updateSigningFieldStyle(object.id, { color: value }, 'Change signing color');
+  }
+
+  updateSigningChecked(checked: boolean): void {
+    const object = this.selectedSignatureObject();
+    if (!object) return;
+    this.facade.updateSigningFieldStyle(object.id, { checked }, 'Change checkbox');
   }
 
   updateShapeColor(kind: 'stroke' | 'fill', value: string): void {
