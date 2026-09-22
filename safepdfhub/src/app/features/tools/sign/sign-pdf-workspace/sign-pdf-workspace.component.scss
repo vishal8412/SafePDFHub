@@ -367,3 +367,130 @@
   .field-handle--se { right: -8px; bottom: -8px; }
   .field-delete { width: 30px; height: 30px; right: -15px; top: -36px; }
 }
+
+/* P2.7 — final UX polish */
+.sign-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.sign-toolbar {
+  position: sticky;
+  top: 72px;
+  z-index: 35;
+}
+
+.sign-header button:focus-visible,
+.sign-toolbar button:focus-visible,
+.sign-sidebar button:focus-visible,
+.sign-stage button:focus-visible,
+.sign-stage input:focus-visible,
+.sign-sidebar input:focus-visible,
+.sign-sidebar select:focus-visible {
+  outline: 2px solid #7ff7e8;
+  outline-offset: 2px;
+}
+
+.stage-empty {
+  min-height: 360px;
+  width: min(420px, calc(100% - 32px));
+  margin: auto;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 9px;
+  text-align: center;
+  color: #7890a5;
+}
+
+.stage-empty__icon {
+  width: 58px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,107,112,.2);
+  border-radius: 12px;
+  background: rgba(255,107,112,.06);
+  color: #ffadb2;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .08em;
+}
+
+.stage-empty strong {
+  color: #dce9f2;
+  font-size: 14px;
+}
+
+.stage-empty span {
+  max-width: 360px;
+  color: #6f8599;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.signature-modal {
+  overscroll-behavior: contain;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.signature-dialog {
+  max-height: min(88dvh, 720px);
+}
+
+@media (max-width: 760px) {
+  .sign-header {
+    position: sticky;
+    top: 0;
+  }
+
+  .sign-toolbar {
+    position: sticky;
+    top: 113px;
+  }
+
+  .sign-header__actions .secondary-button,
+  .sign-header__actions .primary-button,
+  .header-icon {
+    min-height: 44px;
+  }
+
+  .tool-button,
+  .page-control,
+  .icon-button,
+  .asset-delete,
+  .field-delete,
+  .mobile-properties-header button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .tool-button {
+    height: 44px;
+  }
+
+  .page-control {
+    width: 44px;
+    height: 44px;
+  }
+
+  .stage-empty {
+    min-height: 300px;
+  }
+
+  .sign-sidebar--right {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign-workspace *,
+  .sign-workspace *::before,
+  .sign-workspace *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

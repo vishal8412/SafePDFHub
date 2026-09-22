@@ -11,7 +11,6 @@ import {
 
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioObjectService } from '../../services/studio-object.service';
-import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
 import type {
   StudioObject,
   StudioObjectBounds,
@@ -47,7 +46,6 @@ export class StudioRightSidebar {
 
   readonly facade = inject(StudioFacade);
   private readonly objectService = inject(StudioObjectService);
-  private readonly signingState = inject(SigningStateService);
 
   readonly activeTab = signal<PropertiesTab>('document');
 
@@ -212,9 +210,7 @@ export class StudioRightSidebar {
 
   resolveSigningAsset(object: StudioObject | null): import('../../../../core/signing/models/signing.models').SigningAsset | null {
     if (object?.type !== 'signature') return null;
-    if (object.signing.asset) return object.signing.asset;
-    const assetId = object.signing.assetId;
-    return assetId ? this.signingState.assets().find(asset => asset.id === assetId) ?? null : null;
+    return object.signing.asset ?? null;
   }
   readonly signingColors = ['#121923', '#0f766e', '#2563eb', '#7c3aed', '#be185d', '#b45309', '#000000'] as const;
 

@@ -23,6 +23,7 @@ import {
   type SigningPdfSession,
 } from '../../../../core/signing/services/signing-pdf-renderer.service';
 import { SigningPdfExportService } from '../../../../core/signing/services/signing-pdf-export.service';
+import { SigningBulkPlacementService, type SigningBulkPosition, type SigningBulkScope } from '../../../../core/signing/services/signing-bulk-placement.service';
 import { SignatureAssetService } from '../../../../core/signing/services/signature-asset.service';
 import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
 import {
@@ -61,6 +62,7 @@ interface FieldInteraction {
   templateUrl: './sign-pdf-workspace.component.html',
   styleUrl: './sign-pdf-workspace.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [SigningStateService, SignatureAssetService, SigningBulkPlacementService],
 })
 export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   @Input() file: File | null = null;
@@ -69,6 +71,7 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   readonly state = inject(SigningStateService);
   private readonly renderer = inject(SigningPdfRendererService);
   private readonly exporter = inject(SigningPdfExportService);
+  private readonly bulkPlacement = inject(SigningBulkPlacementService);
   private readonly assets = inject(SignatureAssetService);
   private readonly loader = inject(LoaderService);
   private readonly toast = inject(ToastService);
@@ -90,11 +93,11 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   resultDurationMs = 0;
   bulkDialog = false;
   bulkMode: BulkMode = 'apply';
-  bulkScope: 'current' | 'all' | 'range' | 'specific' = 'current';
+  bulkScope: SigningBulkScope = 'current';
   bulkFrom = 1;
   bulkTo = 1;
   bulkPages = '';
-  bulkPosition: 'same' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' = 'same';
+  bulkPosition: SigningBulkPosition = 'same';
   draggingAssetId: string | null = null;
 
   readonly toolItems: readonly { kind: SigningFieldKind; label: string; icon: string }[] = [
@@ -122,6 +125,8 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   private loadGeneration = 0;
   private renderGeneration = 0;
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  private modalReturnFocus: HTMLElement | null = null;
+  private bodyOverflowBeforeModal: string | null = null;
   private lastViewportWidth = 0;
   private lastViewportHeight = 0;
   @ViewChild('bulkModal')
@@ -299,12 +304,14 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
 
   openCreateDialog(): void {
     this.error = '';
+    this.captureModalFocus();
     this.dialog = true;
     this.cd.markForCheck();
   }
 
   closeDialog(): void {
     this.dialog = false;
+    this.restoreModalFocus();
     this.cd.markForCheck();
   }
 
@@ -344,6 +351,7 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     this.bulkTo = field.pageNumber;
     this.bulkPages = '';
     this.bulkPosition = 'same';
+    this.captureModalFocus();
     this.bulkDialog = true;
     this.cd.markForCheck();
     setTimeout(() => this.bulkModal?.nativeElement.focus(), 0);
@@ -351,6 +359,7 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
 
   closeBulkDialog(): void {
     this.bulkDialog = false;
+    this.restoreModalFocus();
     this.cd.markForCheck();
   }
 
@@ -365,18 +374,24 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
 
     const before = this.state.checkpoint();
     const groupId = source.bulkGroupId ?? this.id();
+    const existingByPage = new Map(
+      this.state.fields()
+        .filter(field => field.bulkGroupId === groupId && field.kind === source.kind)
+        .map(field => [field.pageNumber, field] as const),
+    );
 
     for (const pageNumber of pages) {
-      const existing = this.state.fields().find(field =>
-        field.bulkGroupId === groupId && field.pageNumber === pageNumber && field.kind === source.kind
-      );
+      const existing = existingByPage.get(pageNumber);
       const bounds = this.positionedBounds(source.bounds, this.bulkPosition);
       if (existing) {
         this.state.updateField(existing.id, { ...source, id: existing.id, pageNumber, bulkGroupId: groupId, bounds });
       } else if (pageNumber === source.pageNumber && source.bulkGroupId !== groupId) {
         this.state.updateField(source.id, { bulkGroupId: groupId, bounds });
+        existingByPage.set(pageNumber, { ...source, bulkGroupId: groupId, bounds });
       } else {
-        this.state.addField({ ...source, id: this.id(), pageNumber, bulkGroupId: groupId, bounds });
+        const created = { ...source, id: this.id(), pageNumber, bulkGroupId: groupId, bounds };
+        this.state.addField(created);
+        existingByPage.set(pageNumber, created);
       }
     }
 
@@ -402,41 +417,21 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   }
 
   private resolveBulkPages(): number[] {
-    if (this.bulkScope === 'current') return [this.selectedField?.pageNumber ?? this.currentPageNumber];
-    if (this.bulkScope === 'all') return Array.from({ length: this.pageCount }, (_, i) => i + 1);
-    if (this.bulkScope === 'range') {
-      const from = Math.max(1, Math.min(this.pageCount, Math.floor(this.bulkFrom)));
-      const to = Math.max(from, Math.min(this.pageCount, Math.floor(this.bulkTo)));
-      return Array.from({ length: to - from + 1 }, (_, i) => from + i);
-    }
-    const result = new Set<number>();
-    for (const part of this.bulkPages.split(',')) {
-      const trimmed = part.trim();
-      if (!trimmed) continue;
-      const range = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
-      if (range) {
-        const from = Math.max(1, Math.min(this.pageCount, +range[1]));
-        const to = Math.max(from, Math.min(this.pageCount, +range[2]));
-        for (let page = from; page <= to; page++) result.add(page);
-      } else if (/^\d+$/.test(trimmed)) {
-        const page = +trimmed;
-        if (page >= 1 && page <= this.pageCount) result.add(page);
-      }
-    }
-    return [...result].sort((a, b) => a - b);
+    return this.bulkPlacement.resolvePages(
+      this.bulkScope,
+      this.pageCount,
+      this.selectedField?.pageNumber ?? this.currentPageNumber,
+      this.bulkFrom,
+      this.bulkTo,
+      this.bulkPages,
+    );
   }
 
-  private positionedBounds(bounds: SigningField['bounds'], position: typeof this.bulkPosition): SigningField['bounds'] {
-    if (position === 'same') return { ...bounds };
-    const margin = 0.06;
-    let x = bounds.x;
-    let y = bounds.y;
-    if (position.includes('left')) x = margin;
-    if (position.includes('right')) x = 1 - margin - bounds.width;
-    if (position.includes('top')) y = margin;
-    if (position.includes('bottom')) y = 1 - margin - bounds.height;
-    if (position === 'center') { x = (1 - bounds.width) / 2; y = (1 - bounds.height) / 2; }
-    return { ...bounds, x: this.clamp(x, 0, 1 - bounds.width), y: this.clamp(y, 0, 1 - bounds.height) };
+  private positionedBounds(
+    bounds: SigningField['bounds'],
+    position: SigningBulkPosition,
+  ): SigningField['bounds'] {
+    return this.bulkPlacement.positionBounds(bounds, position);
   }
 
   placeField(event: MouseEvent | PointerEvent): void {
@@ -710,6 +705,8 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
 
   get fieldInteractionActive(): boolean { return this.fieldInteraction !== null; }
 
+  get hasSession(): boolean { return this.session !== null; }
+
   get selectedField(): SigningField | null {
     return this.state.fields().find(field => field.id === this.selectedFieldId) ?? null;
   }
@@ -812,6 +809,40 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     this.scheduleViewportRerender();
   }
 
+  async retryCurrentPage(): Promise<void> {
+    if (!this.session || this.exporting) return;
+    await this.renderCurrentPage(this.loadGeneration);
+  }
+
+  private captureModalFocus(): void {
+    if (typeof document !== 'undefined') {
+      const active = document.activeElement;
+      this.modalReturnFocus = active instanceof HTMLElement ? active : null;
+    }
+    this.lockDocumentScroll();
+  }
+
+  private restoreModalFocus(): void {
+    this.unlockDocumentScroll();
+    const target = this.modalReturnFocus;
+    this.modalReturnFocus = null;
+    if (target && typeof target.focus === 'function' && target.isConnected) {
+      setTimeout(() => target.focus(), 0);
+    }
+  }
+
+  private lockDocumentScroll(): void {
+    if (typeof document === 'undefined' || this.bodyOverflowBeforeModal !== null) return;
+    this.bodyOverflowBeforeModal = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+
+  private unlockDocumentScroll(): void {
+    if (typeof document === 'undefined' || this.bodyOverflowBeforeModal === null) return;
+    document.body.style.overflow = this.bodyOverflowBeforeModal;
+    this.bodyOverflowBeforeModal = null;
+  }
+
   onBulkModalKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -878,6 +909,8 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     if (this.resizeTimer) clearTimeout(this.resizeTimer);
     this.resizeTimer = null;
     this.state.reset();
+    this.unlockDocumentScroll();
+    this.modalReturnFocus = null;
     void this.destroySession();
   }
 }

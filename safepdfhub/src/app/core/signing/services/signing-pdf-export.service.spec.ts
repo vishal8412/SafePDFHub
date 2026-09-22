@@ -1,4 +1,4 @@
-import { displayBoundsToPdfBox } from './signing-pdf-export.service';
+import { displayBoundsToPdfBox, normalizeSigningFieldRotation } from './signing-pdf-export.service';
 import type { SigningBounds } from '../models/signing.models';
 
 describe('displayBoundsToPdfBox', () => {
@@ -70,5 +70,67 @@ describe('displayBoundsToPdfBox', () => {
         expect(box.y + box.height).toBeLessThanOrEqual(pageHeight);
       }
     }
+  });
+});
+
+describe('displayBoundsToPdfBox — asymmetric pages and rotation boundaries', () => {
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const cases = [
+    { rotation: 0 as const, bounds: { x: 0.02, y: 0.03, width: 0.18, height: 0.11 } },
+    { rotation: 90 as const, bounds: { x: 0.78, y: 0.04, width: 0.18, height: 0.11 } },
+    { rotation: 180 as const, bounds: { x: 0.78, y: 0.86, width: 0.18, height: 0.11 } },
+    { rotation: 270 as const, bounds: { x: 0.03, y: 0.86, width: 0.18, height: 0.11 } },
+  ];
+
+  it('keeps asymmetric-page corner placements within the unrotated PDF box', () => {
+    for (const item of cases) {
+      const box = displayBoundsToPdfBox(item.bounds, pageWidth, pageHeight, item.rotation);
+      expect(box.x).toBeGreaterThanOrEqual(-0.000001);
+      expect(box.y).toBeGreaterThanOrEqual(-0.000001);
+      expect(box.x + box.width).toBeLessThanOrEqual(pageWidth + 0.000001);
+      expect(box.y + box.height).toBeLessThanOrEqual(pageHeight + 0.000001);
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.height).toBeGreaterThan(0);
+    }
+  });
+
+  it('swaps display dimensions only for quarter-turn page rotations', () => {
+    const bounds = { x: 0.25, y: 0.20, width: 0.30, height: 0.25 };
+    const zero = displayBoundsToPdfBox(bounds, pageWidth, pageHeight, 0);
+    const ninety = displayBoundsToPdfBox(bounds, pageWidth, pageHeight, 90);
+    const oneEighty = displayBoundsToPdfBox(bounds, pageWidth, pageHeight, 180);
+    const twoSeventy = displayBoundsToPdfBox(bounds, pageWidth, pageHeight, 270);
+
+    expect(zero.width).toBeCloseTo(pageWidth * bounds.width, 8);
+    expect(zero.height).toBeCloseTo(pageHeight * bounds.height, 8);
+    expect(ninety.width).toBeCloseTo(pageWidth * bounds.height, 8);
+    expect(ninety.height).toBeCloseTo(pageHeight * bounds.width, 8);
+    expect(oneEighty.width).toBeCloseTo(zero.width, 8);
+    expect(oneEighty.height).toBeCloseTo(zero.height, 8);
+    expect(twoSeventy.width).toBeCloseTo(pageWidth * bounds.height, 8);
+    expect(twoSeventy.height).toBeCloseTo(pageHeight * bounds.width, 8);
+  });
+});
+
+
+describe('normalizeSigningFieldRotation', () => {
+  it('accepts the four supported field rotations', () => {
+    expect(normalizeSigningFieldRotation(0)).toBe(0);
+    expect(normalizeSigningFieldRotation(90)).toBe(90);
+    expect(normalizeSigningFieldRotation(180)).toBe(180);
+    expect(normalizeSigningFieldRotation(270)).toBe(270);
+  });
+
+  it('normalizes negative and wrapped quarter-turn rotations', () => {
+    expect(normalizeSigningFieldRotation(-90)).toBe(270);
+    expect(normalizeSigningFieldRotation(450)).toBe(90);
+    expect(normalizeSigningFieldRotation(720)).toBe(0);
+  });
+
+  it('fails closed for unsupported non-quarter-turn values', () => {
+    expect(normalizeSigningFieldRotation(45)).toBe(0);
+    expect(normalizeSigningFieldRotation(Number.NaN)).toBe(0);
+    expect(normalizeSigningFieldRotation(undefined)).toBe(0);
   });
 });

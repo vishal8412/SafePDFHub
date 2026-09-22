@@ -79,9 +79,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
 
   getSigningAsset(object: StudioObject): SigningAsset | null {
     if (object.type !== 'signature' || !object.signing) return null;
-    if (object.signing.asset) return object.signing.asset;
-    const assetId = object.signing.assetId;
-    return assetId ? this.signingState.assets().find(asset => asset.id === assetId) ?? null : null;
+    return object.signing.asset ?? null;
   }
 
   readonly facade =

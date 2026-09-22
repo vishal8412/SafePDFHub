@@ -9,7 +9,7 @@
   />
 } @else {
 <section class="sign-workspace" aria-label="Sign PDF workspace">
-  <header class="sign-header">
+  <header class="sign-header" aria-label="Sign PDF controls">
     <div class="sign-file">
       <div class="sign-file__icon" aria-hidden="true">PDF</div>
       <div class="sign-file__meta">
@@ -18,14 +18,14 @@
       </div>
     </div>
     <div class="sign-header__actions">
-      <button type="button" class="icon-button header-icon" [disabled]="!state.canUndo()" (click)="undo()" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo">↶</button>
-      <button type="button" class="icon-button header-icon" [disabled]="!state.canRedo()" (click)="redo()" title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo">↷</button>
+      <button type="button" class="icon-button header-icon" [disabled]="!state.canUndo()" (click)="undo()" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo" aria-keyshortcuts="Control+Z Meta+Z">↶</button>
+      <button type="button" class="icon-button header-icon" [disabled]="!state.canRedo()" (click)="redo()" title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z">↷</button>
       <button type="button" class="secondary-button replace-button" (click)="replaceFile.emit()">Replace PDF</button>
       <button type="button" class="primary-button" [disabled]="exporting || loading || !state.hasFields()" (click)="export()"><span aria-hidden="true">✓</span>{{ exporting ? 'Preparing…' : 'Apply & Prepare PDF' }}</button>
     </div>
   </header>
 
-  <div class="sign-toolbar">
+  <div class="sign-toolbar" role="toolbar" aria-label="Signing tools">
     <div class="sign-toolbar__group">
       <button type="button" class="tool-button tool-button--select" [class.active]="interactionMode === 'select'" [attr.aria-pressed]="interactionMode === 'select'" (click)="interactionMode='select'">⌖ <span>Select</span></button>
       <span class="sign-toolbar__label">Add to PDF</span>
@@ -73,12 +73,12 @@
     <main class="sign-stage" aria-label="PDF page editor">
       <div class="stage-topbar">
         <div><span class="stage-title">Page {{ currentPageNumber }}</span><span class="stage-subtitle">of {{ pageCount }}</span></div>
-        <div class="page-controls" aria-label="Page navigation"><button type="button" class="page-control" [disabled]="currentPageNumber <= 1 || loading" (click)="previousPage()" aria-label="Previous page">‹</button><label class="page-jump"><input type="number" min="1" [max]="pageCount" [value]="currentPageNumber" (change)="goToPage(+$any($event.target).value)" aria-label="Current page" /><span>/ {{ pageCount }}</span></label><button type="button" class="page-control" [disabled]="currentPageNumber >= pageCount || loading" (click)="nextPage()" aria-label="Next page">›</button></div>
+        <div class="page-controls" role="navigation" aria-label="Page navigation"><button type="button" class="page-control" [disabled]="currentPageNumber <= 1 || loading" (click)="previousPage()" aria-label="Previous page">‹</button><label class="page-jump"><input type="number" min="1" [max]="pageCount" [value]="currentPageNumber" (change)="goToPage(+$any($event.target).value)" aria-label="Current page" /><span>/ {{ pageCount }}</span></label><button type="button" class="page-control" [disabled]="currentPageNumber >= pageCount || loading" (click)="nextPage()" aria-label="Next page">›</button></div>
       </div>
 
-      <div class="stage-viewport">
+      <div class="stage-viewport" aria-live="polite" aria-atomic="false">
         @if (loading) {
-          <div class="stage-loading" role="status"><div class="spinner"></div><strong>{{ currentPage ? 'Loading page…' : 'Opening your PDF…' }}</strong><span>Only the page you are viewing is rendered.</span></div>
+          <div class="stage-loading" role="status" aria-live="polite"><div class="spinner"></div><strong>{{ currentPage ? 'Loading page…' : 'Opening your PDF…' }}</strong><span>Only the page you are viewing is rendered.</span></div>
         } @else if (currentPage) {
           <article class="sign-page" [class.is-interacting]="!!fieldInteractionActive" [attr.data-page]="currentPage.pageNumber" (click)="placeField($event)" (pointermove)="onFieldPointerMove($event)" (pointerup)="onFieldPointerUp($event)" (pointercancel)="onFieldPointerUp($event)">
             <img class="sign-page__pdf" [src]="currentPage.imageUrl" [alt]="'PDF page ' + currentPage.pageNumber" draggable="false" />
@@ -99,6 +99,17 @@
               }
             }
           </article>
+        } @else {
+          <div class="stage-empty" role="status">
+            <div class="stage-empty__icon" aria-hidden="true">PDF</div>
+            <strong>Page preview unavailable</strong>
+            <span>{{ error || 'The current PDF page could not be displayed.' }}</span>
+            @if (hasSession) {
+              <button type="button" class="secondary-button" (click)="retryCurrentPage()">Try again</button>
+            } @else {
+              <button type="button" class="secondary-button" (click)="replaceFile.emit()">Replace PDF</button>
+            }
+          </div>
         }
       </div>
       <footer class="stage-footer"><div class="stage-tip"><span>✦</span> Click to place · drag to move · use the corner handles to resize</div><div class="field-count">{{ state.fields().length }} field{{ state.fields().length === 1 ? '' : 's' }}</div></footer>
@@ -140,9 +151,9 @@
   @if (error) {<div class="sign-error" role="alert"><span>!</span><p>{{ error }}</p><button type="button" (click)="error=''" aria-label="Dismiss error">×</button></div>}
   @if (dialog) {<app-signature-builder [kind]="selectedKind === 'initials' ? 'initials' : 'signature'" (closed)="closeDialog()" (created)="onAssetCreated()" />}
   @if (bulkDialog && selectedField; as field) {
-    <div #bulkModal class="signature-modal" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-label]="bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages'" (keydown)="onBulkModalKeyDown($event)" (click)="closeBulkDialog()">
+    <div #bulkModal class="signature-modal" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="bulk-dialog-title" [attr.aria-label]="bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages'" (keydown)="onBulkModalKeyDown($event)" (click)="closeBulkDialog()">
       <section class="signature-dialog bulk-dialog" (click)="$event.stopPropagation()">
-        <header class="signature-dialog__header"><div><span class="eyebrow">MULTI-PAGE PLACEMENT</span><h2>{{ bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages' }}</h2><p>{{ bulkMode === 'remove' ? 'Remove only the selected field copies. Other pages remain unchanged.' : 'Reuse this field across exactly the pages you choose.' }}</p></div><button type="button" class="dialog-close" (click)="closeBulkDialog()" aria-label="Close">×</button></header>
+        <header class="signature-dialog__header"><div><span class="eyebrow">MULTI-PAGE PLACEMENT</span><h2 id="bulk-dialog-title">{{ bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages' }}</h2><p>{{ bulkMode === 'remove' ? 'Remove only the selected field copies. Other pages remain unchanged.' : 'Reuse this field across exactly the pages you choose.' }}</p></div><button type="button" class="dialog-close" (click)="closeBulkDialog()" aria-label="Close">×</button></header>
         <div class="bulk-options">
           <div class="bulk-scope"><button type="button" [class.active]="bulkScope === 'current'" (click)="bulkScope='current'">Current page</button><button type="button" [class.active]="bulkScope === 'all'" (click)="bulkScope='all'">All pages</button><button type="button" [class.active]="bulkScope === 'range'" (click)="bulkScope='range'">Page range</button><button type="button" [class.active]="bulkScope === 'specific'" (click)="bulkScope='specific'">Specific pages</button></div>
           @if (bulkScope === 'range') {<div class="bulk-grid"><label>From <input type="number" min="1" [max]="pageCount" [(ngModel)]="bulkFrom"></label><label>To <input type="number" min="1" [max]="pageCount" [(ngModel)]="bulkTo"></label></div>}

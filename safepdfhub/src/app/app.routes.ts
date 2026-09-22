@@ -17,6 +17,13 @@ export const routes: Routes = [
         .then(m => m.LargePdfSecurityBenchmarkComponent)
   },
   {
+    path: '__dev/sign-pdf-benchmark',
+    canMatch: [() => isDevMode()],
+    loadComponent: () =>
+      import('./pages/dev/sign-pdf-benchmark/sign-pdf-benchmark.component')
+        .then(m => m.SignPdfBenchmarkComponent)
+  },
+  {
     path: '__dev/qpdf-smoke',
     canMatch: [() => isDevMode()],
     loadComponent: () =>

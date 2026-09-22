@@ -20,7 +20,7 @@ export interface TypedSignatureOptions {
   letterSpacing?: number;
 }
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class SignatureAssetService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly state = inject(SigningStateService);

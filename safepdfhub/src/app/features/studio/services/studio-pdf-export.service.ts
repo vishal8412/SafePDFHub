@@ -24,7 +24,7 @@ import {
 import { saveAs } from 'file-saver';
 import fontkit from '@pdf-lib/fontkit';
 import { QpdfWasmPrototypeService } from '../../../core/qpdf/qpdf-wasm-prototype.service';
-import { SigningStateService } from '../../../core/signing/services/signing-state.service';
+import { SigningPdfTextService } from '../../../core/signing/services/signing-pdf-text.service';
 
 import type { PDFDocumentProxy } from 'pdfjs-dist/types/src/display/api';
 
@@ -55,7 +55,7 @@ import type {
 export class StudioPdfExportService {
   private readonly platformId = inject(PLATFORM_ID);
   private readonly qpdf = inject(QpdfWasmPrototypeService);
-  private readonly signingState = inject(SigningStateService);
+  private readonly signingText = inject(SigningPdfTextService);
 
   /**
    * Build a new PDF from the original uploaded bytes and paint all committed
@@ -247,9 +247,21 @@ export class StudioPdfExportService {
         } else {
           const text = object.signing.value ?? (object.signing.kind === 'date' ? new Date().toLocaleDateString('en-GB') : '');
           if (text) {
-            const png = await this.renderStudioSigningText(text, object.signing, signingBox);
-            const image = await pdfDocument.embedPng(png);
-            page.drawImage(image, { x: signingBox.x, y: signingBox.y, width: signingBox.width, height: signingBox.height });
+            await this.signingText.drawText(
+              pdfDocument,
+              page,
+              text,
+              signingBox,
+              {
+                fontFamily: object.signing.fontFamily,
+                fontSize: object.signing.fontSize,
+                fontStyle: object.signing.fontStyle,
+                fontWeight: 600,
+                color: object.signing.color,
+                opacity: object.signing.opacity,
+                cssPixels: true,
+              },
+            );
           }
         }
         continue;
@@ -609,19 +621,21 @@ export class StudioPdfExportService {
             : '');
 
         if (text) {
-          const png = await this.renderStudioSigningText(
+          await this.signingText.drawText(
+            overlayPdf,
+            page,
             text,
-            object.signing,
-            signingBox
+            signingBox,
+            {
+              fontFamily: object.signing.fontFamily,
+              fontSize: object.signing.fontSize,
+              fontStyle: object.signing.fontStyle,
+              fontWeight: 600,
+              color: object.signing.color,
+              opacity: object.signing.opacity,
+              cssPixels: true,
+            },
           );
-          const image = await overlayPdf.embedPng(png);
-          page.drawImage(image, {
-            x: signingBox.x,
-            y: signingBox.y,
-            width: signingBox.width,
-            height: signingBox.height,
-            opacity: Math.max(.05, Math.min(1, object.signing.opacity ?? 1)),
-          });
         }
       }
     }
@@ -1408,9 +1422,9 @@ export class StudioPdfExportService {
 
   private resolveSigningAsset(object: StudioObject): import('../../../core/signing/models/signing.models').SigningAsset | null {
     if (object.type !== 'signature' || !object.signing) return null;
-    if (object.signing.asset) return object.signing.asset;
-    const assetId = object.signing.assetId;
-    return assetId ? this.signingState.assets().find(asset => asset.id === assetId) ?? null : null;
+    // Signature objects carry their own immutable asset snapshot. This keeps
+    // export independent from any application-level signing session.
+    return object.signing.asset ?? null;
   }
 
   private studioDisplayBox(
@@ -1485,45 +1499,6 @@ export class StudioPdfExportService {
     });
   }
 
-  private async renderStudioSigningText(
-    text: string,
-    signing: NonNullable<Extract<StudioObject, { type: 'signature' }>['signing']>,
-    box: { x: number; y: number; width: number; height: number },
-  ): Promise<Uint8Array> {
-    if (typeof document === 'undefined') throw new Error('Text rendering is available only in the browser.');
-    const scale = 3;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(32, Math.ceil(box.width * scale));
-    canvas.height = Math.max(24, Math.ceil(box.height * scale));
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Could not create the signing text canvas.');
-    // Studio renders signing text in CSS pixels. PDF points are 96/72 of a
-    // CSS pixel at the browser's reference DPI, so 1 CSS px maps to 0.75 pt.
-    // Keeping this conversion here makes the exported PDF visually match the
-    // live Studio canvas instead of making text ~33% larger after export.
-    const size = Math.max(8, Math.min(96, signing.fontSize ?? 16)) * 0.75 * scale;
-    const family = signing.fontFamily ?? 'Inter, Arial, sans-serif';
-    const style = signing.fontStyle === 'italic' ? 'italic ' : '';
-    const weight = '600 ';
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.font = `${style}${weight}${size}px ${family}`;
-    ctx.fillStyle = signing.color ?? '#121923';
-    ctx.globalAlpha = Math.max(.05, Math.min(1, signing.opacity));
-    ctx.textBaseline = 'middle';
-    const pad = 4 * scale;
-    let fontSize = size;
-    const maxWidth = Math.max(8, canvas.width - pad*2);
-    for (let i=0;i<12;i+=1) {
-      ctx.font = `${style}${weight}${fontSize}px ${family}`;
-      if (ctx.measureText(text).width <= maxWidth || fontSize <= 8*scale) break;
-      fontSize *= .9;
-    }
-    ctx.fillText(text, pad, canvas.height/2);
-    ctx.globalAlpha = 1;
-    const blob = await new Promise<Blob|null>(resolve => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) throw new Error('Could not rasterize signing text.');
-    return new Uint8Array(await blob.arrayBuffer());
-  }
 
   /** Draw reconstruction artwork across the exact displayed source box. */
   private drawImageAcrossObjectBounds(

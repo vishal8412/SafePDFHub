@@ -9,11 +9,11 @@
       <button type="button" class="close" (click)="closed.emit()" aria-label="Close">×</button>
     </header>
 
-    <div class="builder__tabs" role="tablist">
-      <button type="button" [class.active]="mode === 'draw'" (click)="setMode('draw')">Draw</button>
-      <button type="button" [class.active]="mode === 'type'" (click)="setMode('type')">Type</button>
-      <button type="button" [class.active]="mode === 'upload'" (click)="setMode('upload')">Upload</button>
-      <button type="button" [class.active]="mode === 'scan'" (click)="setMode('scan')">Scan</button>
+    <div class="builder__tabs" role="tablist" aria-label="Signature creation method">
+      <button type="button" role="tab" [attr.aria-selected]="mode === 'draw'" [attr.tabindex]="mode === 'draw' ? 0 : -1" [class.active]="mode === 'draw'" (click)="setMode('draw')">Draw</button>
+      <button type="button" role="tab" [attr.aria-selected]="mode === 'type'" [attr.tabindex]="mode === 'type' ? 0 : -1" [class.active]="mode === 'type'" (click)="setMode('type')">Type</button>
+      <button type="button" role="tab" [attr.aria-selected]="mode === 'upload'" [attr.tabindex]="mode === 'upload' ? 0 : -1" [class.active]="mode === 'upload'" (click)="setMode('upload')">Upload</button>
+      <button type="button" role="tab" [attr.aria-selected]="mode === 'scan'" [attr.tabindex]="mode === 'scan' ? 0 : -1" [class.active]="mode === 'scan'" (click)="setMode('scan')">Scan</button>
     </div>
 
     @if (mode === 'draw') {

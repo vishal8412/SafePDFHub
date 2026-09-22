@@ -3,7 +3,7 @@ import type { SigningAsset, SigningField, SigningFieldKind } from '../models/sig
 
 type FieldSnapshot = readonly SigningField[];
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class SigningStateService {
   private readonly _assets = signal<readonly SigningAsset[]>([]);
   private readonly _fields = signal<readonly SigningField[]>([]);

@@ -1,6 +1,7 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { PDFDocument, degrees, rgb, type PDFImage, type PDFPage } from 'pdf-lib';
+import { SigningPdfTextService } from './signing-pdf-text.service';
 import { saveAs } from 'file-saver';
 import type { SigningBounds, SigningField } from '../models/signing.models';
 
@@ -65,7 +66,7 @@ export function displayBoundsToPdfBox(
   }
 }
 
-function normalizeFieldRotation(value: number | undefined): 0 | 90 | 180 | 270 {
+export function normalizeSigningFieldRotation(value: number | undefined): 0 | 90 | 180 | 270 {
   const normalized = ((value ?? 0) % 360 + 360) % 360;
   if (normalized === 90 || normalized === 180 || normalized === 270) return normalized;
   return 0;
@@ -74,6 +75,7 @@ function normalizeFieldRotation(value: number | undefined): 0 | 90 | 180 | 270 {
 @Injectable({ providedIn: 'root' })
 export class SigningPdfExportService {
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly signingText = inject(SigningPdfTextService);
 
   async export(sourceFile: File, fields: readonly SigningField[], outputName?: string): Promise<Blob> {
     if (!isPlatformBrowser(this.platformId)) {
@@ -100,7 +102,7 @@ export class SigningPdfExportService {
       const pageWidth = page.getWidth();
       const pageHeight = page.getHeight();
       const box = displayBoundsToPdfBox(field.bounds, pageWidth, pageHeight, rotation);
-      const fieldRotation = normalizeFieldRotation(field.rotation);
+      const fieldRotation = normalizeSigningFieldRotation(field.rotation);
 
       if (field.kind === 'checkbox') {
         this.drawCheckbox(page, box, field.checked ?? true, field.color ?? '#0b6c5f', field.opacity ?? 1);
@@ -110,9 +112,20 @@ export class SigningPdfExportService {
       if (field.kind === 'text' || field.kind === 'date') {
         const text = field.value ?? (field.kind === 'date' ? new Date().toLocaleDateString() : '');
         if (!text) continue;
-        const png = await this.renderTextField(text, field, box);
-        const textImage = await pdf.embedPng(png);
-        this.drawImage(page, textImage, box, fieldRotation, 1);
+        await this.signingText.drawText(
+          pdf,
+          page,
+          text,
+          box,
+          {
+            fontFamily: field.fontFamily,
+            fontSize: field.fontSize,
+            fontStyle: field.fontStyle,
+            color: field.color,
+            opacity: field.opacity,
+          },
+          fieldRotation,
+        );
         continue;
       }
 
@@ -256,44 +269,6 @@ export class SigningPdfExportService {
     });
   }
 
-  private async renderTextField(text: string, field: SigningField, box: ExportBox): Promise<Uint8Array> {
-    if (typeof document === 'undefined') throw new Error('Text rendering is available only in the browser.');
-    const scale = 3;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(32, Math.ceil(box.width * scale));
-    canvas.height = Math.max(24, Math.ceil(box.height * scale));
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Could not create the text rendering canvas.');
-
-    const color = field.color ?? '#121923';
-    const opacity = Math.max(0.05, Math.min(1, field.opacity ?? 1));
-    const family = field.fontFamily ?? (field.kind === 'date'
-      ? '"Segoe Script", "Brush Script MT", "Segoe Print", cursive'
-      : 'Inter, Arial, sans-serif');
-    const style = field.fontStyle === 'italic' ? 'italic ' : '';
-    const targetSize = Math.max(8, Math.min(96, field.fontSize ?? 16)) * scale;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = color;
-    ctx.globalAlpha = opacity;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-
-    let fontSize = targetSize;
-    const horizontalPadding = 4 * scale;
-    const maxWidth = Math.max(8, canvas.width - horizontalPadding * 2);
-    for (let i = 0; i < 12; i += 1) {
-      ctx.font = `${style}${fontSize}px ${family}`;
-      if (ctx.measureText(text).width <= maxWidth || fontSize <= 8 * scale) break;
-      fontSize *= 0.9;
-    }
-    ctx.fillText(text, horizontalPadding, canvas.height / 2);
-    ctx.globalAlpha = 1;
-
-    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) throw new Error('Could not rasterize the signing text.');
-    return new Uint8Array(await blob.arrayBuffer());
-  }
 
   private pdfColor(value: string) {
     const c = this.hexToRgb(value);

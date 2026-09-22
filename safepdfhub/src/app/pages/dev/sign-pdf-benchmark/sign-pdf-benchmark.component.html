@@ -1,0 +1,76 @@
+<div class="shell">
+  <h1>Sign PDF V1 — Large Workload Benchmark</h1>
+  <p>
+    Development-only P2.5 harness. This exercises the real Sign PDF PDF.js renderer and pdf-lib exporter.
+    It is not a production route and is only reachable in Angular development mode.
+  </p>
+
+  <section class="panel">
+    <h2>Workload</h2>
+    <p>Run progressively larger page-count workloads. The 500-page case is the current interactive Sign PDF ceiling.</p>
+    <div class="grid">
+      @for (scenario of scenarios; track scenario.id) {
+        <div class="metric">
+          <span>{{ scenario.id }}</span>
+          <strong>{{ scenario.label }}</strong>
+          <p>{{ scenario.pages }} pages · {{ scenario.payloadCharsPerPage.toLocaleString() }} chars/page</p>
+        </div>
+      }
+    </div>
+    <div style="margin-top:18px">
+      <label for="scenario" style="display:block;color:#9eb4c7;font-size:12px;margin-bottom:6px">Selected scenario</label>
+      <select id="scenario" [(ngModel)]="selectedScenario" [disabled]="running" style="width:100%;max-width:420px;box-sizing:border-box;margin:0 0 12px;padding:10px;border-radius:9px;border:1px solid #31516a;background:#081d2e;color:#eaf7ff">
+        @for (scenario of scenarios; track scenario.id) {
+          <option [value]="scenario.id">{{ scenario.label }}</option>
+        }
+      </select>
+      <button type="button" (click)="runScenario()" [disabled]="running">Run selected ({{ selectedScenario }})</button>
+      <button type="button" class="secondary" (click)="runAll()" [disabled]="running">Run all</button>
+    </div>
+    <p class="status" data-testid="signing-stress-status">{{ status }}</p>
+  </section>
+
+  <section class="panel">
+    <h2>Results</h2>
+    @if (results.length === 0) {
+      <p>No benchmark result yet.</p>
+    } @else {
+      <table data-testid="signing-stress-results">
+        <thead>
+          <tr>
+            <th>Scenario</th><th>Input</th><th>Open</th><th>Render</th><th>Export</th><th>Total</th><th>Peak heap</th><th>Max gap</th><th>Output</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (result of results; track result.scenario) {
+            <tr>
+              <td>{{ result.scenario }}</td>
+              <td>{{ formatBytes(result.inputBytes) }}</td>
+              <td>{{ formatMs(result.openMs) }}</td>
+              <td>{{ formatMs(result.renderMs) }}</td>
+              <td>{{ formatMs(result.exportMs) }}</td>
+              <td>{{ formatMs(result.totalMs) }}</td>
+              <td>{{ formatBytes(result.peakHeapBytes) }}</td>
+              <td>{{ formatMs(result.maxEventLoopGapMs) }}</td>
+              <td>{{ formatBytes(result.outputBytes) }}</td>
+              <td [class.pass]="result.status === 'PASS'" [class.fail]="result.status === 'FAIL'">{{ result.status }}</td>
+            </tr>
+            @if (result.error) { <tr><td colspan="10" class="fail">{{ result.error }}</td></tr> }
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+
+  <section class="panel">
+    <h2>Interpretation</h2>
+    <ul>
+      <li><strong>Open</strong> measures PDF.js document-open time.</li>
+      <li><strong>Render</strong> sequentially renders every page and validates a WebP preview is produced.</li>
+      <li><strong>Export</strong> reopens the source with pdf-lib and writes one native text field per page.</li>
+      <li><strong>Peak heap</strong> is available only in browsers exposing <code>performance.memory</code>.</li>
+      <li><strong>Max event-loop gap</strong> is a responsiveness signal, not a formal browser-performance SLA.</li>
+      <li>These results are measurements, not promises about every device.</li>
+    </ul>
+  </section>
+</div>

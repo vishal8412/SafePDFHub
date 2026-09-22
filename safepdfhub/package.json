@@ -11,7 +11,11 @@
     "benchmark:large-pdf:browser": "python scripts/phase1.5-browser-benchmark.py --start-server",
     "prebuild": "node scripts/generate-seo-assets.mjs",
     "seo:audit": "node scripts/seo-architecture-audit.mjs",
-    "seo:generate": "node scripts/generate-seo-assets.mjs"
+    "seo:generate": "node scripts/generate-seo-assets.mjs",
+    "benchmark:sign-pdf:stress": "python scripts/phase2.5-sign-pdf-stress.py --start-server --profile quick",
+    "benchmark:sign-pdf:stress:full": "python scripts/phase2.5-sign-pdf-stress.py --start-server --profile full",
+    "sign:audit": "node scripts/sign-pdf-security-audit.mjs",
+    "sign:ux:audit": "node scripts/sign-pdf-ux-audit.mjs"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

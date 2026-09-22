@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   HostListener,
+  OnDestroy,
   ViewChild,
   computed,
   inject,
@@ -20,6 +21,7 @@ import type { PdfSecurityRequest } from '../../../../core/security/pdf-security.
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioSigningDialogComponent } from '../../signing/studio-signing-dialog.component';
 import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
+import { SignatureAssetService } from '../../../../core/signing/services/signature-asset.service';
 import type { SigningAsset, SigningFieldKind } from '../../../../core/signing/models/signing.models';
 import type {
   StudioToolId
@@ -39,9 +41,10 @@ import type {
   ],
   templateUrl: './studio-shell.component.html',
   styleUrls: ['./studio-shell.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [SigningStateService, SignatureAssetService],
 })
-export class StudioShellComponent {
+export class StudioShellComponent implements OnDestroy {
 
   private readonly facade =
     inject(StudioFacade);
@@ -90,6 +93,11 @@ export class StudioShellComponent {
   passwordInput = '';
   readonly signingDialogOpen = signal(false);
   readonly signingState = inject(SigningStateService);
+
+  /**
+   * Signing assets/state are scoped to this Studio instance. They must not
+   * survive navigation into another Studio or Sign PDF workflow.
+   */
 
   /**
    * Independent Studio chrome state.
@@ -787,5 +795,11 @@ cancelPasswordPrompt(): void {
 async onExportPdf(): Promise<void> {
   await this.facade.exportPdf();
 }
+
+  ngOnDestroy(): void {
+    // Release signature data URLs and active signing state as soon as the
+    // Studio route is destroyed. The service itself is component-scoped.
+    this.signingState.reset();
+  }
 
 }

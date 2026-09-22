@@ -154,3 +154,40 @@
     display: none;
   }
 }
+
+/* P2.7 — modal accessibility and touch-target polish */
+.builder__tabs button:focus-visible,
+.builder__header .close:focus-visible,
+.builder__footer button:focus-visible,
+.draw-toolbar button:focus-visible,
+.type-controls button:focus-visible,
+.import-card:focus-within,
+.type-controls input:focus-visible,
+.type-controls select:focus-visible,
+.draw-controls input:focus-visible {
+  outline: 2px solid #7ff7e8;
+  outline-offset: 2px;
+}
+
+.builder__tabs button {
+  min-height: 42px;
+}
+
+@media (pointer: coarse) {
+  .builder__tabs button,
+  .draw-toolbar button,
+  .builder__footer button,
+  .close {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .builder,
+  .builder * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
