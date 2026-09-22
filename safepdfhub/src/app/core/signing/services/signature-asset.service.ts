@@ -3,6 +3,8 @@ import { isPlatformBrowser } from '@angular/common';
 import {
   MAX_SIGNATURE_UPLOAD_BYTES,
   SIGNATURE_MIME_TYPES,
+  MAX_SIGNATURE_IMAGE_PIXELS,
+  MAX_SIGNATURE_IMAGE_DIMENSION,
   type SigningAsset,
   type SigningAssetKind,
   type SigningAssetSource,
@@ -89,8 +91,11 @@ export class SignatureAssetService {
       throw new Error('Signature image must be 5 MB or smaller.');
     }
     const rawDataUrl = await this.readAsDataUrl(file);
-    const dataUrl = options.cleanupBackground ? await this.removeLightBackground(rawDataUrl) : rawDataUrl;
-    const dimensions = await this.readImageDimensions(dataUrl);
+    const rawDimensions = await this.readImageDimensions(rawDataUrl);
+    this.assertSafeImageDimensions(rawDimensions.width, rawDimensions.height);
+    const dataUrl = options.cleanupBackground ? await this.removeLightBackground(rawDataUrl, rawDimensions) : rawDataUrl;
+    const dimensions = options.cleanupBackground ? await this.readImageDimensions(dataUrl) : rawDimensions;
+    this.assertSafeImageDimensions(dimensions.width, dimensions.height);
     const asset: SigningAsset = {
       id: this.id(),
       kind,
@@ -126,28 +131,52 @@ export class SignatureAssetService {
   }
 
 
-  private removeLightBackground(dataUrl: string): Promise<string> {
+  private removeLightBackground(dataUrl: string, dimensions: { width: number; height: number }): Promise<string> {
     return new Promise((resolve, reject) => {
       const image = new Image();
-      image.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) { resolve(dataUrl); return; }
-        ctx.drawImage(image, 0, 0);
-        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        for (let i = 0; i < pixels.data.length; i += 4) {
-          const r = pixels.data[i];
-          const g = pixels.data[i + 1];
-          const b = pixels.data[i + 2];
-          const light = r > 242 && g > 242 && b > 242;
-          if (light) pixels.data[i + 3] = 0;
-        }
-        ctx.putImageData(pixels, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
+      const cleanupImage = (): void => {
+        image.onload = null;
+        image.onerror = null;
+        image.removeAttribute('src');
       };
-      image.onerror = () => reject(new Error('The signature image could not be processed.'));
+
+      image.onload = () => {
+        let canvas: HTMLCanvasElement | null = null;
+        try {
+          this.assertSafeImageDimensions(dimensions.width, dimensions.height);
+          canvas = document.createElement('canvas');
+          canvas.width = dimensions.width;
+          canvas.height = dimensions.height;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) {
+            resolve(dataUrl);
+            return;
+          }
+          ctx.drawImage(image, 0, 0);
+          const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          for (let i = 0; i < pixels.data.length; i += 4) {
+            const r = pixels.data[i];
+            const g = pixels.data[i + 1];
+            const b = pixels.data[i + 2];
+            if (r > 242 && g > 242 && b > 242) pixels.data[i + 3] = 0;
+          }
+          ctx.putImageData(pixels, 0, 0);
+          const result = canvas.toDataURL('image/png');
+          resolve(result);
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error('The signature image could not be processed.'));
+        } finally {
+          if (canvas) {
+            canvas.width = 0;
+            canvas.height = 0;
+          }
+          cleanupImage();
+        }
+      };
+      image.onerror = () => {
+        cleanupImage();
+        reject(new Error('The signature image could not be processed.'));
+      };
       image.src = dataUrl;
     });
   }
@@ -189,11 +218,34 @@ export class SignatureAssetService {
     });
   }
 
+  private assertSafeImageDimensions(width: number, height: number): void {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      throw new Error('The signature image has invalid dimensions.');
+    }
+    if (width > MAX_SIGNATURE_IMAGE_DIMENSION || height > MAX_SIGNATURE_IMAGE_DIMENSION) {
+      throw new Error(`Signature image dimensions must be ${MAX_SIGNATURE_IMAGE_DIMENSION}px or smaller on each side.`);
+    }
+    if (width * height > MAX_SIGNATURE_IMAGE_PIXELS) {
+      throw new Error(`Signature image is too large after decoding. Use an image with ${MAX_SIGNATURE_IMAGE_PIXELS.toLocaleString()} pixels or fewer.`);
+    }
+  }
+
   private readImageDimensions(dataUrl: string): Promise<{ width: number; height: number }> {
     return new Promise((resolve, reject) => {
       const image = new Image();
-      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-      image.onerror = () => reject(new Error('The uploaded signature image could not be decoded.'));
+      image.onload = () => {
+        const dimensions = { width: image.naturalWidth, height: image.naturalHeight };
+        image.onload = null;
+        image.onerror = null;
+        image.removeAttribute('src');
+        resolve(dimensions);
+      };
+      image.onerror = () => {
+        image.onload = null;
+        image.onerror = null;
+        image.removeAttribute('src');
+        reject(new Error('The uploaded signature image could not be decoded.'));
+      };
       image.src = dataUrl;
     });
   }

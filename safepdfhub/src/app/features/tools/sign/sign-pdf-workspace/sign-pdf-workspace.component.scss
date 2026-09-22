@@ -97,7 +97,7 @@
 .page-jump input { width: 48px; height: 30px; box-sizing: border-box; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: #0b1522; color: #eaf4ff; text-align: center; outline: none; }
 .page-jump input:focus { border-color: rgba(25,234,211,.4); }
 .stage-viewport { min-height: 0; overflow: auto; display: grid; place-items: start center; padding: 28px 22px; box-sizing: border-box; scrollbar-color: #32475b transparent; }
-.sign-page { position: relative; width: min(780px, 100%); flex: 0 0 auto; box-shadow: 0 18px 60px rgba(0,0,0,.42); background: white; cursor: crosshair; user-select: none; touch-action: none; }
+.sign-page { position: relative; width: min(780px, 100%); flex: 0 0 auto; box-shadow: 0 18px 60px rgba(0,0,0,.42); background: white; cursor: crosshair; user-select: none; touch-action: pan-x pan-y; }
 .sign-page__pdf { display: block; width: 100%; height: auto; pointer-events: none; user-select: none; -webkit-user-drag: none; }
 .stage-loading { min-height: 380px; display: grid; place-items: center; align-content: center; gap: 9px; color: #aebdca; text-align: center; }
 .stage-loading strong { font-size: 13px; }
@@ -347,4 +347,23 @@
 .property-range > span b {
   font-size: 10px;
   letter-spacing: 0;
+}
+
+/* Keyboard-accessible signing fields. */
+.sign-field:focus-visible {
+  outline: 2px solid #00d4b3;
+  outline-offset: 2px;
+  z-index: 8;
+}
+
+.sign-page.is-interacting { touch-action: none; }
+.sign-field:focus-visible { outline: 2px solid #7ff7e8; outline-offset: 2px; z-index: 4; }
+.signature-modal:focus { outline: none; }
+@media (pointer: coarse) {
+  .field-handle { width: 14px; height: 14px; border-radius: 4px; }
+  .field-handle--nw { left: -8px; top: -8px; }
+  .field-handle--ne { right: -8px; top: -8px; }
+  .field-handle--sw { left: -8px; bottom: -8px; }
+  .field-handle--se { right: -8px; bottom: -8px; }
+  .field-delete { width: 30px; height: 30px; right: -15px; top: -36px; }
 }

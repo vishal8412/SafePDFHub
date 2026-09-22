@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, EventEmitter, Input, Output, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, EventEmitter, Input, Output, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SignatureAssetService, type TypedSignatureOptions } from '../../../core/signing/services/signature-asset.service';
@@ -17,11 +17,12 @@ interface Stroke { points: Point[]; tool: DrawTool; color: string; size: number;
   styleUrl: './signature-builder.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class SignatureBuilderComponent {
+export class SignatureBuilderComponent implements AfterViewInit {
   @Input() kind: SigningAssetKind = 'signature';
   @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly created = new EventEmitter<SigningAsset>();
   @ViewChild('pad') pad?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('builder') builder?: ElementRef<HTMLElement>;
 
   private readonly assets = inject(SignatureAssetService);
 
@@ -64,6 +65,49 @@ export class SignatureBuilderComponent {
     { label: 'Modern', font: '"Trebuchet MS", Arial, sans-serif', category: 'Modern' },
     { label: 'Handwritten', font: '"Segoe Print", "Comic Sans MS", cursive', category: 'Handwritten' },
   ];
+
+  ngAfterViewInit(): void {
+    setTimeout(() => this.focusFirstControl(), 0);
+  }
+
+  onDialogKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closed.emit();
+      return;
+    }
+    if (event.key !== 'Tab' || !this.builder) return;
+
+    const root = this.builder.nativeElement;
+    const focusable: HTMLElement[] = Array.from(root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )).filter((element: HTMLElement) => element.offsetParent !== null);
+
+    if (!focusable.length) {
+      event.preventDefault();
+      root.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  private focusFirstControl(): void {
+    const root = this.builder?.nativeElement;
+    if (!root) return;
+    const first = root.querySelector<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    );
+    first?.focus();
+  }
 
   setMode(mode: BuilderMode): void {
     this.mode = mode;

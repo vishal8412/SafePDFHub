@@ -86,6 +86,20 @@ export class SigningStateService {
     this.redoVersion.update(version => version + 1);
   }
 
+  /** Clear browser-session signature assets when the signing workflow ends. */
+  clearAssets(): void {
+    this._assets.set([]);
+    this._activeAsset.set(null);
+    this._activeKind.set('signature');
+  }
+
+  /** Reset all signing data owned by this browser session/workflow. */
+  reset(): void {
+    this.clearFields();
+    this.clearAssets();
+    this._busy.set(false);
+  }
+
   /** Capture the current field state before a user-visible mutation. */
   checkpoint(): FieldSnapshot {
     return this.cloneFields(this._fields());

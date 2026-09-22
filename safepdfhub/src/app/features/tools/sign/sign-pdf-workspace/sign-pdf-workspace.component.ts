@@ -4,6 +4,8 @@ import {
   Component,
   EventEmitter,
   HostListener,
+  ElementRef,
+  ViewChild,
   Input,
   OnChanges,
   OnDestroy,
@@ -23,6 +25,9 @@ import {
 import { SigningPdfExportService } from '../../../../core/signing/services/signing-pdf-export.service';
 import { SignatureAssetService } from '../../../../core/signing/services/signature-asset.service';
 import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
+import {
+  MAX_SIGNING_PDF_PAGES,
+} from '../../../../core/signing/models/signing.models';
 import type {
   SigningAsset,
   SigningField,
@@ -114,6 +119,13 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   private session: SigningPdfSession | null = null;
   sourceFile: File | null = null;
   private fieldInteraction: FieldInteraction | null = null;
+  private loadGeneration = 0;
+  private renderGeneration = 0;
+  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastViewportWidth = 0;
+  private lastViewportHeight = 0;
+  @ViewChild('bulkModal')
+  private bulkModal?: ElementRef<HTMLElement>;
 
   ngOnChanges(changes: SimpleChanges): void {
     const fileChange = changes['file'];
@@ -123,7 +135,12 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   }
 
   private async loadFile(file: File | null): Promise<void> {
+    const generation = ++this.loadGeneration;
+    this.renderGeneration += 1;
     await this.destroySession();
+
+    if (generation !== this.loadGeneration) return;
+
     this.currentPage = null;
     this.pageCount = 0;
     this.currentPageNumber = 1;
@@ -134,53 +151,122 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     this.error = '';
 
     if (!file) {
+      this.loading = false;
       this.cd.markForCheck();
       return;
     }
 
     this.loading = true;
     this.cd.markForCheck();
+
     try {
-      this.session = await this.renderer.open(file);
-      this.pageCount = this.session.pageCount;
-      if (this.pageCount < 1) throw new Error('This PDF does not contain any pages.');
-      await this.renderCurrentPage();
+      const session = await this.renderer.open(file);
+      if (generation !== this.loadGeneration) {
+        await session.destroy();
+        return;
+      }
+
+      this.session = session;
+      this.pageCount = session.pageCount;
+      if (this.pageCount < 1) {
+        throw new Error('This PDF does not contain any pages.');
+      }
+      if (this.pageCount > MAX_SIGNING_PDF_PAGES) {
+        throw new Error(`This PDF contains too many pages. Browser signing supports up to ${MAX_SIGNING_PDF_PAGES} pages.`);
+      }
+
+      await this.renderCurrentPage(generation);
     } catch (error) {
+      if (generation !== this.loadGeneration) return;
       this.error = error instanceof Error ? error.message : 'Could not open this PDF.';
       this.currentPage = null;
       await this.destroySession();
     } finally {
-      this.loading = false;
-      this.cd.markForCheck();
+      if (generation === this.loadGeneration) {
+        this.loading = false;
+        this.cd.markForCheck();
+      }
     }
   }
 
   async goToPage(pageNumber: number): Promise<void> {
-    if (!this.session || this.loading || !Number.isFinite(pageNumber)) return;
+    if (!this.session || this.exporting || !Number.isFinite(pageNumber)) return;
     const next = Math.max(1, Math.min(this.pageCount, Math.floor(pageNumber)));
     if (next === this.currentPageNumber && this.currentPage) return;
     this.currentPageNumber = next;
     this.selectedFieldId = null;
-    await this.renderCurrentPage();
+    await this.renderCurrentPage(this.loadGeneration);
   }
 
-  async previousPage(): Promise<void> { await this.goToPage(this.currentPageNumber - 1); }
-  async nextPage(): Promise<void> { await this.goToPage(this.currentPageNumber + 1); }
+  async previousPage(): Promise<void> {
+    if (this.currentPageNumber > 1) await this.goToPage(this.currentPageNumber - 1);
+  }
 
-  private async renderCurrentPage(): Promise<void> {
-    if (!this.session) return;
+  async nextPage(): Promise<void> {
+    if (this.currentPageNumber < this.pageCount) await this.goToPage(this.currentPageNumber + 1);
+  }
+
+  private async renderCurrentPage(expectedLoadGeneration = this.loadGeneration): Promise<void> {
+    const session = this.session;
+    if (!session || expectedLoadGeneration !== this.loadGeneration) return;
+
+    const generation = ++this.renderGeneration;
     this.loading = true;
     this.error = '';
     this.cd.markForCheck();
+
     try {
-      this.currentPage = await this.session.renderPage(this.currentPageNumber, 1.35);
+      const page = await session.renderPage(this.currentPageNumber, 1.35);
+      if (
+        generation !== this.renderGeneration ||
+        expectedLoadGeneration !== this.loadGeneration ||
+        session !== this.session
+      ) {
+        return;
+      }
+      this.currentPage = page;
+      this.lastViewportWidth = typeof window === 'undefined' ? page.width : window.innerWidth;
+      this.lastViewportHeight = typeof window === 'undefined' ? page.height : window.innerHeight;
     } catch (error) {
-      this.error = error instanceof Error ? error.message : 'Could not render this PDF page.';
-      this.currentPage = null;
+      if (
+        generation !== this.renderGeneration ||
+        expectedLoadGeneration !== this.loadGeneration ||
+        session !== this.session
+      ) {
+        return;
+      }
+      const message = error instanceof Error ? error.message : '';
+      // PDF.js uses a cancellation exception when a newer page render wins.
+      if (!/cancel/i.test(message)) {
+        this.error = message || 'Could not render this PDF page.';
+        this.currentPage = null;
+      }
     } finally {
-      this.loading = false;
-      this.cd.markForCheck();
+      if (
+        generation === this.renderGeneration &&
+        expectedLoadGeneration === this.loadGeneration &&
+        session === this.session
+      ) {
+        this.loading = false;
+        this.cd.markForCheck();
+      }
     }
+  }
+
+  private scheduleViewportRerender(): void {
+    if (!this.session || !this.currentPage || this.exporting) return;
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
+    this.resizeTimer = setTimeout(() => {
+      this.resizeTimer = null;
+      if (!this.session || !this.currentPage || this.exporting) return;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const widthChanged = Math.abs(width - this.lastViewportWidth) >= 32;
+      const heightChanged = Math.abs(height - this.lastViewportHeight) >= 32;
+      if (widthChanged || heightChanged) {
+        void this.renderCurrentPage(this.loadGeneration);
+      }
+    }, 180);
   }
 
   chooseKind(kind: SigningFieldKind): void {
@@ -217,7 +303,10 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     this.cd.markForCheck();
   }
 
-  closeDialog(): void { this.dialog = false; this.cd.markForCheck(); }
+  closeDialog(): void {
+    this.dialog = false;
+    this.cd.markForCheck();
+  }
 
   onAssetCreated(): void {
     this.dialog = false;
@@ -257,9 +346,13 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     this.bulkPosition = 'same';
     this.bulkDialog = true;
     this.cd.markForCheck();
+    setTimeout(() => this.bulkModal?.nativeElement.focus(), 0);
   }
 
-  closeBulkDialog(): void { this.bulkDialog = false; }
+  closeBulkDialog(): void {
+    this.bulkDialog = false;
+    this.cd.markForCheck();
+  }
 
   applyToPages(): void {
     const source = this.selectedField;
@@ -346,7 +439,7 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     return { ...bounds, x: this.clamp(x, 0, 1 - bounds.width), y: this.clamp(y, 0, 1 - bounds.height) };
   }
 
-  placeField(event: PointerEvent): void {
+  placeField(event: MouseEvent | PointerEvent): void {
     if (!this.currentPage || event.button !== 0 || this.fieldInteraction) return;
     const target = event.target as HTMLElement | null;
 
@@ -416,6 +509,46 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     this.cd.markForCheck();
   }
 
+  onFieldKeyDown(event: KeyboardEvent, field: SigningField): void {
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.selectedFieldId = field.id;
+      this.removeSelected();
+      return;
+    }
+
+    const step = event.shiftKey ? 0.0025 : 0.01;
+    let dx = 0;
+    let dy = 0;
+    switch (event.key) {
+      case 'ArrowLeft': dx = -step; break;
+      case 'ArrowRight': dx = step; break;
+      case 'ArrowUp': dy = -step; break;
+      case 'ArrowDown': dy = step; break;
+      case 'Enter':
+      case ' ':
+        event.preventDefault();
+        this.selectedFieldId = field.id;
+        this.interactionMode = 'select';
+        this.cd.markForCheck();
+        return;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const before = this.state.checkpoint();
+    this.selectedFieldId = field.id;
+    this.interactionMode = 'select';
+    this.state.updateField(field.id, {
+      bounds: this.moveBounds(field.bounds, dx, dy),
+    });
+    this.state.commitCheckpoint(before);
+    this.cd.markForCheck();
+  }
+
   beginFieldMove(event: PointerEvent, field: SigningField): void {
     if (event.button !== 0) return;
     event.preventDefault(); event.stopPropagation();
@@ -472,34 +605,67 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
 
   private resizeBounds(bounds: SigningField['bounds'], dx: number, dy: number, handle: ResizeHandle | undefined, pageWidth: number, pageHeight: number): SigningField['bounds'] {
     if (!handle) return bounds;
+
     const minWidth = Math.max(0.035, 20 / pageWidth);
     const minHeight = Math.max(0.028, 18 / pageHeight);
-    let { x, y, width, height } = bounds;
+    const right = bounds.x + bounds.width;
+    const bottom = bounds.y + bounds.height;
+    let x = bounds.x;
+    let y = bounds.y;
+    let width = bounds.width;
+    let height = bounds.height;
+
     if (handle.includes('w')) {
-      const nextX = this.clamp(bounds.x + dx, 0, bounds.x + bounds.width - minWidth);
-      x = nextX; width = bounds.x + bounds.width - nextX;
-    } else if (handle.includes('e')) width = this.clamp(bounds.width + dx, minWidth, 1 - bounds.x);
+      x = this.clamp(bounds.x + dx, 0, right - minWidth);
+      width = right - x;
+    } else if (handle.includes('e')) {
+      width = this.clamp(bounds.width + dx, minWidth, 1 - bounds.x);
+    }
+
     if (handle.includes('n')) {
-      const nextY = this.clamp(bounds.y + dy, 0, bounds.y + bounds.height - minHeight);
-      y = nextY; height = bounds.y + bounds.height - nextY;
-    } else if (handle.includes('s')) height = this.clamp(bounds.height + dy, minHeight, 1 - bounds.y);
+      y = this.clamp(bounds.y + dy, 0, bottom - minHeight);
+      height = bottom - y;
+    } else if (handle.includes('s')) {
+      height = this.clamp(bounds.height + dy, minHeight, 1 - bounds.y);
+    }
 
     const field = this.selectedField;
     if ((field?.kind === 'signature' || field?.kind === 'initials') && field.asset) {
-      const aspect = (field.asset.naturalWidth / Math.max(1, field.asset.naturalHeight)) * (pageHeight / pageWidth);
-      if (Number.isFinite(aspect) && aspect > 0) {
-        const targetWidth = Math.max(minWidth, height * aspect);
-        const targetHeight = Math.max(minHeight, width / aspect);
-        if (Math.abs(dx) >= Math.abs(dy)) {
-          width = Math.min(targetWidth, 1 - x);
-          height = Math.min(Math.max(minHeight, width / aspect), 1 - y);
+      // Preserve the artwork's physical aspect ratio. Bounds are normalized,
+      // so the page aspect ratio must be part of the conversion.
+      const assetAspect = field.asset.naturalWidth / Math.max(1, field.asset.naturalHeight);
+      const normalizedAspect = assetAspect * (pageHeight / pageWidth);
+      if (Number.isFinite(normalizedAspect) && normalizedAspect > 0) {
+        const horizontalDominant = Math.abs(dx) >= Math.abs(dy);
+        if (horizontalDominant) {
+          const desiredHeight = width / normalizedAspect;
+          if (desiredHeight <= 1 - y && desiredHeight >= minHeight) {
+            height = desiredHeight;
+          } else {
+            height = this.clamp(desiredHeight, minHeight, 1 - y);
+            width = height * normalizedAspect;
+          }
         } else {
-          height = Math.min(targetHeight, 1 - y);
-          width = Math.min(Math.max(minWidth, height * aspect), 1 - x);
+          const desiredWidth = height * normalizedAspect;
+          if (desiredWidth <= 1 - x && desiredWidth >= minWidth) {
+            width = desiredWidth;
+          } else {
+            width = this.clamp(desiredWidth, minWidth, 1 - x);
+            height = width / normalizedAspect;
+          }
         }
+
+        // Keep the opposite edge anchored for west/north handles.
+        if (handle.includes('w')) x = right - width;
+        if (handle.includes('n')) y = bottom - height;
       }
     }
-    return { x: this.clamp(x, 0, 1 - width), y: this.clamp(y, 0, 1 - height), width: Math.min(width, 1), height: Math.min(height, 1) };
+
+    width = this.clamp(width, minWidth, 1);
+    height = this.clamp(height, minHeight, 1);
+    x = this.clamp(x, 0, 1 - width);
+    y = this.clamp(y, 0, 1 - height);
+    return { x, y, width, height };
   }
 
   updateSelectedText(value: string): void { this.updateFieldPatch({ value }); }
@@ -542,8 +708,19 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     this.cd.markForCheck();
   }
 
+  get fieldInteractionActive(): boolean { return this.fieldInteraction !== null; }
+
   get selectedField(): SigningField | null {
     return this.state.fields().find(field => field.id === this.selectedFieldId) ?? null;
+  }
+
+  fieldAriaLabel(field: SigningField): string {
+    const label = field.kind === 'signature' ? 'Signature'
+      : field.kind === 'initials' ? 'Initials'
+      : field.kind === 'date' ? 'Date field'
+      : field.kind === 'checkbox' ? 'Checkbox'
+      : 'Text field';
+    return `${label}, page ${field.pageNumber}. Use arrow keys to move, Shift plus arrow for fine movement, Delete to remove.`;
   }
 
   fieldStyle(field: SigningField): Record<string, string> {
@@ -617,6 +794,7 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   }
 
   private async destroySession(): Promise<void> {
+    this.renderGeneration += 1;
     const session = this.session;
     this.session = null;
     if (session) {
@@ -627,6 +805,41 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
   private clamp(value: number, min: number, max: number): number { return Math.max(min, Math.min(max, value)); }
   private id(): string {
     return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `field-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.scheduleViewportRerender();
+  }
+
+  onBulkModalKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeBulkDialog();
+      return;
+    }
+    if (event.key !== 'Tab' || !this.bulkModal) return;
+
+    const root = this.bulkModal.nativeElement;
+    const focusable: HTMLElement[] = Array.from(root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )).filter((element: HTMLElement) => element.offsetParent !== null);
+
+    if (!focusable.length) {
+      event.preventDefault();
+      root.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   @HostListener('document:keydown', ['$event'])
@@ -659,5 +872,12 @@ export class SignPdfWorkspaceComponent implements OnDestroy, OnChanges {
     }
   }
 
-  ngOnDestroy(): void { void this.destroySession(); }
+  ngOnDestroy(): void {
+    this.loadGeneration += 1;
+    this.renderGeneration += 1;
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
+    this.resizeTimer = null;
+    this.state.reset();
+    void this.destroySession();
+  }
 }

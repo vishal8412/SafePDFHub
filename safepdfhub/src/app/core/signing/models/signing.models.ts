@@ -48,6 +48,16 @@ export interface SigningPageInfo {
 
 export const SIGNATURE_MIME_TYPES = ['image/png', 'image/jpeg'] as const;
 export const MAX_SIGNATURE_UPLOAD_BYTES = 5 * 1024 * 1024;
+/** Maximum decoded pixel count for uploaded signature artwork. */
+export const MAX_SIGNATURE_IMAGE_PIXELS = 12_000_000;
+/** Maximum decoded width or height for uploaded signature artwork. */
+export const MAX_SIGNATURE_IMAGE_DIMENSION = 8_000;
+/** Browser-side safety ceiling for a single PDF loaded by the Sign PDF workflow. */
+export const MAX_SIGNING_PDF_BYTES = 100 * 1024 * 1024;
+/** Browser-side safety ceiling for page count in the interactive Sign PDF workflow. */
+export const MAX_SIGNING_PDF_PAGES = 500;
+/** Maximum preview canvas pixel count before the renderer scales down automatically. */
+export const MAX_SIGNING_PREVIEW_PIXELS = 16_000_000;
 
 export function isSigningFieldKind(value: string): value is SigningFieldKind {
   return ['signature', 'initials', 'text', 'date', 'checkbox'].includes(value);

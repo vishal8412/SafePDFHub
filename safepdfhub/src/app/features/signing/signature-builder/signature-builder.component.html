@@ -1,5 +1,5 @@
 <div class="builder-backdrop" role="presentation" (click)="closed.emit()">
-  <section class="builder" role="dialog" aria-modal="true" aria-label="Create signature" (click)="$event.stopPropagation()">
+  <section #builder class="builder" role="dialog" tabindex="-1" (keydown)="onDialogKeyDown($event)" aria-modal="true" aria-label="Create signature" (click)="$event.stopPropagation()">
     <header class="builder__header">
       <div>
         <span class="eyebrow">SIGNATURE BUILDER</span>

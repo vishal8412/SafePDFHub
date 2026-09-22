@@ -80,11 +80,11 @@
         @if (loading) {
           <div class="stage-loading" role="status"><div class="spinner"></div><strong>{{ currentPage ? 'Loading page…' : 'Opening your PDF…' }}</strong><span>Only the page you are viewing is rendered.</span></div>
         } @else if (currentPage) {
-          <article class="sign-page" [attr.data-page]="currentPage.pageNumber" (pointerdown)="placeField($event)" (pointermove)="onFieldPointerMove($event)" (pointerup)="onFieldPointerUp($event)" (pointercancel)="onFieldPointerUp($event)">
+          <article class="sign-page" [class.is-interacting]="!!fieldInteractionActive" [attr.data-page]="currentPage.pageNumber" (click)="placeField($event)" (pointermove)="onFieldPointerMove($event)" (pointerup)="onFieldPointerUp($event)" (pointercancel)="onFieldPointerUp($event)">
             <img class="sign-page__pdf" [src]="currentPage.imageUrl" [alt]="'PDF page ' + currentPage.pageNumber" draggable="false" />
             @for (field of state.fields(); track field.id) {
               @if (field.pageNumber === currentPage.pageNumber) {
-                <div class="sign-field" [class.selected]="selectedFieldId === field.id" [class.sign-field--checkbox]="field.kind === 'checkbox'" [style]="fieldStyle(field)" (pointerdown)="beginFieldMove($event, field)" (click)="selectField($event, field)">
+                <div class="sign-field" [class.selected]="selectedFieldId === field.id" [class.sign-field--checkbox]="field.kind === 'checkbox'" [style]="fieldStyle(field)" tabindex="0" role="button" [attr.aria-label]="fieldAriaLabel(field)" [attr.aria-selected]="selectedFieldId === field.id" (pointerdown)="beginFieldMove($event, field)" (click)="selectField($event, field)" (keydown)="onFieldKeyDown($event, field)">
                   @if (field.kind === 'signature' || field.kind === 'initials') {
                     <img class="sign-field__image" [src]="field.asset?.dataUrl" [alt]="field.kind === 'initials' ? 'Initials' : 'Signature'" draggable="false" />
                   } @else if (field.kind === 'checkbox') {
@@ -140,7 +140,7 @@
   @if (error) {<div class="sign-error" role="alert"><span>!</span><p>{{ error }}</p><button type="button" (click)="error=''" aria-label="Dismiss error">×</button></div>}
   @if (dialog) {<app-signature-builder [kind]="selectedKind === 'initials' ? 'initials' : 'signature'" (closed)="closeDialog()" (created)="onAssetCreated()" />}
   @if (bulkDialog && selectedField; as field) {
-    <div class="signature-modal" role="dialog" aria-modal="true" [attr.aria-label]="bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages'" (click)="closeBulkDialog()">
+    <div #bulkModal class="signature-modal" tabindex="-1" role="dialog" aria-modal="true" [attr.aria-label]="bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages'" (keydown)="onBulkModalKeyDown($event)" (click)="closeBulkDialog()">
       <section class="signature-dialog bulk-dialog" (click)="$event.stopPropagation()">
         <header class="signature-dialog__header"><div><span class="eyebrow">MULTI-PAGE PLACEMENT</span><h2>{{ bulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages' }}</h2><p>{{ bulkMode === 'remove' ? 'Remove only the selected field copies. Other pages remain unchanged.' : 'Reuse this field across exactly the pages you choose.' }}</p></div><button type="button" class="dialog-close" (click)="closeBulkDialog()" aria-label="Close">×</button></header>
         <div class="bulk-options">

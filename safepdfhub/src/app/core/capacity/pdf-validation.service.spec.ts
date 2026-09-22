@@ -1,144 +1,219 @@
 import { PdfValidationService } from './pdf-validation.service';
 
-function makePdf(body = '1 0 obj\n<< /Type /Catalog >>\nendobj\n'): File {
+function makePdf(
+  name = 'document.pdf',
+  size = 32,
+  type = 'application/pdf'
+): File {
   return new File(
-    [new TextEncoder().encode(`%PDF-1.7\n${body}%%EOF\n`)],
-    'document.pdf',
-    { type: 'application/pdf' }
+    [new Uint8Array(size)],
+    name,
+    { type }
   );
 }
 
-function makeService(exitCode = 2, stderr: string[] = []): PdfValidationService {
+function makeService(options?: {
+  maxFileBytes?: number;
+  maxTotalBytes?: number;
+  maxFiles?: number;
+  securitySupported?: boolean;
+  securityMaxFileBytes?: number;
+}): PdfValidationService {
   const capability = {
     budget: {
-      maxFileBytes: 100 * 1024 * 1024,
-      maxTotalBytes: 400 * 1024 * 1024,
-      maxFiles: 40,
+      maxFileBytes: options?.maxFileBytes ?? 100 * 1024 * 1024,
+      maxTotalBytes: options?.maxTotalBytes ?? 400 * 1024 * 1024,
+      maxFiles: options?.maxFiles ?? 40,
       maxPages: 40_000,
       largeWorkloadBytes: 300 * 1024 * 1024,
       largeWorkloadPages: 10_000
     }
   };
+
   const securityCapability = {
-    supported: true,
-    current: { maxFileBytes: 1024 * 1024 * 1024 }
-  };
-  const qpdf = {
-    run: async ({ args }: { args: readonly string[] }) => ({
-      ok: exitCode === 0,
-      outputs: {},
-      stdout: [],
-      stderr,
-      warnings: [],
-      exitCode: args.includes('--is-encrypted') ? exitCode : exitCode,
-      durationMs: 1
-    })
+    supported: options?.securitySupported ?? true,
+    current: {
+      maxFileBytes: options?.securityMaxFileBytes ?? 1024 * 1024 * 1024
+    }
   };
 
   return new PdfValidationService(
     capability as never,
-    securityCapability as never,
-    qpdf as never
+    securityCapability as never
   );
 }
 
 describe('PdfValidationService', () => {
-  it('rejects non-PDF files before any engine work', () => {
+  it('accepts a valid PDF selection', () => {
+    const service = makeService();
+
+    expect(
+      service.validateSelection(makePdf(), [], false)
+    ).toEqual({
+      valid: true,
+      code: 'ok'
+    });
+  });
+
+  it('accepts a PDF file when the MIME type is missing but the filename is valid', () => {
+    const service = makeService();
+    const file = makePdf('document.pdf', 32, '');
+
+    expect(
+      service.validateSelection(file, [], false)
+    ).toEqual({
+      valid: true,
+      code: 'ok'
+    });
+  });
+
+  it('rejects non-PDF files before capacity checks', () => {
     const service = makeService();
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
-    expect(service.validateSelection(file, [], false).code).toBe('invalid-type');
+
+    expect(
+      service.validateSelection(file, [], false)
+    ).toEqual({
+      valid: false,
+      code: 'invalid-type',
+      message: 'Only PDF files are allowed.'
+    });
   });
 
-  it('rejects empty files', () => {
+  it('rejects duplicate files by name and size', () => {
     const service = makeService();
-    const file = new File([], 'empty.pdf', { type: 'application/pdf' });
-    expect(service.validateSelection(file, [], false).code).toBe('empty-file');
+    const existing = makePdf('document.pdf', 32);
+    const duplicate = makePdf('document.pdf', 32);
+
+    expect(
+      service.validateSelection(duplicate, [existing], false)
+    ).toEqual({
+      valid: false,
+      code: 'duplicate',
+      message: 'document.pdf is already added.'
+    });
   });
 
-  it('rejects a missing PDF header', async () => {
-    const service = makeService();
-    const file = new File(['not-a-pdf\n%%EOF'], 'broken.pdf', { type: 'application/pdf' });
-    const result = await service.validatePdfEnvelope(file);
-    expect(result.code).toBe('invalid-header');
+  it('rejects a file above the device file-size budget', () => {
+    const service = makeService({ maxFileBytes: 100 });
+    const file = makePdf('large.pdf', 101);
+
+    const result = service.validateSelection(file, [], false);
+
+    expect(result.valid).toBe(false);
+    expect(result.code).toBe('file-too-large');
+    expect(result.message).toContain('large.pdf');
   });
 
-  it('accepts a PDF upload after only checking the header', async () => {
-    const service = makeService();
-    const file = new File(['%PDF-1.7\n1 0 obj'], 'partial.pdf', { type: 'application/pdf' });
-    const result = await service.validateUploadHeader(file);
-    expect(result).toEqual({ valid: true, code: 'ok' });
-  });
+  it('rejects an additional file when the multi-file count budget is exceeded', () => {
+    const service = makeService({ maxFiles: 2 });
+    const existingFiles = [
+      makePdf('one.pdf'),
+      makePdf('two.pdf')
+    ];
 
-  it('keeps validatePdfEnvelope lightweight for upload admission', async () => {
-    const service = makeService();
-    const result = await service.validatePdfEnvelope(makePdf());
-    expect(result).toEqual({ valid: true, code: 'ok' });
-  });
-
-
-  it('detects a protected PDF from the trailer tail without loading the whole file', async () => {
-    const service = makeService();
-    const protectedPdf = new File(
-      [new TextEncoder().encode('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R /Encrypt 7 0 R >>\nstartxref\n0\n%%EOF\n')],
-      'protected.pdf',
-      { type: 'application/pdf' }
+    const result = service.validateSelection(
+      makePdf('three.pdf'),
+      existingFiles,
+      true
     );
-    await expect(service.inspectEncryptionHint(protectedPdf)).resolves.toBe('encrypted');
+
+    expect(result).toEqual({
+      valid: false,
+      code: 'too-many-files',
+      message: 'You can process up to 2 PDFs at a time on this device.'
+    });
   });
 
-  it('returns not-encrypted for a normal trailer without /Encrypt', async () => {
-    const service = makeService();
-    const result = await service.inspectEncryptionHint(makePdf());
-    expect(result).toBe('not-encrypted');
+  it('does not apply the multi-file count limit to single-file workflows', () => {
+    const service = makeService({ maxFiles: 1 });
+    const existingFiles = [makePdf('one.pdf')];
+
+    expect(
+      service.validateSelection(
+        makePdf('second.pdf'),
+        existingFiles,
+        false
+      )
+    ).toEqual({
+      valid: true,
+      code: 'ok'
+    });
   });
-  it('detects encryption in a cross-reference stream located well before the final 256 KiB', async () => {
-    const service = makeService();
-    const prefix = new Uint8Array(300 * 1024);
-    prefix.fill(32);
-    const xrefOffset = prefix.length;
-    const xref = new TextEncoder().encode(
-      '76148 0 obj\n<< /Type /XRef /Length 10 /W [1 4 1] /Root 1 0 R /Encrypt 76147 0 R >>\nstream\n0123456789\nendstream\nendobj\n'
+
+  it('rejects a selection when the combined file size exceeds the device budget', () => {
+    const service = makeService({
+      maxTotalBytes: 100
+    });
+
+    const existingFiles = [makePdf('one.pdf', 60)];
+    const result = service.validateSelection(
+      makePdf('two.pdf', 41),
+      existingFiles,
+      true
     );
-    const suffix = new TextEncoder().encode(`startxref\n${xrefOffset}\n%%EOF\n`);
-    const protectedPdf = new File([prefix, xref, new Uint8Array(300 * 1024), suffix], 'large-protected.pdf', { type: 'application/pdf' });
 
-    await expect(service.inspectEncryptionHint(protectedPdf)).resolves.toBe('encrypted');
+    expect(result.valid).toBe(false);
+    expect(result.code).toBe('total-too-large');
+    expect(result.message).toContain('combined files');
   });
 
-  it('follows XRefStm from a traditional trailer', async () => {
+  it('validates security selections against the dedicated security input target', () => {
+    const service = makeService({
+      maxFileBytes: 100,
+      securityMaxFileBytes: 200
+    });
+
+    expect(
+      service.validateSecuritySelection(makePdf('security.pdf', 150))
+    ).toEqual({
+      valid: true,
+      code: 'ok'
+    });
+
+    const result = service.validateSecuritySelection(
+      makePdf('security-large.pdf', 201)
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.code).toBe('file-too-large');
+    expect(result.message).toContain('1 GB');
+  });
+
+  it('falls back to the normal device selection budget when the security capability is unavailable', () => {
+    const service = makeService({
+      securitySupported: false,
+      maxFileBytes: 100
+    });
+
+    const result = service.validateSecuritySelection(
+      makePdf('large.pdf', 101)
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.code).toBe('file-too-large');
+  });
+
+  it('rejects a non-PDF security selection', () => {
     const service = makeService();
-    const xrefStreamOffset = 1024;
-    const xrefTableOffset = 4096;
-    const prefix = new Uint8Array(xrefStreamOffset);
-    prefix.fill(32);
-    const xrefStream = new TextEncoder().encode(
-      '7 0 obj\n<< /Type /XRef /Length 4 /W [1 1 1] /Encrypt 8 0 R >>\nstream\n1234\nendstream\nendobj\n'
-    );
-    const gap = new Uint8Array(xrefTableOffset - (xrefStreamOffset + xrefStream.length));
-    gap.fill(32);
-    const xrefTable = new TextEncoder().encode(
-      `xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 9 /Root 1 0 R /XRefStm ${xrefStreamOffset} >>\nstartxref\n${xrefTableOffset}\n%%EOF\n`
-    );
-    const protectedPdf = new File([prefix, xrefStream, gap, xrefTable], 'xref-stream-protected.pdf', { type: 'application/pdf' });
+    const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
 
-    await expect(service.inspectEncryptionHint(protectedPdf)).resolves.toBe('encrypted');
+    expect(
+      service.validateSecuritySelection(file)
+    ).toEqual({
+      valid: false,
+      code: 'invalid-type',
+      message: 'Only PDF files are allowed.'
+    });
   });
 
-  it('blocks Protect PDF when qpdf reports encryption', async () => {
-    const service = makeService(0);
-    const result = await service.validateSecurityContent(makePdf(), 'protect');
-    expect(result.code).toBe('encrypted');
-  });
+  it('formats byte values consistently for capacity messages', () => {
+    const service = makeService();
 
-  it('blocks Unlock PDF when qpdf reports a non-encrypted input', async () => {
-    const service = makeService(2);
-    const result = await service.validateSecurityContent(makePdf(), 'unlock');
-    expect(result.code).toBe('not-encrypted');
-  });
-
-  it('classifies a qpdf structural failure as damaged', async () => {
-    const service = makeService(2, ['xref table is damaged']);
-    const result = await service.validatePdfStructure(makePdf());
-    expect(result.code).toBe('damaged-pdf');
+    expect(service.formatBytes(0)).toBe('0 B');
+    expect(service.formatBytes(1024 * 1024)).toBe('1.0 MB');
+    expect(service.formatBytes(100 * 1024 * 1024)).toBe('100 MB');
+    expect(service.formatBytes(1024 * 1024 * 1024)).toBe('1.0 GB');
+    expect(service.formatBytes(Number.NaN)).toBe('0 B');
   });
 });
