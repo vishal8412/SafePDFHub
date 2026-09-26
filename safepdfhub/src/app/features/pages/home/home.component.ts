@@ -24,6 +24,7 @@ export class HomeComponent {
     { name: 'Split PDF', description: 'Extract pages from a PDF', mark: 'S', route: '/tools/split-pdf' },
     { name: 'Protect PDF', description: 'Add password protection', mark: 'P', route: '/tools/protect-pdf' },
     { name: 'Unlock PDF', description: 'Remove password protection', mark: 'U', route: '/tools/unlock-pdf' },
-    { name: 'Sign PDF', description: 'Add a signature and fill fields', mark: '✍', route: '/tools/sign-pdf' }
+    { name: 'Sign PDF', description: 'Add a signature and fill fields', mark: '✍', route: '/tools/sign-pdf' },
+    { name: 'Watermark PDF', description: 'Add text or image watermark', mark: 'W', route: '/tools/watermark-pdf' }
   ];
 }

@@ -25,6 +25,11 @@ export interface SplitRequest {
 
 export class SplitWorkspaceComponent {
 
+  // Kept as a public input because ToolComponent passes the source PDF into
+  // the split workspace. The workspace currently uses fileName/pageCount for
+  // its UI, but accepting the File preserves the existing component contract
+  // and keeps Angular template type-checking strict.
+  @Input() file: File | null = null;
   @Input() fileName = '';
   @Input() pageCount = 0;
   @Input() fileSize = '';

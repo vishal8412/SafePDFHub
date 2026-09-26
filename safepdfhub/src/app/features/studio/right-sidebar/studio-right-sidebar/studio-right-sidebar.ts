@@ -11,6 +11,9 @@ import {
 
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioObjectService } from '../../services/studio-object.service';
+import { WatermarkControlsComponent } from '../../../tools/watermark/watermark-controls.component';
+import { StudioWatermarkStateService } from '../../state/studio-watermark-state.service';
+import type { PdfWatermarkRequest } from '../../../../core/watermark/pdf-watermark.types';
 import type {
   StudioObject,
   StudioObjectBounds,
@@ -37,7 +40,7 @@ type PdfImageFidelityValidation = {
 @Component({
   selector: 'app-studio-right-sidebar',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, WatermarkControlsComponent],
   templateUrl: './studio-right-sidebar.html',
   styleUrl: './studio-right-sidebar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -46,6 +49,7 @@ export class StudioRightSidebar {
 
   readonly facade = inject(StudioFacade);
   private readonly objectService = inject(StudioObjectService);
+  readonly watermark = inject(StudioWatermarkStateService);
 
   readonly activeTab = signal<PropertiesTab>('document');
 
@@ -383,6 +387,33 @@ export class StudioRightSidebar {
       signature: 'Signature'
     } as Record<string, string>)[object.type] ?? 'Selection';
   });
+
+  updateWatermark(request: PdfWatermarkRequest): void {
+    this.watermark.updateDraft(request);
+  }
+
+  applyWatermark(request: PdfWatermarkRequest): void {
+    this.watermark.updateDraft(request);
+    const committed = this.watermark.apply();
+
+    if (committed) {
+      // A successful Add/Update is a Studio edit, not an export action.
+      // Close the inspector so the canvas becomes the focus immediately.
+      this.watermark.close();
+    }
+  }
+
+  removeWatermark(): void {
+    if (this.watermark.busy() || !this.watermark.committed()) return;
+
+    // Removal is a committed Studio edit. Clear both draft and committed
+    // state so no stale preview can remain when the inspector is reopened.
+    this.watermark.clear();
+  }
+
+  closeWatermark(): void {
+    this.watermark.close();
+  }
 
   constructor() {
     /**

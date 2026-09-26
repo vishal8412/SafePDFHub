@@ -159,6 +159,7 @@ export class StudioToolbar {
       kind: 'interaction'
     },
     { id: 'sign', label: 'Sign', shortcut: 'S', kind: 'interaction' },
+    { id: 'watermark', label: 'Watermark', kind: 'action' },
 
     // {
     //   id: 'more',

@@ -45,6 +45,8 @@ import {
 } from '../services/studio-history.service';
 import type { StudioPage } from '../models/studio-page.model';
 import type { StudioPdfDocument } from '../models/pdf-document.model';
+import { StudioWatermarkStateService } from '../state/studio-watermark-state.service';
+import { PdfWatermarkService } from '../../../core/watermark/pdf-watermark.service';
 
 @Injectable({
   providedIn: 'root'
@@ -87,6 +89,12 @@ export class StudioFacade {
   private readonly pdfSecurity =
     inject(PdfSecurityService);
 
+  private readonly watermarkState =
+    inject(StudioWatermarkStateService);
+
+  private readonly pdfWatermark =
+    inject(PdfWatermarkService);
+
   /**
    * F6.3 — One live pointer transform is treated as one history mutation.
    * Pointer-move frames update the object immediately for smooth UI feedback,
@@ -114,6 +122,8 @@ export class StudioFacade {
   private activeRenderCanvas:
     | HTMLCanvasElement
     | null = null;
+
+  readonly renderScale = signal(1);
 
   /**
    * Public readonly state exposed to UI.
@@ -245,6 +255,8 @@ export class StudioFacade {
        * Commit the new document to application state.
        */
       this.state.setDocument(newDocument);
+      this.renderScale.set(1);
+      this.watermarkState.clear();
       this.pageService.initialize(newDocument.pageCount);
 
       /**
@@ -633,6 +645,8 @@ async renderCurrentPage(
   ) {
     return null;
   }
+
+  this.renderScale.set(Math.max(0.0001, rendered.scale));
 
   return rendered;
 }
@@ -2367,6 +2381,45 @@ goToPage(page: number): void {
  * are persisted on top of the original PDF pages and downloaded as an
  * `_edited.pdf` file.
  */
+async exportCurrentDocumentFile(): Promise<File> {
+  const document = this.document();
+  if (!document) {
+    throw new Error('Open a PDF before exporting.');
+  }
+
+  const objects = Array.from(
+    { length: this.pageCount() },
+    (_, index) => this.objectService.listForPage(index + 1),
+  ).flat();
+
+  const blob = await this.pdfExportService.exportTextObjects(
+    document.file,
+    objects,
+    this.pages(),
+  );
+
+  const buffer = await blob.arrayBuffer();
+  const base = document.name.replace(/\.pdf$/i, '') || 'document';
+  let file = new File(
+    [buffer],
+    `${base}_edited.pdf`,
+    { type: 'application/pdf' },
+  );
+
+  const committedWatermark = this.watermarkState.committed();
+  if (committedWatermark) {
+    const result = await this.pdfWatermark.apply(file, committedWatermark);
+    const watermarkedBuffer = await result.file.arrayBuffer();
+    file = new File(
+      [watermarkedBuffer],
+      `${base}_edited.pdf`,
+      { type: 'application/pdf' },
+    );
+  }
+
+  return file;
+}
+
 async exportPdf(): Promise<void> {
   if (!this.hasDocument()) {
     this.toast.show(
@@ -2376,38 +2429,20 @@ async exportPdf(): Promise<void> {
     return;
   }
 
-  const document = this.document();
-
-  if (!document) {
-    return;
-  }
-
   try {
-    this.loader.show(
-      'Preparing your edited PDF...'
-    );
-    this.loader.setText(
-      'Writing Studio changes into PDF...'
-    );
+    this.loader.show('Preparing your edited PDF...');
+    this.loader.setText('Writing Studio changes into PDF...');
 
-    const objects = Array.from(
-      { length: this.pageCount() },
-      (_, index) =>
-        this.objectService.listForPage(index + 1)
-    ).flat();
+    const output = await this.exportCurrentDocumentFile();
 
-    await this.pdfExportService.exportAndDownload(
-      document.file,
-      objects,
-      this.pages()
-    );
+    this.loader.setText('Downloading your PDF...');
+    saveAs(output, output.name);
 
-    this.loader.setText(
-      'PDF exported successfully'
-    );
-
+    this.loader.setText('PDF exported successfully');
     this.toast.show(
-      'Edited PDF exported successfully.',
+      this.watermarkState.committed()
+        ? 'Edited PDF with watermark exported successfully.'
+        : 'Edited PDF exported successfully.',
       'success'
     );
   } catch (error: unknown) {
@@ -2417,7 +2452,9 @@ async exportPdf(): Promise<void> {
     );
 
     this.toast.show(
-      'Unable to export the edited PDF. Please try again.',
+      error instanceof Error
+        ? error.message
+        : 'Unable to export the edited PDF. Please try again.',
       'error'
     );
   } finally {

@@ -34,18 +34,21 @@ import { PdfWorkloadAnalyzerService } from '../../core/capacity/pdf-workload-ana
 import { LocalProcessingCapability, WorkloadAssessment } from '../../core/capacity/local-processing-capability.model';
 import { SecurityWorkspaceComponent } from '../../features/tools/security/security-workspace/security-workspace.component';
 import { SignPdfWorkspaceComponent } from '../../features/tools/sign/sign-pdf-workspace/sign-pdf-workspace.component';
+import { WatermarkWorkspaceComponent } from '../../features/tools/watermark/watermark-workspace/watermark-workspace.component';
 import { PdfSecurityService } from '../../core/security/pdf-security.service';
 import { SeoService } from '../../core/services/seo.service';
 import { HomeSectionNavigationService } from '../../shared/services/home-section-navigation.service';
 import { LargePdfSecurityCapabilityService } from '../../core/security/large-file/large-pdf-security-capability.service';
 import type { PdfSecurityMode, PdfSecurityRequest, PdfSecurityResult } from '../../core/security/pdf-security.types';
+import { PdfWatermarkService } from '../../core/watermark/pdf-watermark.service';
+import type { PdfWatermarkRequest, PdfWatermarkResult } from '../../core/watermark/pdf-watermark.types';
 
 type WorkflowStep = 'merge' | 'compress' | 'split';
 
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent,
+  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
     DialogComponent, BottomSheetComponent, ActionPanelComponent, RouterModule],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
@@ -117,6 +120,9 @@ export class ToolComponent implements OnInit, OnDestroy {
   securityProgress = 0;
   securityResult: PdfSecurityResult | null = null;
   securityErrorMessage: string | null = null;
+  watermarkProgress = 0;
+  watermarkResult: PdfWatermarkResult | null = null;
+  watermarkErrorMessage: string | null = null;
 
   get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
@@ -146,6 +152,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     private pdfWorkloadAnalyzer: PdfWorkloadAnalyzerService,
     private largePdfSecurityCapability: LargePdfSecurityCapabilityService,
     private pdfSecurity: PdfSecurityService,
+    private pdfWatermark: PdfWatermarkService,
     private ngZone: NgZone,
     @Inject(PLATFORM_ID) private platformId: Object
   ) { }
@@ -227,6 +234,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       'protect-pdf': 'Protect PDF',
       'unlock-pdf': 'Unlock PDF',
       'sign-pdf': 'Sign PDF',
+      'watermark-pdf': 'Watermark PDF',
     };
 
     this.breadcrumbLabel = labels[this.tool?.slug ?? ''] ?? 'PDF Tool';
@@ -241,6 +249,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get isSignTool(): boolean { return this.tool?.slug === 'sign-pdf'; }
+
+  get isWatermarkTool(): boolean { return this.tool?.slug === 'watermark-pdf'; }
 
   get isSecurityTool(): boolean {
     return this.tool?.category === 'security';
@@ -271,6 +281,9 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.securityResult = null;
     this.securityErrorMessage = null;
     this.securityProgress = 0;
+    this.watermarkResult = null;
+    this.watermarkErrorMessage = null;
+    this.watermarkProgress = 0;
     // reset ui state
     this.workspace.activeIndex = -1;
     this.workspace.hasMerged = false;
@@ -491,6 +504,11 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.securityErrorMessage = null;
       this.securityProgress = 0;
     }
+    if (this.isWatermarkTool) {
+      this.watermarkResult = null;
+      this.watermarkErrorMessage = null;
+      this.watermarkProgress = 0;
+    }
 
     const selected = this.validateFiles(files);
     if (this.workspace.files.length && this.workspace.activeIndex === -1) {
@@ -504,6 +522,11 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.securityResult = null;
       this.securityErrorMessage = null;
       this.securityProgress = 0;
+    }
+    if (this.isWatermarkTool) {
+      this.watermarkResult = null;
+      this.watermarkErrorMessage = null;
+      this.watermarkProgress = 0;
     }
 
     const selected = this.validateFiles(files);
@@ -822,7 +845,8 @@ export class ToolComponent implements OnInit, OnDestroy {
       { id: 'compress-pdf', icon: AppIcons.Zap, title: 'Compress PDF', desc: 'Reduce PDF file size' },
       { id: 'split-pdf', icon: AppIcons.Scissors, title: 'Split PDF', desc: 'Extract pages from a PDF' },
       { id: 'protect-pdf', icon: AppIcons.Shield, title: 'Protect PDF', desc: 'Add password protection' },
-      { id: 'unlock-pdf', icon: AppIcons.Lock, title: 'Unlock PDF', desc: 'Remove password protection' }
+      { id: 'unlock-pdf', icon: AppIcons.Lock, title: 'Unlock PDF', desc: 'Remove password protection' },
+      { id: 'watermark-pdf', icon: AppIcons.FileText, title: 'Watermark PDF', desc: 'Add text or image watermark' }
     ];
 
     const preferredSlugs = this.tool?.nextTools ?? [];
@@ -1264,6 +1288,81 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
 
+  async runWatermarkOperation(request: PdfWatermarkRequest): Promise<void> {
+    if (this.workspace.loading || !this.workspace.files.length || !this.isWatermarkTool) return;
+
+    this.refreshWorkloadAssessment();
+    if (this.hasBlockedWorkload) {
+      this.toast.show(this.workloadMessage, 'error');
+      return;
+    }
+
+    const file = this.workspace.files[0];
+    this.workspace.loading = true;
+    this.watermarkProgress = 0;
+    this.watermarkErrorMessage = null;
+    this.watermarkResult = null;
+    this.loader.show();
+    this.loader.setProgress?.(0);
+    this.loader.setText('Preparing watermark operation...');
+
+    this.unregisterLoaderCancellation?.();
+    this.unregisterLoaderCancellation = this.loader.registerCancellationHandler(() => {
+      this.pdfWatermark.cancel();
+      this.loader.setText('Cancelling watermark operation...');
+    });
+
+    try {
+      const result = await this.pdfWatermark.apply(file, request, progress => {
+        this.watermarkProgress = progress;
+        this.loader.setProgress?.(progress);
+        this.loader.setText(progress >= 95 ? 'Finalizing watermarked PDF...' : `Applying watermark... ${progress}%`);
+        this.cd.markForCheck();
+      });
+
+      this.watermarkResult = result;
+      this.loader.setText('Done ✨');
+      this.toast.show('PDF watermarked successfully.', 'success');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'PDF watermarking failed. Please try again.';
+      this.watermarkErrorMessage = message;
+      this.loader.setText('Watermark operation could not be completed');
+      this.toast.show(message, 'error');
+    } finally {
+      this.unregisterLoaderCancellation?.();
+      this.unregisterLoaderCancellation = null;
+      this.workspace.loading = false;
+      setTimeout(() => this.loader.hide(), 250);
+      this.cd.markForCheck();
+    }
+  }
+
+  downloadWatermarkResult(): void {
+    if (!this.watermarkResult) return;
+    this.downloadFile(this.watermarkResult.file);
+  }
+
+  editWatermarkAgain(): void {
+    if (this.workspace.loading) return;
+    this.watermarkResult = null;
+    this.watermarkErrorMessage = null;
+    this.watermarkProgress = 0;
+    this.cd.markForCheck();
+  }
+
+  processAnotherWatermarkPdf(): void {
+    if (this.workspace.loading) return;
+    this.pdfWatermark.cancel();
+    this.watermarkResult = null;
+    this.watermarkErrorMessage = null;
+    this.watermarkProgress = 0;
+    this.workspaceOps.clear();
+    this.workspace.activeIndex = -1;
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
+    this.cd.markForCheck();
+    setTimeout(() => this.triggerUpload());
+  }
+
   resetAfterMerge() {
     this.workspaceOps.replaceAll([]);
     this.workspace.activeIndex = -1;
@@ -1454,6 +1553,8 @@ export class ToolComponent implements OnInit, OnDestroy {
     if (this.workspace.loading) {
       if (this.isSecurityTool) {
         void this.pdfSecurity.cancel();
+      } else if (this.isWatermarkTool) {
+        this.pdfWatermark.cancel();
       } else {
         this.mergeEngine.cancel();
       }

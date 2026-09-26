@@ -20,6 +20,9 @@ import type { PdfSecurityRequest } from '../../../../core/security/pdf-security.
 
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioSigningDialogComponent } from '../../signing/studio-signing-dialog.component';
+import { StudioWatermarkStateService } from '../../state/studio-watermark-state.service';
+import { ToastService } from '../../../../shared/services/toast.service';
+import { LoaderService } from '../../../../shared/services/loader.service';
 import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
 import { SignatureAssetService } from '../../../../core/signing/services/signature-asset.service';
 import type { SigningAsset, SigningFieldKind } from '../../../../core/signing/models/signing.models';
@@ -92,6 +95,9 @@ export class StudioShellComponent implements OnDestroy {
 
   passwordInput = '';
   readonly signingDialogOpen = signal(false);
+  readonly watermark = inject(StudioWatermarkStateService);
+  private readonly toast = inject(ToastService);
+  private readonly loader = inject(LoaderService);
   readonly signingState = inject(SigningStateService);
 
   /**
@@ -734,6 +740,11 @@ onToolSelected(
       this.signingDialogOpen.set(true);
       return;
 
+    case 'watermark':
+      if (!this.facade.hasDocument()) return;
+      this.watermark.open();
+      return;
+
     case 'extract':
       this.openExtractPagesDialog();
       return;
@@ -800,6 +811,7 @@ async onExportPdf(): Promise<void> {
     // Release signature data URLs and active signing state as soon as the
     // Studio route is destroyed. The service itself is component-scoped.
     this.signingState.reset();
+    this.watermark.clear();
   }
 
 }

@@ -3,7 +3,7 @@ export interface Tool {
   title: string;
   description: string;
   keywords: string;
-  category: 'merge' | 'compress' | 'convert' | 'split' | 'security' | 'sign';
+  category: 'merge' | 'compress' | 'convert' | 'split' | 'security' | 'sign' | 'edit';
   nextTools?: string[]; // slugs of implemented recommended tools
 }
 
@@ -57,6 +57,14 @@ export const TOOLS: Tool[] = [
     keywords: 'sign pdf, electronic signature, e-sign pdf, fill and sign pdf',
     category: 'sign',
     nextTools: ['protect-pdf', 'unlock-pdf']
+  },
+  {
+    slug: 'watermark-pdf',
+    title: 'Watermark PDF Online Free',
+    description: 'Add text or image watermarks to PDF pages locally in your browser with adjustable opacity, rotation, position, and page range.',
+    keywords: 'watermark pdf, add watermark to pdf, pdf watermark, image watermark pdf, text watermark pdf',
+    category: 'edit',
+    nextTools: ['protect-pdf', 'sign-pdf', 'compress-pdf']
   },
   {
     slug: 'split-pdf',

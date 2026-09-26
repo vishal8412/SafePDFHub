@@ -15,6 +15,8 @@
 // ============================================================
 
 .studio-workspace {
+  position: relative;
+
   display: grid;
 
   grid-template-columns:
@@ -2580,3 +2582,37 @@
   outline-offset: 2px;
 }
 
+
+.studio-watermark-mobile-backdrop {
+  display: none;
+}
+
+@media (max-width: 920px) {
+  .studio-workspace--watermark-open .studio-workspace__right-sidebar {
+    display: block;
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(360px, calc(100% - 24px));
+    z-index: 120;
+    background: #07111f;
+    box-shadow: -24px 0 60px rgba(0,0,0,.42);
+  }
+
+  .studio-workspace--watermark-open .studio-watermark-mobile-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 110;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: rgba(0,0,0,.38);
+    cursor: default;
+  }
+}
+
+@media (max-width: 700px) {
+  .studio-workspace--watermark-open .studio-workspace__right-sidebar {
+    width: min(390px, calc(100% - 12px));
+  }
+}

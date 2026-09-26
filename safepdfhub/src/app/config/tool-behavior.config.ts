@@ -70,6 +70,19 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
     heroTitle: 'Sign your PDF locally', heroDescription: 'Add a signature and fill common PDF fields without uploading your document.',
     uploadTitle: 'Choose a PDF', uploadButtonText: 'Choose a PDF', uploadHint: 'Your PDF stays on your device', showQuickActions: false, primaryActionText: 'Sign PDF'
   },
+  {
+    slug: 'watermark-pdf',
+    allowMultiple: false,
+    replaceOnUpload: true,
+    acceptedTypes: '.pdf,application/pdf',
+    heroTitle: 'Add a watermark to your PDF',
+    heroDescription: 'Add text or image watermarks with adjustable opacity, rotation, position, and page ranges. Your PDF stays on your device.',
+    uploadTitle: 'Choose a PDF',
+    uploadButtonText: 'Choose a PDF',
+    uploadHint: 'Your PDF and watermark are processed locally',
+    showQuickActions: false,
+    primaryActionText: 'Apply Watermark'
+  },
 
   // =========================
   // MERGE PDF

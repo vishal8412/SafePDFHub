@@ -1,3 +1,38 @@
+@if (watermark.isOpen()) {
+  <section class="studio-watermark-inspector" aria-label="Watermark settings">
+    <header class="studio-watermark-inspector__header">
+      <div>
+        <span class="studio-watermark-inspector__eyebrow">STUDIO WATERMARK</span>
+        <h2>Watermark</h2>
+        <p>Customize your watermark.<br />Editable until export.</p>
+        @if (watermark.hasUnappliedChanges()) {
+          <span class="studio-watermark-inspector__status">Unsaved changes</span>
+        } @else if (watermark.committed()) {
+          <span class="studio-watermark-inspector__status studio-watermark-inspector__status--saved">✓ Watermark added to Studio</span>
+        }
+      </div>
+      <button type="button" class="studio-watermark-inspector__close" [disabled]="watermark.busy()" (click)="closeWatermark()" aria-label="Close watermark inspector">×</button>
+    </header>
+
+    <div class="studio-watermark-inspector__body">
+      <app-watermark-controls
+        [pageCount]="pageCount()"
+        [request]="watermark.draft()"
+        [busy]="watermark.busy()"
+        [errorMessage]="watermark.error()"
+        [compact]="true"
+        [showApplyButton]="true"
+        [showRemoveButton]="!!watermark.committed()"
+        [applyLabel]="watermark.committed() ? 'Update Watermark' : 'Add Watermark'"
+        removeLabel="Remove watermark"
+        (requestChange)="updateWatermark($event)"
+        (applyWatermark)="applyWatermark($event)"
+        (removeWatermark)="removeWatermark()"
+      />
+    </div>
+
+  </section>
+} @else {
 <aside class="properties" aria-label="Document properties">
   <nav class="properties__tabs" aria-label="Properties tabs">
     <button type="button" class="properties__tab"
@@ -582,4 +617,6 @@
       </footer>
     </section>
   </div>
+}
+
 }

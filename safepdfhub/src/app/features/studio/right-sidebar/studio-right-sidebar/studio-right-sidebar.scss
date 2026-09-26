@@ -781,3 +781,111 @@
 /* SIGN-9 visual consistency: signing controls use the same compact palette and dark select treatment. */
 .properties__field select.signing-font-select{width:100%;height:38px;box-sizing:border-box;border:1px solid rgba(255,255,255,.10);border-radius:9px;background:#0b1522;color:#eaf4ff;padding:0 10px;outline:none;font:inherit;font-size:11px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%238ca2b5' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-size:12px 12px}.properties__field select.signing-font-select:focus{border-color:rgba(25,234,211,.4)}
 .signing-color-control{display:grid;gap:8px;margin-top:14px}.signing-control-label{color:#71869a;font-size:9px;text-transform:uppercase;letter-spacing:.08em}.signing-color-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-height:25px}.signing-color-swatch{width:23px;height:23px;flex:0 0 23px;padding:0;border:2px solid rgba(255,255,255,.18);border-radius:50%;cursor:pointer;box-sizing:border-box}.signing-color-swatch.is-active{outline:2px solid #00d4b3;outline-offset:2px}.signing-custom-color{position:relative;width:23px;height:23px;flex:0 0 23px;display:block;overflow:hidden;border:1px dashed rgba(255,255,255,.28);border-radius:50%;background:conic-gradient(#00d4b3 0 25%,#2563eb 0 50%,#be185d 0 75%,#b45309 0);cursor:pointer}.signing-custom-color input{position:absolute;inset:-6px;width:35px;height:35px;opacity:0;cursor:pointer}.signing-custom-color span{position:absolute;inset:5px;border:1px solid rgba(255,255,255,.72);border-radius:50%;pointer-events:none}.signing-range-field{display:grid!important;grid-template-columns:minmax(54px,auto) minmax(0,1fr);align-items:center;gap:12px;width:100%;min-width:0;margin-top:14px}.signing-range-field>span{min-width:0}.signing-range-input{display:block!important;width:100%!important;min-width:0!important;max-width:none!important;flex:1 1 auto!important;margin:0!important;padding:0!important;box-sizing:border-box!important}.signing-range-field .signing-range-input::-webkit-slider-runnable-track{width:100%}.signing-range-field .signing-range-input::-moz-range-track{width:100%}
+
+/* ==========================================================
+   STUDIO WATERMARK INSPECTOR
+========================================================== */
+.studio-watermark-inspector {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: #07111f;
+}
+
+.studio-watermark-inspector__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+
+.studio-watermark-inspector__eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #00d4b3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+
+.studio-watermark-inspector__header h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+.studio-watermark-inspector__header p {
+  max-width: 255px;
+  margin: 7px 0 0;
+  color: rgba(255,255,255,.5);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.studio-watermark-inspector__close {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 9px;
+  background: rgba(255,255,255,.025);
+  color: rgba(255,255,255,.62);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.studio-watermark-inspector__close:hover {
+  color: #fff;
+  border-color: rgba(0,212,179,.35);
+  background: rgba(0,212,179,.07);
+}
+
+.studio-watermark-inspector__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(84,225,211,.28) transparent;
+  overscroll-behavior: contain;
+}
+
+.studio-watermark-inspector__body::-webkit-scrollbar { width: 7px; }
+.studio-watermark-inspector__body::-webkit-scrollbar-track { background: transparent; }
+.studio-watermark-inspector__body::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(84,225,211,.25);
+  background-clip: padding-box;
+}
+.studio-watermark-inspector__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(84,225,211,.45);
+  background-clip: padding-box;
+}
+.studio-watermark-inspector__body::-webkit-scrollbar-corner { background: transparent; }
+
+.studio-watermark-inspector__body .watermark-controls {
+  min-height: 100%;
+  padding: 16px 16px 8px;
+}
+
+.studio-watermark-inspector__status {
+  display: block;
+  margin-top: 7px;
+  color: #ffb66d;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.studio-watermark-inspector__status--saved {
+  color: #69e5d4;
+}

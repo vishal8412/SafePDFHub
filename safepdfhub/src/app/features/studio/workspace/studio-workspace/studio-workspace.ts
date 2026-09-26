@@ -16,6 +16,7 @@ import { StudioCanvas } from '../../canvas/studio-canvas/studio-canvas';
 import { StudioFacade } from '../../facade/studio.facade';
 import { StudioPageThumbnail } from '../../left-sidebar/studio-page-thumbnail/studio-page-thumbnail';
 import { StudioRightSidebar } from '../../right-sidebar/studio-right-sidebar/studio-right-sidebar';
+import { StudioWatermarkStateService } from '../../state/studio-watermark-state.service';
 import type { StudioSidebarPageView } from '../../models/studio-sidebar.model';
 
 @Component({
@@ -37,6 +38,7 @@ export class StudioWorkspace
   implements AfterViewInit {
 
   readonly facade = inject(StudioFacade);
+  readonly watermark = inject(StudioWatermarkStateService);
 
   @ViewChild('pagesList')
 private readonly pagesList!:

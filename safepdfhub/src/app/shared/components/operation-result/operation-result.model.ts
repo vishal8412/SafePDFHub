@@ -5,7 +5,9 @@ export type OperationResultIcon =
   | 'unlock'
   | 'merge'
   | 'split'
-  | 'compress';
+  | 'compress'
+  | 'watermark'
+  | 'watermark-complete';
 
 export interface OperationResultAction {
   readonly label: string;

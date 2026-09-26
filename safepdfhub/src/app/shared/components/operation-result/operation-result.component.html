@@ -44,6 +44,27 @@
           <path class="operation-result__check" d="m39 45 4 4 7-8" />
         </svg>
       }
+      @case ('watermark') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M16 8h22l10 10v38H16z" />
+          <path class="operation-result__icon-stroke operation-result__icon-fold" d="M38 8v11h10" />
+          <path class="operation-result__watermark-line" d="M12 38 35 15M15 49 45 19M27 55 50 32" />
+          <circle class="operation-result__watermark-check-badge" cx="45.5" cy="45.5" r="8.5" />
+          <path class="operation-result__check operation-result__check--badge" d="m41.5 45.5 2.5 2.5 5-6" />
+        </svg>
+      }
+      @case ('watermark-complete') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard operation-result__success-mark--watermark-complete" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M17 7h21l10 10v40H17z" />
+          <path class="operation-result__icon-stroke operation-result__icon-fold" d="M38 7v11h10" />
+          <g class="operation-result__watermark-stamp">
+            <rect class="operation-result__watermark-band" x="11" y="27" width="42" height="13" rx="3" transform="rotate(-18 11 27)" />
+            <path class="operation-result__watermark-w" d="m24 27 2.5 8 3.5-6 3.5 6 2.5-8" />
+          </g>
+          <circle class="operation-result__watermark-check-badge" cx="47" cy="47" r="9" />
+          <path class="operation-result__check operation-result__check--badge" d="m42.5 47 3 3 6-7" />
+        </svg>
+      }
       @default {
         <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
           <circle class="operation-result__icon-stroke" cx="32" cy="32" r="22" />

@@ -14,6 +14,7 @@ export type StudioToolId =
   | 'comment'
   | 'link'
   | 'sign'
+  | 'watermark'
   | 'more';
 
 export type StudioToolKind =

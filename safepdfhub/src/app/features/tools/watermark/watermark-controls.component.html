@@ -1,0 +1,119 @@
+<div class="watermark-controls" [class.watermark-controls--compact]="compact" aria-label="Watermark settings">
+  <div class="section-heading">
+    <div><span class="section-kicker">WATERMARK</span><h2>Customize</h2></div>
+  </div>
+
+  <div class="mode-switch" role="tablist" aria-label="Watermark type">
+    <button type="button" role="tab" [attr.aria-selected]="kind === 'text'" [class.active]="kind === 'text'" [disabled]="busy" (click)="selectKind('text')">T Text</button>
+    <button type="button" role="tab" [attr.aria-selected]="kind === 'image'" [class.active]="kind === 'image'" [disabled]="busy" (click)="selectKind('image')">▧ Image</button>
+  </div>
+
+  @if (kind === 'text') {
+    <label class="field">
+      <span>Watermark text</span>
+      <input type="text" maxlength="300" [(ngModel)]="text" (ngModelChange)="emitChange()" placeholder="CONFIDENTIAL" />
+    </label>
+
+    <div class="field-row">
+      <label class="field">
+        <span>Font</span>
+        <select [(ngModel)]="font" (ngModelChange)="emitChange()">
+          <option value="Helvetica">Helvetica</option>
+          <option value="Times-Roman">Times Roman</option>
+          <option value="Courier">Courier</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Size · {{ fontSize }} pt</span>
+        <input type="range" min="8" max="120" step="1" [(ngModel)]="fontSize" (ngModelChange)="emitChange()" />
+      </label>
+    </div>
+
+    <label class="field color-field">
+      <span>Color</span>
+      <span class="color-control"><input type="color" [(ngModel)]="color" (ngModelChange)="emitChange()" /><code>{{ color }}</code></span>
+    </label>
+  } @else {
+    <label class="image-picker">
+      <input type="file" accept="image/png,image/jpeg,image/webp" (change)="onImageSelected($event)" hidden />
+      <span class="image-picker-icon">＋</span>
+      <span><strong>{{ imageFile ? imageFile.name : 'Choose watermark image' }}</strong><small>PNG, JPEG or WebP · max 5 MB</small></span>
+    </label>
+
+    @if (imagePreviewUrl) {
+      <div class="image-preview-row"><img [src]="imagePreviewUrl" alt="Selected watermark image" /><span>Selected watermark</span></div>
+    }
+
+    <label class="field">
+      <span>Image scale · {{ imageScalePercent }}%</span>
+      <input type="range" min="5" max="80" step="1" [(ngModel)]="imageScalePercent" (ngModelChange)="emitChange()" />
+    </label>
+  }
+
+  <label class="field watermark-opacity-field">
+    <span>Opacity · {{ (opacity * 100).toFixed(0) }}%</span>
+    <input type="range" min="0.05" max="1" step="0.01" [(ngModel)]="opacity" (ngModelChange)="emitChange()" />
+  </label>
+
+  <label class="field watermark-rotation-field">
+    <span>Rotation · {{ rotation }}°</span>
+    <input type="range" min="-180" max="180" step="1" [(ngModel)]="rotation" (ngModelChange)="emitChange()" />
+    <div class="rotation-presets" aria-label="Rotation presets">
+      @for (preset of rotationPresets; track preset.value) {
+        <button type="button" [class.active]="rotation === preset.value" [disabled]="busy" (click)="rotation = preset.value; emitChange()">{{ preset.label }}</button>
+      }
+    </div>
+  </label>
+
+  <div class="field position-field">
+    <div class="position-heading"><span>{{ tiled ? 'Pattern position' : 'Position' }}</span><strong>{{ tiled ? 'Auto pattern' : selectedPositionLabel }}</strong></div>
+    <small class="field-help">{{ tiled ? 'Position presets apply only to a single watermark. Turn off Repeat across the page to use a position.' : "Choose where the watermark's visible bounds should sit on the page." }}</small>
+    <div class="position-grid" role="radiogroup" aria-label="Watermark position">
+      @for (item of positions; track item.id) {
+        <button type="button" role="radio" [attr.aria-checked]="position === item.id" [class.active]="position === item.id" [attr.aria-label]="item.name" [attr.title]="item.name" [disabled]="busy || tiled" (click)="position = item.id; emitChange()"><span>{{ item.label }}</span><small>{{ item.name }}</small></button>
+      }
+    </div>
+  </div>
+
+  <label class="toggle-row">
+    <span><strong>Repeat across the page</strong><small>{{ tiled ? 'Adds four repeated watermarks across the page.' : 'Adds exactly one watermark at the selected position.' }}</small></span>
+    <input type="checkbox" [(ngModel)]="tiled" (ngModelChange)="emitChange()" />
+  </label>
+
+  <div class="page-scope">
+    <div class="scope-heading"><span>Apply to</span><strong>{{ selectedPageSummary }}</strong></div>
+    <div class="scope-pills">
+      <button type="button" [class.active]="pageMode === 'all'" [disabled]="busy" (click)="pageMode = 'all'; emitChange()">All pages</button>
+      <button type="button" [class.active]="pageMode === 'ranges'" [disabled]="busy" (click)="pageMode = 'ranges'; emitChange()">Page range</button>
+    </div>
+    @if (pageMode === 'ranges') {
+      <input class="range-input" type="text" [(ngModel)]="pageRanges" (ngModelChange)="emitChange()" placeholder="1-3,5,8-10" aria-label="Pages to watermark" />
+    }
+  </div>
+
+  @if (errorMessage || imageErrorMessage) {
+    <div class="error-box" role="alert">⚠ {{ errorMessage || imageErrorMessage }}</div>
+  }
+
+  @if (showApplyButton || showRemoveButton) {
+    <div class="actions">
+      @if (showApplyButton) {
+        <button type="button" class="primary-btn" [disabled]="!canApply" (click)="apply()">{{ busy ? 'Processing…' : applyLabel }}</button>
+      }
+      <button type="button" class="secondary-btn" [disabled]="busy" (click)="resetOptions()">Reset</button>
+    </div>
+  }
+
+  @if (showRemoveButton) {
+    <div class="danger-zone">
+      <button
+        type="button"
+        class="danger-btn"
+        [disabled]="busy"
+        (click)="remove()"
+      >
+        {{ removeLabel }}
+      </button>
+    </div>
+  }
+</div>

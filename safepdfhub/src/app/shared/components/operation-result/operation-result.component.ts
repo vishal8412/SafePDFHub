@@ -25,7 +25,7 @@ export class OperationResultComponent {
   @Input() actionDescription = 'Save your finished PDF to your device';
   @Input() statusLabel = 'Ready';
   @Input() processedLabel = 'On this device';
-  @Input() footerNote = 'Your document was processed locally. Nothing was uploaded to a server.';
+  @Input() footerNote = 'Your document was processed on this device. Nothing was uploaded to a server.';
   @Input() showFooterNote = true;
 
   @Input() privacyHeading = 'Your PDF stayed on this device.';

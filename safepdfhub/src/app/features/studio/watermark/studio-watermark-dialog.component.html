@@ -1,0 +1,26 @@
+<div class="studio-watermark-dialog" role="presentation" (click)="closed.emit()">
+  <section class="studio-watermark-dialog__panel" role="dialog" aria-modal="true" aria-labelledby="studio-watermark-title" (click)="$event.stopPropagation()">
+    <header class="studio-watermark-dialog__header">
+      <div>
+        <span class="studio-watermark-dialog__eyebrow">STUDIO WATERMARK</span>
+        <h2 id="studio-watermark-title">Watermark this PDF</h2>
+        <p>{{ fileName }} · {{ pageCount }} pages. Studio changes are included before the watermark is applied.</p>
+      </div>
+      <button type="button" class="studio-watermark-dialog__close" [disabled]="busy" (click)="closed.emit()" aria-label="Close watermark dialog">×</button>
+    </header>
+
+    <div class="studio-watermark-dialog__body">
+      <app-watermark-controls
+        [pageCount]="pageCount"
+        [busy]="busy"
+        [errorMessage]="errorMessage"
+        [compact]="true"
+        (applyWatermark)="applied.emit($event)"
+      />
+    </div>
+
+    @if (busy) {
+      <div class="studio-watermark-dialog__processing" aria-live="polite">Preparing the current Studio document, applying the watermark, and exporting locally…</div>
+    }
+  </section>
+</div>

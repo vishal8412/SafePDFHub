@@ -51,6 +51,46 @@
         ></canvas>
 
 
+        @if (isWatermarkVisibleOnCurrentPage()) {
+          <svg
+            class="studio-watermark-preview"
+            [attr.viewBox]="watermarkSvgViewBox()"
+            preserveAspectRatio="none"
+            aria-label="Watermark preview"
+            [style.opacity]="watermarkOpacity()"
+          >
+            @if (watermarkRequest()?.kind === 'text') {
+              @for (center of watermarkCenters(); track $index) {
+                <text
+                  [attr.x]="center.x"
+                  [attr.y]="center.y"
+                  text-anchor="middle"
+                  dominant-baseline="middle"
+                  [attr.transform]="watermarkTransform(center)"
+                  [attr.fill]="watermarkColor()"
+                  [attr.font-family]="watermarkFontFamily()"
+                  [attr.font-size]="watermarkFontSizePx()"
+                  font-weight="400"
+                  letter-spacing="0"
+                  style="paint-order:stroke;stroke:transparent;stroke-width:0"
+                >{{ watermarkRequest()?.text }}</text>
+              }
+            } @else if (watermarkImageUrl()) {
+              @for (center of watermarkCenters(); track $index) {
+                <image
+                  [attr.x]="center.x - watermarkImageWidthPx() / 2"
+                  [attr.y]="center.y - watermarkImageHeightPx() / 2"
+                  [attr.width]="watermarkImageWidthPx()"
+                  [attr.height]="watermarkImageHeightPx()"
+                  [attr.href]="watermarkImageUrl()"
+                  [attr.transform]="watermarkTransform(center)"
+                  preserveAspectRatio="none"
+                />
+              }
+            }
+          </svg>
+        }
+
         <!-- =====================================================
              STUDIO OBJECTS
         ====================================================== -->

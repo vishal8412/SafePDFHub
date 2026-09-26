@@ -1,5 +1,6 @@
 <main
   class="studio-workspace"
+  [class.studio-workspace--watermark-open]="watermark.isOpen()"
   [class.studio-workspace--organize-focus]="organizeFocusMode()"
   aria-label="Studio workspace">
 
@@ -510,6 +511,10 @@
   <!-- ======================================================
        RIGHT SIDEBAR — PROPERTY INSPECTOR
   ======================================================= -->
+
+  @if (watermark.isOpen()) {
+    <button type="button" class="studio-watermark-mobile-backdrop" aria-label="Close watermark settings" (click)="watermark.close()"></button>
+  }
 
   <app-studio-right-sidebar />
 

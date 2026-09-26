@@ -44,7 +44,7 @@
        UPLOAD AREA
   ===================== -->
 
-  <div *ngIf="(!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode)"
+  <div *ngIf="(!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode) && !(isWatermarkTool && isWorkspaceMode)"
     #uploadDropZone
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
@@ -100,7 +100,7 @@
   </ng-container>
 
   <!-- 🔥 COMPACT MODE -->
-  <ng-container *ngIf="isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
+  <ng-container *ngIf="isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool && !isWatermarkTool">
     <div class="upload-compact" (click)="addMoreFiles()">
       <span>+ Add more files</span>
     </div>
@@ -118,7 +118,24 @@
   (replaceFile)="triggerUpload()"
 ></app-sign-pdf-workspace>
 
-<div class="workspace" *ngIf="isWorkspaceMode && !isSignTool">
+<app-watermark-workspace
+  *ngIf="isWorkspaceMode && isWatermarkTool"
+  [file]="workspace.files[0] || null"
+  [fileName]="workspace.files[0]?.name || ''"
+  [pageCount]="workspace.pageCounts[0] || 0"
+  [fileSize]="getTotalSize()"
+  [busy]="workspace.loading"
+  [progress]="watermarkProgress"
+  [errorMessage]="watermarkErrorMessage"
+  [result]="watermarkResult"
+  (replaceFile)="triggerUpload()"
+  (applyWatermark)="runWatermarkOperation($event)"
+  (downloadResult)="downloadWatermarkResult()"
+  (processAnother)="processAnotherWatermarkPdf()"
+  (editAgain)="editWatermarkAgain()"
+></app-watermark-workspace>
+
+<div class="workspace" *ngIf="isWorkspaceMode && !isSignTool && !isWatermarkTool">
 
   <!-- =========================
      PDF SECURITY WORKSPACE
@@ -175,6 +192,7 @@
 ========================= -->
 <app-split-workspace
   *ngIf="isWorkspaceMode && isSplitTool"
+  [file]="workspace.files[0] || null"
   [fileName]="workspace.files[0]?.name || ''"
   [pageCount]="workspace.pageCounts[0] || 0"
   [fileSize]="getTotalSize()"

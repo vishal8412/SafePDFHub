@@ -9,13 +9,16 @@ import {
   OnDestroy,
   ViewChild,
   effect,
-  inject
+  inject,
+  signal
 } from '@angular/core';
 
 import { StudioFacade } from '../../facade/studio.facade';
 import { SelectionEngineService } from '../../services/selection-engine.service';
 import { StudioObjectService } from '../../services/studio-object.service';
 import type { StudioToolId } from '../../models/studio-tool.model';
+import { StudioWatermarkStateService } from '../../state/studio-watermark-state.service';
+import { watermarkDisplayPositionCenter, watermarkTiledCenters, resolveWatermarkPageSelection } from '../../../../core/watermark/pdf-watermark.service';
 import type {
   StudioObject,
   StudioImageData,
@@ -84,6 +87,13 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
 
   readonly facade =
     inject(StudioFacade);
+
+  readonly watermark =
+    inject(StudioWatermarkStateService);
+
+  readonly watermarkImageUrl = signal('');
+  readonly watermarkImageAspectRatio = signal(1);
+  private watermarkImageFile: File | null = null;
 
   @ViewChild('pdfCanvas', {
     static: true
@@ -359,6 +369,29 @@ private activeRenderVersion: number | null = null;
   private readonly MIN_COMMENT_SIZE = 18;
 
   constructor() {
+    effect(() => {
+      const request = this.watermark.isOpen()
+        ? this.watermark.draft()
+        : this.watermark.committed();
+      const file = request?.kind === 'image' ? (request.imageFile ?? null) : null;
+      if (file === this.watermarkImageFile) return;
+
+      this.revokeWatermarkImagePreview();
+      this.watermarkImageFile = file;
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      this.watermarkImageUrl.set(url);
+      const image = new Image();
+      image.onload = () => {
+        if (this.watermarkImageUrl() !== url) return;
+        if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+          this.watermarkImageAspectRatio.set(image.naturalWidth / image.naturalHeight);
+        }
+      };
+      image.src = url;
+    });
+
     /**
      * Re-render whenever a render-relevant Studio
      * state value changes.
@@ -6350,12 +6383,166 @@ onWindowKeyDown(
     this.resizeFrame = null;
   }
 
+  watermarkRequest() {
+    return this.watermark.isOpen()
+      ? this.watermark.draft()
+      : this.watermark.committed();
+  }
+
+  isWatermarkVisibleOnCurrentPage(): boolean {
+    const request = this.watermarkRequest();
+    if (!request || !this.facade.hasDocument()) return false;
+    try {
+      return resolveWatermarkPageSelection(request.pageSelection, this.facade.pageCount()).includes(this.facade.currentPage());
+    } catch {
+      return false;
+    }
+  }
+
+  watermarkPageWidth(): number {
+    return this.pageRef?.nativeElement.clientWidth ?? 0;
+  }
+
+  watermarkPageHeight(): number {
+    return this.pageRef?.nativeElement.clientHeight ?? 0;
+  }
+
+  watermarkFontFamily(): string {
+    const request = this.watermarkRequest();
+    switch (request?.font) {
+      case 'Times-Roman': return 'Times New Roman, Times, serif';
+      case 'Courier': return 'Courier New, Courier, monospace';
+      default: return 'Helvetica, Arial, sans-serif';
+    }
+  }
+
+  watermarkFontSizePx(): number {
+    const request = this.watermarkRequest();
+    return Math.max(1, (request?.fontSize ?? 42) * this.facade.renderScale());
+  }
+
+  watermarkTextWidthPx(): number {
+    const request = this.watermarkRequest();
+    const text = request?.text ?? '';
+    if (!text) return 0;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) return this.watermarkFontSizePx() * text.length * 0.55;
+    context.font = `${this.watermarkFontSizePx()}px ${this.watermarkFontFamily()}`;
+    return context.measureText(text).width;
+  }
+
+  watermarkTextHeightPx(): number {
+    return this.watermarkFontSizePx() * 1.16;
+  }
+
+  watermarkCenters(): readonly { x: number; y: number }[] {
+    const request = this.watermarkRequest();
+    const width = this.watermarkPageWidth();
+    const height = this.watermarkPageHeight();
+    if (!request || width <= 0 || height <= 0) return [];
+
+    // Studio's SVG preview is top-origin. Resolve single-position anchors
+    // directly in display coordinates. Do not route them through PDF-space and
+    // invert Y again at the SVG boundary. Repeat geometry remains shared PDF
+    // geometry and is converted exactly once below.
+    if (request.kind === 'text') {
+      const watermarkWidth = this.watermarkTextWidthPx();
+      const watermarkHeight = this.watermarkTextHeightPx();
+      if (!request.tiled) {
+        return [watermarkDisplayPositionCenter(
+          request.position,
+          width,
+          height,
+          watermarkWidth,
+          watermarkHeight,
+          request.rotation,
+        )];
+      }
+
+      return watermarkTiledCenters(
+        width,
+        height,
+        watermarkWidth,
+        watermarkHeight,
+        'text',
+        1,
+        request.rotation,
+      ).map(point => ({
+        x: point.x,
+        y: height - point.y,
+      }));
+    }
+
+    const aspect = Math.max(0.01, this.watermarkImageAspectRatio());
+    const imageWidth = Math.min(width * (request.imageScalePercent / 100), width * 0.8);
+    const imageHeight = Math.max(1, imageWidth / aspect);
+    if (!request.tiled) {
+      return [watermarkDisplayPositionCenter(
+        request.position,
+        width,
+        height,
+        imageWidth,
+        imageHeight,
+        request.rotation,
+      )];
+    }
+
+    return watermarkTiledCenters(
+      width,
+      height,
+      imageWidth,
+      imageHeight,
+      'image',
+      1,
+      request.rotation,
+    ).map(point => ({
+      x: point.x,
+      y: height - point.y,
+    }));
+  }
+
+  watermarkImageWidthPx(): number {
+    const request = this.watermarkRequest();
+    return Math.min(this.watermarkPageWidth() * ((request?.imageScalePercent ?? 28) / 100), this.watermarkPageWidth() * 0.8);
+  }
+
+  watermarkImageHeightPx(): number {
+    return Math.max(1, this.watermarkImageWidthPx() / Math.max(0.01, this.watermarkImageAspectRatio()));
+  }
+
+  watermarkTransform(center: { x: number; y: number }): string {
+    const request = this.watermarkRequest();
+    return `rotate(${request?.rotation ?? 0} ${center.x} ${center.y})`;
+  }
+
+  watermarkSvgViewBox(): string {
+    return `0 0 ${this.watermarkPageWidth()} ${this.watermarkPageHeight()}`;
+  }
+
+  watermarkOpacity(): number {
+    return this.watermarkRequest()?.opacity ?? 0;
+  }
+
+  watermarkColor(): string {
+    return this.watermarkRequest()?.color ?? '#17324d';
+  }
+
+  private revokeWatermarkImagePreview(): void {
+    const url = this.watermarkImageUrl();
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+    this.watermarkImageUrl.set('');
+    this.watermarkImageAspectRatio.set(1);
+    this.watermarkImageFile = null;
+  }
+
 /**
  * ----------------------------------------------------------
  * DESTROY
  * ----------------------------------------------------------
  */
 ngOnDestroy(): void {
+  this.revokeWatermarkImagePreview();
 
   /**
    * Mark destruction first so any asynchronous render completion

@@ -1,0 +1,126 @@
+<section class="watermark-workspace" [class.watermark-workspace--result]="!!result" aria-label="Watermark PDF">
+  @if (!result) {
+    <header class="watermark-topbar">
+      <h1 id="watermark-title">Watermark PDF</h1>
+      <button type="button" class="replace-btn" [disabled]="busy" (click)="onReplace()">Replace PDF</button>
+    </header>
+  }
+
+  @if (result) {
+    <app-operation-result
+      [file]="result.file"
+      [originalFileName]="fileName"
+      [durationMs]="result.durationMs"
+      eyebrow="WATERMARK COMPLETE"
+      title="Your watermarked PDF is ready"
+      description="Your watermark was applied to the selected PDF pages."
+      operationLabel="Watermarked PDF"
+      icon="watermark-complete"
+      actionLabel="Download watermarked PDF"
+      actionDescription="Save your finished PDF to your device"
+      privacyHeading="Your PDF stayed on this device."
+      privacyDescription="SafePDFHub did not upload or receive your document."
+      [showEditAgain]="true"
+      editAgainLabel="Back to watermark settings"
+      processAnotherLabel="Watermark another PDF"
+      (download)="downloadResult.emit()"
+      (editAgain)="editAgain.emit()"
+      (processAnother)="processAnother.emit()"
+    />
+  } @else {
+    <div class="file-summary" aria-label="Selected PDF">
+      <div class="file-mark" aria-hidden="true">PDF</div>
+      <div class="file-copy"><strong [title]="fileName">{{ fileName }}</strong><span>{{ pageCount }} pages · {{ fileSize }}</span></div>
+      <div class="privacy-chip"><span class="privacy-chip__dot" aria-hidden="true"></span>On this device</div>
+    </div>
+
+    <div class="workspace-grid">
+      <section class="preview-card" aria-label="Watermark preview">
+        <div class="section-heading">
+          <div><span class="section-kicker">LIVE PREVIEW</span><h2>Preview every page</h2></div>
+          <div class="page-navigation" aria-label="Preview page navigation">
+            <button class="page-nav-btn" type="button" aria-label="Previous page" [disabled]="currentPage <= 1 || previewLoading" (click)="previousPage()">
+              <span aria-hidden="true">←</span>
+            </button>
+            <label class="page-number-control">
+              <span>Page</span>
+              <input type="number" min="1" [max]="pageCount" [value]="currentPage" [disabled]="previewLoading" (change)="goToPage(+$any($event.target).value)" />
+              <span class="page-count">of {{ pageCount }}</span>
+            </label>
+            <button class="page-nav-btn" type="button" aria-label="Next page" [disabled]="currentPage >= pageCount || previewLoading" (click)="nextPage()">
+              <span aria-hidden="true">→</span>
+            </button>
+            <input
+              class="page-slider"
+              type="range"
+              min="1"
+              [max]="pageCount"
+              [value]="currentPage"
+              [disabled]="pageCount <= 1"
+              [attr.aria-label]="'Preview page ' + currentPage + ' of ' + pageCount"
+              (input)="onPageSliderInput(+$any($event.target).value)"
+            />
+          </div>
+        </div>
+
+        <div class="page-stage">
+          @if (previewLoading) {
+            <div class="preview-empty"><span class="preview-spinner"></span>Rendering page {{ currentPage }}…</div>
+          } @else if (previewError) {
+            <div class="preview-empty preview-empty--error"><strong>Preview unavailable</strong><span>{{ previewError }}</span><button type="button" (click)="onPreviewRetry()">Try again</button></div>
+          } @else if (previewPage) {
+            <div #previewPageElement class="preview-page">
+              <img [src]="previewPage.imageUrl" [alt]="'PDF page ' + currentPage" />
+              @if (isCurrentPageSelected()) {
+                @if (previewRequest.kind === 'text') {
+                  <svg class="preview-watermark-text-layer" [attr.viewBox]="'0 0 ' + previewPage.width + ' ' + previewPage.height" preserveAspectRatio="none" aria-hidden="true">
+                    @for (center of previewTextCenters(); track $index) {
+                      <text
+                        [attr.x]="center.x"
+                        [attr.y]="center.y + previewTextBaselineOffset()"
+                        text-anchor="middle"
+                        dominant-baseline="alphabetic"
+                        [attr.transform]="previewTextTransform(center)"
+                        [attr.fill]="previewRequest.color"
+                        [attr.fill-opacity]="previewRequest.opacity"
+                        [attr.font-family]="previewFontFamily()"
+                        [attr.font-size]="previewTextFontSize()"
+                        font-weight="400">{{ previewRequest.text || 'WATERMARK' }}</text>
+                    }
+                  </svg>
+                } @else if (previewRequest.tiled) {
+                  @for (center of previewTileCenters(); track $index) {
+                    <div class="preview-watermark preview-watermark--tiled" [style.color]="previewRequest.color" [style.opacity]="previewRequest.opacity" [style.transform]="previewTransform()" [style.left.px]="center.left" [style.top.px]="center.top" [style.width]="previewWatermarkBoxStyle().width" [style.height]="previewWatermarkBoxStyle().height" [style.fontSize.px]="previewFontSize()" [style.fontFamily]="previewFontFamily()">
+                      @if (previewRequest.imageFile) { <img [src]="previewImageUrl" alt="" [style.width]="previewImageWidth()" /> }
+                    </div>
+                  }
+                } @else {
+                  <div class="preview-watermark" [ngClass]="'position--' + previewRequest.position" [style.color]="previewRequest.color" [style.opacity]="previewRequest.opacity" [style.transform]="previewTransform()" [style.left]="previewAnchorStyle().left" [style.top]="previewAnchorStyle().top" [style.width]="previewWatermarkBoxStyle().width" [style.height]="previewWatermarkBoxStyle().height" [style.fontSize.px]="previewFontSize()" [style.fontFamily]="previewFontFamily()">
+                    @if (previewRequest.imageFile) { <img [src]="previewImageUrl" alt="" [style.width]="previewImageWidth()" /> }
+                  </div>
+                }
+              } @else {
+                <div class="preview-scope-note">Watermark is not applied to this page</div>
+              }
+            </div>
+          } @else {
+            <div class="preview-empty">Preparing preview…</div>
+          }
+        </div>
+        <p class="preview-note">Use the page controls to inspect every page. The preview matches the exported PDF, including position, rotation, scale, opacity, repeat mode, and page scope.</p>
+      </section>
+
+      <app-watermark-controls
+        [pageCount]="pageCount"
+        [busy]="busy"
+        [errorMessage]="errorMessage"
+        (requestChange)="onConfigurationChange($event)"
+        (applyWatermark)="applyWatermark.emit($event)"
+      />
+    </div>
+
+    @if (busy) {
+      <div class="progress-box" aria-live="polite"><div><span>Applying watermark…</span><strong>{{ progress }}%</strong></div><div class="progress-track"><span [style.width.%]="progress"></span></div></div>
+    }
+  }
+</section>
