@@ -2583,36 +2583,246 @@
 }
 
 
-.studio-watermark-mobile-backdrop {
+.studio-responsive-actions,
+.studio-responsive-backdrop,
+.studio-responsive-panel-close {
   display: none;
 }
 
+/* ==========================================================
+   RESPONSIVE STUDIO — CANVAS FIRST
+
+   Desktop keeps the established three-column editor. At <=920px,
+   navigation and inspection become contextual drawers so the PDF canvas
+   remains the primary surface. At <=700px the inspector becomes a bottom
+   sheet, preserving a meaningful portion of the document while editing.
+========================================================== */
+
 @media (max-width: 920px) {
-  .studio-workspace--watermark-open .studio-workspace__right-sidebar {
+  .studio-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio-workspace__left-sidebar {
+    display: block;
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: min(320px, calc(100% - 28px));
+    height: 100%;
+    z-index: 140;
+    transform: translateX(-102%);
+    border-right: 1px solid rgba(255,255,255,.09);
+    background: #07111f;
+    box-shadow: 24px 0 60px rgba(0,0,0,.38);
+    transition: transform 180ms cubic-bezier(.2,.8,.2,1);
+  }
+
+  .studio-workspace__left-sidebar--mobile-open {
+    transform: translateX(0);
+  }
+
+  .studio-workspace__right-sidebar {
     display: block;
     position: absolute;
     inset: 0 0 0 auto;
-    width: min(360px, calc(100% - 24px));
-    z-index: 120;
+    width: min(360px, calc(100% - 28px));
+    height: 100%;
+    z-index: 140;
+    transform: translateX(102%);
+    border-left: 1px solid rgba(255,255,255,.09);
     background: #07111f;
-    box-shadow: -24px 0 60px rgba(0,0,0,.42);
+    box-shadow: -24px 0 60px rgba(0,0,0,.38);
+    transition: transform 180ms cubic-bezier(.2,.8,.2,1);
   }
 
-  .studio-workspace--watermark-open .studio-watermark-mobile-backdrop {
-    display: block;
+  .studio-workspace__right-sidebar--mobile-open {
+    transform: translateX(0);
+  }
+
+  .studio-responsive-backdrop {
     position: absolute;
     inset: 0;
-    z-index: 110;
+    z-index: 130;
     width: 100%;
     height: 100%;
+    padding: 0;
     border: 0;
-    background: rgba(0,0,0,.38);
+    background: rgba(1,7,15,.16);
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
     cursor: default;
+  }
+
+  .studio-responsive-backdrop.is-open {
+    display: block;
+  }
+
+  .studio-responsive-panel-close {
+    position: absolute;
+    top: 10px;
+    z-index: 8;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 9px;
+    background: rgba(8,20,34,.92);
+    color: rgba(235,243,249,.72);
+    font: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,0,0,.22);
+  }
+
+  .studio-responsive-panel-close:hover,
+  .studio-responsive-panel-close:focus-visible {
+    border-color: rgba(0,212,179,.30);
+    color: #62e7d5;
+    outline: none;
+  }
+
+  .studio-responsive-panel-close--left {
+    right: 10px;
+  }
+
+  .studio-responsive-panel-close--right {
+    right: 10px;
+  }
+
+  .studio-responsive-actions {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    z-index: 100;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px;
+    border: 1px solid rgba(255,255,255,.09);
+    border-radius: 13px;
+    background: rgba(8,20,34,.88);
+    box-shadow: 0 10px 28px rgba(0,0,0,.28);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .studio-responsive-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 76px;
+    min-height: 38px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: rgba(232,242,250,.70);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 750;
+    cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+  }
+
+  .studio-responsive-action svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .studio-responsive-action:hover,
+  .studio-responsive-action.is-active {
+    border-color: rgba(0,212,179,.24);
+    background: rgba(0,212,179,.09);
+    color: #62e7d5;
+  }
+
+  .studio-responsive-action:focus-visible {
+    outline: 2px solid rgba(0,212,179,.65);
+    outline-offset: 2px;
   }
 }
 
 @media (max-width: 700px) {
-  .studio-workspace--watermark-open .studio-workspace__right-sidebar {
-    width: min(390px, calc(100% - 12px));
+  .studio-workspace__left-sidebar {
+    width: min(330px, calc(100% - 22px));
+  }
+
+  .studio-workspace__right-sidebar {
+    inset: auto 0 0 0;
+    width: 100%;
+    max-width: none;
+    height: min(62dvh, 560px);
+    min-height: 300px;
+    border-top: 1px solid rgba(255,255,255,.10);
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(105%);
+    box-shadow: 0 -20px 55px rgba(0,0,0,.42);
+    overflow: hidden;
+  }
+
+  .studio-workspace__right-sidebar::before {
+    content: '';
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    z-index: 7;
+    width: 42px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.18);
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .studio-workspace__right-sidebar--mobile-open {
+    transform: translateY(0);
+  }
+
+  .studio-responsive-actions {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    justify-content: center;
+  }
+
+  .studio-responsive-action {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .studio-workspace__right-sidebar {
+    height: min(64dvh, 560px);
+    min-height: 285px;
+  }
+
+  .studio-responsive-actions {
+    bottom: 8px;
+  }
+
+  .studio-responsive-action {
+    min-height: 36px;
+    font-size: 9px;
+  }
+}
+
+/* Respect reduced-motion preferences for responsive panel transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .studio-workspace__left-sidebar,
+  .studio-workspace__right-sidebar,
+  .studio-responsive-action {
+    transition: none;
   }
 }

@@ -9,6 +9,7 @@ import {
   watermarkPositionCenterTopOrigin,
   watermarkRotatedBounds,
   watermarkTiledCenters,
+  watermarkTiledScale,
 } from './pdf-watermark.service';
 
 describe('PdfWatermarkService geometry contracts', () => {
@@ -22,6 +23,11 @@ describe('PdfWatermarkService geometry contracts', () => {
 
   it('rejects ranges outside the document', () => {
     expect(() => resolveWatermarkPageSelection({ mode: 'ranges', ranges: '2-6' }, 5)).toThrow();
+  });
+
+  it('keeps current-page selection explicit instead of encoding it as a range', () => {
+    expect(resolveWatermarkPageSelection({ mode: 'current', page: 3 }, 5)).toEqual([3]);
+    expect(() => resolveWatermarkPageSelection({ mode: 'current', page: 6 }, 5)).toThrow();
   });
 
 
@@ -143,9 +149,54 @@ describe('PdfWatermarkService geometry contracts', () => {
   });
 
 
-  it('uses exactly four normalized repeat anchors', () => {
-    const centers = watermarkTiledCenters(600, 800, 120, 42, 'text', 1, -35);
+
+  it('keeps all nine position anchors in the correct visual quadrant for every supported rotation', () => {
+    const positions = [
+      'top-left', 'top-center', 'top-right',
+      'middle-left', 'center', 'middle-right',
+      'bottom-left', 'bottom-center', 'bottom-right',
+    ] as const;
+    const rotations = [-180, -135, -90, -45, 0, 45, 90, 135, 180];
+
+    for (const rotation of rotations) {
+      for (const position of positions) {
+        const center = watermarkDisplayPositionCenter(position, 600, 800, 100, 50, rotation);
+
+        if (position.startsWith('top')) expect(center.y).toBeLessThan(400);
+        if (position.startsWith('bottom')) expect(center.y).toBeGreaterThan(400);
+        if (position.endsWith('left')) expect(center.x).toBeLessThan(300);
+        if (position.endsWith('right')) expect(center.x).toBeGreaterThan(300);
+        if (position === 'center') expect(center).toEqual({ x: 300, y: 400 });
+      }
+    }
+  });
+
+  it('keeps all four repeat anchors available for every supported rotation', () => {
+    const rotations = [-180, -135, -90, -45, 0, 45, 90, 135, 180];
+
+    for (const rotation of rotations) {
+      const centers = watermarkTiledCenters(600, 800, 120, 50, 'text', 1, rotation);
+      expect(centers).toHaveLength(4);
+      expect(new Set(centers.map(center => `${center.x}:${center.y}`)).size).toBe(4);
+    }
+  });
+
+  it('uses exactly four fixed normalized repeat anchors', () => {
+    const centers = watermarkTiledCenters(600, 800, 420, 120, 'text', 1, -35);
     expect(centers).toEqual([
+      { x: 150, y: 600 },
+      { x: 450, y: 600 },
+      { x: 150, y: 200 },
+      { x: 450, y: 200 },
+    ]);
+  });
+
+  it('scales oversized repeated content instead of moving its anchors', () => {
+    const scale = watermarkTiledScale(600, 800, 420, 120, -35);
+    expect(scale).toBeLessThan(1);
+    expect(scale).toBeGreaterThan(0);
+    const anchors = watermarkTiledCenters(600, 800, 420 * scale, 120 * scale, 'text', 1, -35);
+    expect(anchors).toEqual([
       { x: 150, y: 600 },
       { x: 450, y: 600 },
       { x: 150, y: 200 },
@@ -171,18 +222,20 @@ describe('PdfWatermarkService geometry contracts', () => {
     }
   });
 
-  it('keeps the four repeat copies fully visible when the rotated bounds approach the edges', () => {
+  it('keeps repeated rotated bounds visible by scaling content at the fixed anchors', () => {
     const pageWidth = 612;
     const pageHeight = 792;
     const width = 420;
     const height = 120;
     const rotation = -35;
-    const centers = watermarkTiledCenters(pageWidth, pageHeight, width, height, 'text', 1, rotation);
-    const bounds = watermarkRotatedBounds(width, height, rotation);
+    const scale = watermarkTiledScale(pageWidth, pageHeight, width, height, rotation);
+    const centers = watermarkTiledCenters(pageWidth, pageHeight, width * scale, height * scale, 'text', 1, rotation);
+    const bounds = watermarkRotatedBounds(width * scale, height * scale, rotation);
     const marginX = Math.max(18, pageWidth * 0.04);
     const marginY = Math.max(18, pageHeight * 0.04);
 
     expect(centers).toHaveLength(4);
+    expect(centers[0]).toEqual({ x: pageWidth * 0.25, y: pageHeight * 0.75 });
     for (const center of centers) {
       expect(center.x - bounds.width / 2).toBeGreaterThanOrEqual(marginX);
       expect(center.x + bounds.width / 2).toBeLessThanOrEqual(pageWidth - marginX);
@@ -214,12 +267,18 @@ describe('PdfWatermarkService geometry contracts', () => {
     expect(page1).toHaveLength(4);
   });
 
-  it('does not clip repeated copies at the page edges', () => {
-    const centers = watermarkTiledCenters(612, 792, 420, 120, 'text', 1, -35);
-    const bounds = watermarkRotatedBounds(420, 120, -35);
+  it('does not clip repeated copies at the page edges after repeat scaling', () => {
+    const pageWidth = 612;
+    const pageHeight = 792;
+    const width = 420;
+    const height = 120;
+    const rotation = -35;
+    const scale = watermarkTiledScale(pageWidth, pageHeight, width, height, rotation);
+    const centers = watermarkTiledCenters(pageWidth, pageHeight, width * scale, height * scale, 'text', 1, rotation);
+    const bounds = watermarkRotatedBounds(width * scale, height * scale, rotation);
     expect(centers).toHaveLength(4);
     expect(centers[0]!.x - bounds.width / 2).toBeGreaterThan(0);
-    expect(centers[1]!.x + bounds.width / 2).toBeLessThan(612);
+    expect(centers[1]!.x + bounds.width / 2).toBeLessThan(pageWidth);
   });
 
   it('inverts rotated display coordinates exactly once', () => {

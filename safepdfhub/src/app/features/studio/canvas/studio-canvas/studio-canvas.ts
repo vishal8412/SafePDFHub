@@ -18,7 +18,8 @@ import { SelectionEngineService } from '../../services/selection-engine.service'
 import { StudioObjectService } from '../../services/studio-object.service';
 import type { StudioToolId } from '../../models/studio-tool.model';
 import { StudioWatermarkStateService } from '../../state/studio-watermark-state.service';
-import { watermarkDisplayPositionCenter, watermarkTiledCenters, resolveWatermarkPageSelection } from '../../../../core/watermark/pdf-watermark.service';
+import { watermarkDisplayPositionCenter, watermarkTiledCenters, watermarkTiledScale, resolveWatermarkPageSelection } from '../../../../core/watermark/pdf-watermark.service';
+import { PdfWatermarkMetricsService, type WatermarkTextMetrics } from '../../../../core/watermark/pdf-watermark-metrics.service';
 import type {
   StudioObject,
   StudioImageData,
@@ -93,7 +94,10 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
 
   readonly watermarkImageUrl = signal('');
   readonly watermarkImageAspectRatio = signal(1);
+  readonly watermarkTextMetrics = signal<WatermarkTextMetrics | null>(null);
+  private watermarkTextMetricsGeneration = 0;
   private watermarkImageFile: File | null = null;
+  private readonly watermarkMetrics = inject(PdfWatermarkMetricsService);
 
   @ViewChild('pdfCanvas', {
     static: true
@@ -390,6 +394,27 @@ private activeRenderVersion: number | null = null;
         }
       };
       image.src = url;
+    });
+
+    effect(() => {
+      const request = this.watermark.isOpen()
+        ? this.watermark.draft()
+        : this.watermark.committed();
+      if (!request || request.kind !== 'text') {
+        this.watermarkTextMetrics.set(null);
+        return;
+      }
+
+      const generation = ++this.watermarkTextMetricsGeneration;
+      void this.watermarkMetrics.measure(request.font, request.text || 'WATERMARK', request.fontSize).then(metrics => {
+        if (generation === this.watermarkTextMetricsGeneration) {
+          this.watermarkTextMetrics.set(metrics);
+        }
+      }).catch(() => {
+        if (generation === this.watermarkTextMetricsGeneration) {
+          this.watermarkTextMetrics.set(null);
+        }
+      });
     });
 
     /**
@@ -6418,22 +6443,46 @@ onWindowKeyDown(
 
   watermarkFontSizePx(): number {
     const request = this.watermarkRequest();
-    return Math.max(1, (request?.fontSize ?? 42) * this.facade.renderScale());
+    const base = Math.max(1, (request?.fontSize ?? 42) * this.facade.renderScale());
+    if (!request?.tiled || request.kind !== 'text') return base;
+    const metrics = this.watermarkTextMetrics();
+    if (!metrics) return base;
+    return base * watermarkTiledScale(
+      this.watermarkPageWidth(),
+      this.watermarkPageHeight(),
+      metrics.width * this.facade.renderScale(),
+      metrics.height * this.facade.renderScale(),
+      request.rotation,
+    );
   }
 
   watermarkTextWidthPx(): number {
     const request = this.watermarkRequest();
-    const text = request?.text ?? '';
-    if (!text) return 0;
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (!context) return this.watermarkFontSizePx() * text.length * 0.55;
-    context.font = `${this.watermarkFontSizePx()}px ${this.watermarkFontFamily()}`;
-    return context.measureText(text).width;
+    const metrics = this.watermarkTextMetrics();
+    if (!request?.text) return 0;
+    if (metrics && metrics.text === request.text && metrics.font === request.font && metrics.fontSize === request.fontSize) {
+      return metrics.width * this.facade.renderScale();
+    }
+    return this.watermarkFontSizePx() * request.text.length * 0.55;
   }
 
   watermarkTextHeightPx(): number {
+    const request = this.watermarkRequest();
+    const metrics = this.watermarkTextMetrics();
+    if (request && metrics && metrics.text === (request.text || 'WATERMARK') && metrics.font === request.font && metrics.fontSize === request.fontSize) {
+      return metrics.height * this.facade.renderScale();
+    }
     return this.watermarkFontSizePx() * 1.16;
+  }
+
+  watermarkTextBaselineOffsetPx(): number {
+    const request = this.watermarkRequest();
+    const metrics = this.watermarkTextMetrics();
+    if (!request || !metrics) return 0;
+    const repeatScale = request.tiled
+      ? watermarkTiledScale(this.watermarkPageWidth(), this.watermarkPageHeight(), metrics.width * this.facade.renderScale(), metrics.height * this.facade.renderScale(), request.rotation)
+      : 1;
+    return ((metrics.ascenderHeight - metrics.descenderHeight) / 2) * this.facade.renderScale() * repeatScale;
   }
 
   watermarkCenters(): readonly { x: number; y: number }[] {
@@ -6451,27 +6500,14 @@ onWindowKeyDown(
       const watermarkHeight = this.watermarkTextHeightPx();
       if (!request.tiled) {
         return [watermarkDisplayPositionCenter(
-          request.position,
-          width,
-          height,
-          watermarkWidth,
-          watermarkHeight,
-          request.rotation,
+          request.position, width, height, watermarkWidth, watermarkHeight, request.rotation,
         )];
       }
 
+      const repeatScale = watermarkTiledScale(width, height, watermarkWidth, watermarkHeight, request.rotation);
       return watermarkTiledCenters(
-        width,
-        height,
-        watermarkWidth,
-        watermarkHeight,
-        'text',
-        1,
-        request.rotation,
-      ).map(point => ({
-        x: point.x,
-        y: height - point.y,
-      }));
+        width, height, watermarkWidth * repeatScale, watermarkHeight * repeatScale, 'text', 1, request.rotation,
+      ).map(point => ({ x: point.x, y: height - point.y }));
     }
 
     const aspect = Math.max(0.01, this.watermarkImageAspectRatio());
@@ -6488,23 +6524,18 @@ onWindowKeyDown(
       )];
     }
 
+    const repeatScale = watermarkTiledScale(width, height, imageWidth, imageHeight, request.rotation);
     return watermarkTiledCenters(
-      width,
-      height,
-      imageWidth,
-      imageHeight,
-      'image',
-      1,
-      request.rotation,
-    ).map(point => ({
-      x: point.x,
-      y: height - point.y,
-    }));
+      width, height, imageWidth * repeatScale, imageHeight * repeatScale, 'image', 1, request.rotation,
+    ).map(point => ({ x: point.x, y: height - point.y }));
   }
 
   watermarkImageWidthPx(): number {
     const request = this.watermarkRequest();
-    return Math.min(this.watermarkPageWidth() * ((request?.imageScalePercent ?? 28) / 100), this.watermarkPageWidth() * 0.8);
+    const baseWidth = Math.min(this.watermarkPageWidth() * ((request?.imageScalePercent ?? 28) / 100), this.watermarkPageWidth() * 0.8);
+    if (!request?.tiled) return baseWidth;
+    const baseHeight = Math.max(1, baseWidth / Math.max(0.01, this.watermarkImageAspectRatio()));
+    return baseWidth * watermarkTiledScale(this.watermarkPageWidth(), this.watermarkPageHeight(), baseWidth, baseHeight, request.rotation);
   }
 
   watermarkImageHeightPx(): number {

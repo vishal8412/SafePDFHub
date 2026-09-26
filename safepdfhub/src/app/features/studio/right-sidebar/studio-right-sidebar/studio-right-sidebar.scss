@@ -889,3 +889,75 @@
 .studio-watermark-inspector__status--saved {
   color: #69e5d4;
 }
+
+
+/* ==========================================================
+   RESPONSIVE INSPECTOR PRESENTATION
+   The document remains visible behind the inspector on smaller screens.
+========================================================== */
+@media (max-width: 700px) {
+  .studio-watermark-inspector__header {
+    padding: 22px 14px 10px;
+    gap: 8px;
+  }
+
+  .studio-watermark-inspector__eyebrow {
+    margin-bottom: 3px;
+    font-size: 9px;
+  }
+
+  .studio-watermark-inspector__header h2 {
+    font-size: 16px;
+  }
+
+  .studio-watermark-inspector__header p {
+    margin-top: 5px;
+    font-size: 10px;
+  }
+
+  .studio-watermark-inspector__close {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    font-size: 18px;
+  }
+
+  .studio-watermark-inspector__body .watermark-controls {
+    padding: 10px 12px 18px;
+  }
+
+  .properties__tabs {
+    padding: 0 8px;
+  }
+
+  .properties__tab {
+    height: 48px;
+    font-size: 11px;
+  }
+
+  .properties__scroll {
+    padding: 14px 14px 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .studio-watermark-inspector__header {
+    padding-inline: 12px;
+  }
+
+  .studio-watermark-inspector__body .watermark-controls {
+    padding-inline: 10px;
+  }
+
+  .properties__tabs {
+    padding-inline: 6px;
+  }
+
+  .properties__tab {
+    font-size: 10px;
+  }
+
+  .properties__scroll {
+    padding-inline: 12px;
+  }
+}

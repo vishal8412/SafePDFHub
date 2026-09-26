@@ -45,6 +45,27 @@ describe('StudioWatermarkStateService', () => {
     expect(service.hasUnappliedChanges()).toBe(false);
   });
 
+
+  it('restores committed watermark state without reopening the inspector', () => {
+    service.restoreCommitted({
+      kind: 'text',
+      text: 'RESTORED',
+      opacity: 0.4,
+      rotation: 45,
+      position: 'top-right',
+      pageSelection: { mode: 'all' },
+      tiled: false,
+      fontSize: 42,
+      font: 'Helvetica',
+      color: '#17324d',
+      imageScalePercent: 28,
+    });
+
+    expect(service.isOpen()).toBe(false);
+    expect(service.committed()?.text).toBe('RESTORED');
+    expect(service.draft()).toEqual(service.committed());
+  });
+
   it('clears both draft and committed state when the watermark is removed', () => {
     service.open();
     service.apply();

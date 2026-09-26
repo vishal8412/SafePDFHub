@@ -83,11 +83,25 @@
   <div class="page-scope">
     <div class="scope-heading"><span>Apply to</span><strong>{{ selectedPageSummary }}</strong></div>
     <div class="scope-pills">
-      <button type="button" [class.active]="pageMode === 'all'" [disabled]="busy" (click)="pageMode = 'all'; emitChange()">All pages</button>
-      <button type="button" [class.active]="pageMode === 'ranges'" [disabled]="busy" (click)="pageMode = 'ranges'; emitChange()">Page range</button>
+      <button type="button" [class.active]="pageMode === 'all'" [disabled]="busy" (click)="selectPageMode('all')">All pages</button>
+      <button type="button" [class.active]="pageMode === 'current'" [disabled]="busy" (click)="selectPageMode('current')">Current page</button>
+      <button type="button" [class.active]="pageMode === 'ranges'" [disabled]="busy" (click)="selectPageMode('ranges')">Page range</button>
     </div>
     @if (pageMode === 'ranges') {
-      <input class="range-input" type="text" [(ngModel)]="pageRanges" (ngModelChange)="emitChange()" placeholder="1-3,5,8-10" aria-label="Pages to watermark" />
+      <input
+        class="range-input"
+        type="text"
+        [(ngModel)]="pageRanges"
+        (ngModelChange)="onPageRangesChange($event)"
+        placeholder="1-3,5,8-10"
+        maxlength="500"
+        aria-label="Pages to watermark"
+        [attr.aria-invalid]="pageRangeError ? 'true' : 'false'"
+        [attr.aria-describedby]="pageRangeError ? 'watermark-page-range-error' : null"
+      />
+      @if (pageRangeError) {
+        <small id="watermark-page-range-error" class="range-error" role="alert">{{ pageRangeError }}</small>
+      }
     }
   </div>
 

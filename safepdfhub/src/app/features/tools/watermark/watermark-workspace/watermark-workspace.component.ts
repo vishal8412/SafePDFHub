@@ -13,10 +13,10 @@ import {
   inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
 import type { PdfWatermarkRequest, PdfWatermarkResult } from '../../../../core/watermark/pdf-watermark.types';
-import { resolveWatermarkPageSelection, watermarkDisplayCenterToCssTopLeft, watermarkDisplayPositionCenter, watermarkPositionCenter, watermarkTiledCenters } from '../../../../core/watermark/pdf-watermark.service';
+import { resolveWatermarkPageSelection, watermarkDisplayCenterToCssTopLeft, watermarkDisplayPositionCenter, watermarkTiledCenters, watermarkTiledScale } from '../../../../core/watermark/pdf-watermark.service';
 import { PdfWatermarkPreviewService, type WatermarkPreviewPage } from '../../../../core/watermark/pdf-watermark-preview.service';
+import { PdfWatermarkMetricsService, type WatermarkTextMetrics } from '../../../../core/watermark/pdf-watermark-metrics.service';
 import { WatermarkControlsComponent } from '../watermark-controls.component';
 import { OperationResultComponent } from '../../../../shared/components/operation-result/operation-result.component';
 
@@ -45,6 +45,7 @@ export class WatermarkWorkspaceComponent implements OnChanges, OnDestroy {
   @Output() readonly editAgain = new EventEmitter<void>();
 
   private readonly previewService = inject(PdfWatermarkPreviewService);
+  private readonly watermarkMetrics = inject(PdfWatermarkMetricsService);
   private readonly cd = inject(ChangeDetectorRef);
 
   @ViewChild('previewPageElement')
@@ -192,7 +193,7 @@ export class WatermarkWorkspaceComponent implements OnChanges, OnDestroy {
   previewAnchorStyle(): { left: string; top: string } {
     const geometry = this.previewPageGeometry();
     const content = this.previewWatermarkContentSize(geometry.width, geometry.height);
-    const center = watermarkPositionCenter(
+    const center = watermarkDisplayPositionCenter(
       this.previewRequest.position,
       geometry.width,
       geometry.height,
@@ -224,21 +225,25 @@ export class WatermarkWorkspaceComponent implements OnChanges, OnDestroy {
     const geometry = this.previewPageGeometry();
     const content = this.previewWatermarkContentSize(geometry.width, geometry.height);
 
+    const repeatScale = watermarkTiledScale(
+      geometry.width, geometry.height, content.width, content.height, this.previewRequest.rotation,
+    );
     return watermarkTiledCenters(
       geometry.width,
       geometry.height,
-      content.width,
-      content.height,
+      content.width * repeatScale,
+      content.height * repeatScale,
       this.previewRequest.kind,
       1,
       this.previewRequest.rotation,
     ).map(center => {
+      const displayCenter = { x: center.x, y: geometry.height - center.y };
       const topLeft = watermarkDisplayCenterToCssTopLeft(
-        center,
+        displayCenter,
         geometry.width,
         geometry.height,
-        content.width,
-        content.height,
+        content.width * repeatScale,
+        content.height * repeatScale,
         geometry.scale,
       );
       return { left: topLeft.left, top: topLeft.top };
@@ -299,11 +304,14 @@ export class WatermarkWorkspaceComponent implements OnChanges, OnDestroy {
       )];
     }
 
+    const repeatScale = watermarkTiledScale(
+      geometry.width, geometry.height, content.width, content.height, this.previewRequest.rotation,
+    );
     return watermarkTiledCenters(
       geometry.width,
       geometry.height,
-      content.width,
-      content.height,
+      content.width * repeatScale,
+      content.height * repeatScale,
       'text',
       1,
       this.previewRequest.rotation,
@@ -317,17 +325,23 @@ export class WatermarkWorkspaceComponent implements OnChanges, OnDestroy {
 
   previewTextBaselineOffset(): number {
     const metrics = this.previewTextMetrics;
-    if (metrics) {
-      // PDF text is positioned by its baseline. Convert the exact pdf-lib
-      // font metrics into the offset required by the SVG baseline so the
-      // visible glyphs share the same visual center as the exported PDF.
-      return (metrics.ascenderHeight - metrics.descenderHeight) / 2;
-    }
-    return Math.max(0, this.previewRequest.fontSize * 0.28);
+    const base = metrics
+      ? (metrics.ascenderHeight - metrics.descenderHeight) / 2
+      : Math.max(0, this.previewRequest.fontSize * 0.28);
+    const geometry = this.previewPageGeometry();
+    const content = this.previewWatermarkContentSize(geometry.width, geometry.height);
+    const repeatScale = this.previewRequest.tiled
+      ? watermarkTiledScale(geometry.width, geometry.height, content.width, content.height, this.previewRequest.rotation)
+      : 1;
+    return base * repeatScale;
   }
 
   previewTextFontSize(): number {
-    return Math.max(8, Math.min(200, this.previewRequest.fontSize));
+    const base = Math.max(8, Math.min(200, this.previewRequest.fontSize));
+    if (!this.previewRequest.tiled) return base;
+    const geometry = this.previewPageGeometry();
+    const content = this.previewWatermarkContentSize(geometry.width, geometry.height);
+    return base * watermarkTiledScale(geometry.width, geometry.height, content.width, content.height, this.previewRequest.rotation);
   }
 
   previewTextTransform(center: { x: number; y: number }): string {
@@ -351,48 +365,26 @@ export class WatermarkWorkspaceComponent implements OnChanges, OnDestroy {
     }
 
     const generation = ++this.previewMetricsGeneration;
-    const text = request.text || 'WATERMARK';
-    const fontSize = Math.max(8, Math.min(200, request.fontSize));
-
     try {
-      const pdf = await PDFDocument.create();
-      const font = await pdf.embedFont(this.standardPreviewFont(request.font));
-      const height = font.heightAtSize(fontSize);
-      const ascenderHeight = font.heightAtSize(fontSize, { descender: false });
-      const descenderHeight = Math.max(0, height - ascenderHeight);
-      const metrics = {
-        width: font.widthOfTextAtSize(text, fontSize),
-        height,
-        ascenderHeight,
-        descenderHeight,
-        text,
-        font: request.font,
-        fontSize,
-      };
+      const metrics = await this.watermarkMetrics.measure(
+        request.font,
+        request.text || 'WATERMARK',
+        request.fontSize,
+      );
       if (generation !== this.previewMetricsGeneration || this.previewRequest !== request) return;
       this.previewTextMetrics = metrics;
       this.cd.markForCheck();
     } catch {
-      // Canvas fallback remains active if standard-font metric extraction fails.
-    }
-  }
-
-  private standardPreviewFont(font: PdfWatermarkRequest['font']): StandardFonts {
-    switch (font) {
-      case 'Times-Roman': return StandardFonts.TimesRoman;
-      case 'Courier': return StandardFonts.Courier;
-      default: return StandardFonts.Helvetica;
+      // Canvas fallback remains active if exact PDF metrics cannot be loaded.
     }
   }
 
   previewFontSize(): number {
-    // The PDF page is already rendered to a CSS-sized raster surface. Its
-    // geometry scale therefore converts PDF points directly into the CSS
-    // pixels used by the overlay. Do not apply an additional 96/72 conversion
-    // here: doing so makes the browser text larger than the measured PDF box
-    // and causes repeated watermarks to clip at the page edges.
+    const geometry = this.previewPageGeometry();
     const points = Math.max(8, Math.min(200, this.previewRequest.fontSize));
-    return points * this.previewPageGeometry().scale;
+    if (!this.previewRequest.tiled) return points * geometry.scale;
+    const content = this.previewWatermarkContentSize(geometry.width, geometry.height);
+    return points * watermarkTiledScale(geometry.width, geometry.height, content.width, content.height, this.previewRequest.rotation) * geometry.scale;
   }
 
   previewFontFamily(): string {
@@ -405,13 +397,18 @@ export class WatermarkWorkspaceComponent implements OnChanges, OnDestroy {
 
   previewImageWidth(): string {
     const geometry = this.previewPageGeometry();
-    return `${geometry.width * Math.max(5, Math.min(80, this.previewRequest.imageScalePercent)) / 100 * geometry.scale}px`;
+    const baseWidth = geometry.width * Math.max(5, Math.min(80, this.previewRequest.imageScalePercent)) / 100;
+    const content = this.previewWatermarkContentSize(geometry.width, geometry.height);
+    const repeatScale = this.previewRequest.tiled
+      ? watermarkTiledScale(geometry.width, geometry.height, content.width, content.height, this.previewRequest.rotation)
+      : 1;
+    return `${baseWidth * repeatScale * geometry.scale}px`;
   }
 
   previewImageUrl = '';
   private previewImageSource: File | null = null;
   private previewImageAspectRatio = 1;
-  private previewTextMetrics: { width: number; height: number; ascenderHeight: number; descenderHeight: number; text: string; font: PdfWatermarkRequest['font']; fontSize: number } | null = null;
+  private previewTextMetrics: WatermarkTextMetrics | null = null;
   private previewMetricsGeneration = 0;
 
   private async renderPreviewPage(): Promise<void> {

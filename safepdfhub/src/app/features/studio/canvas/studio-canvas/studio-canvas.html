@@ -63,9 +63,9 @@
               @for (center of watermarkCenters(); track $index) {
                 <text
                   [attr.x]="center.x"
-                  [attr.y]="center.y"
+                  [attr.y]="center.y + watermarkTextBaselineOffsetPx()"
                   text-anchor="middle"
-                  dominant-baseline="middle"
+                  dominant-baseline="alphabetic"
                   [attr.transform]="watermarkTransform(center)"
                   [attr.fill]="watermarkColor()"
                   [attr.font-family]="watermarkFontFamily()"

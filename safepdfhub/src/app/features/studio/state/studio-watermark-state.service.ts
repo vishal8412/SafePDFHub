@@ -18,7 +18,10 @@ export class StudioWatermarkStateService {
   readonly hasUnappliedChanges = computed(() => {
     const draft = this.draft();
     const committed = this.committed();
-    return committed !== null && draft !== null && draft !== committed;
+    // A newly opened draft is itself an unapplied change. Once committed,
+    // the draft and committed references intentionally point to the same
+    // request until the user edits the draft again.
+    return draft !== null && (committed === null || draft !== committed);
   });
 
   open(initial?: PdfWatermarkRequest | null): void {
@@ -61,6 +64,21 @@ export class StudioWatermarkStateService {
     this.draft.set(null);
     this.committed.set(null);
     this.error.set(null);
+  }
+
+  /**
+   * Restore committed watermark state from the unified Studio history.
+   *
+   * History restoration is intentionally separate from apply/remove so an
+   * Undo/Redo operation cannot accidentally create another history entry or
+   * reopen the inspector.
+   */
+  restoreCommitted(request: PdfWatermarkRequest | null): void {
+    this.error.set(null);
+    this.draft.set(request);
+    this.committed.set(request);
+    this.isOpen.set(false);
+    this.busy.set(false);
   }
 
   clear(): void {

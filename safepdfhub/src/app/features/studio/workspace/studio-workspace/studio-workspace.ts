@@ -88,6 +88,10 @@ private readonly pagesList!:
   readonly sidebarTab = signal<'pages' | 'comments'>('pages');
   readonly comments = this.facade.comments;
 
+  /** Responsive Studio navigation state. These signals are presentation-only. */
+  readonly mobilePagesOpen = signal(false);
+  readonly mobileInspectorOpen = signal(false);
+
   /**
    * F7.3 — User-selected visual density for the Pages sidebar.
    *
@@ -135,6 +139,38 @@ private readonly pagesList!:
 
   exitOrganizeFocusMode(): void {
     this.organizeFocusMode.set(false);
+  }
+
+
+  /** Open the Pages drawer on tablet/mobile without changing document state. */
+  openMobilePages(): void {
+    if (this.watermark.isOpen()) {
+      this.watermark.close();
+    }
+    this.mobileInspectorOpen.set(false);
+    this.mobilePagesOpen.set(true);
+  }
+
+  closeMobilePages(): void {
+    this.mobilePagesOpen.set(false);
+  }
+
+  /** Open the contextual inspector on tablet/mobile. */
+  openMobileInspector(): void {
+    if (this.watermark.isOpen()) {
+      return;
+    }
+    this.mobilePagesOpen.set(false);
+    this.mobileInspectorOpen.set(true);
+  }
+
+  closeMobileInspector(): void {
+    this.mobileInspectorOpen.set(false);
+  }
+
+  closeResponsivePanels(): void {
+    this.mobilePagesOpen.set(false);
+    this.mobileInspectorOpen.set(false);
   }
 
 
@@ -191,6 +227,13 @@ private readonly pagesList!:
      * - keyboard
      * - future navigation controls
      */
+    effect(() => {
+      if (this.watermark.isOpen()) {
+        this.mobileInspectorOpen.set(false);
+        this.mobilePagesOpen.set(false);
+      }
+    });
+
     effect(() => {
 
       const page =

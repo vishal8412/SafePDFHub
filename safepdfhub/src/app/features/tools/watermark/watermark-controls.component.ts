@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { resolveWatermarkPageSelection } from '../../../core/watermark/pdf-watermark.service';
 import type {
   PdfWatermarkFont,
   PdfWatermarkPosition,
@@ -17,6 +18,7 @@ import type {
 })
 export class WatermarkControlsComponent {
   @Input() pageCount = 0;
+  @Input() currentPage = 1;
   @Input() busy = false;
   @Input() errorMessage: string | null = null;
   @Input() compact = false;
@@ -39,8 +41,10 @@ export class WatermarkControlsComponent {
   rotation = -35;
   position: PdfWatermarkPosition = 'center';
   tiled = false;
-  pageMode: 'all' | 'ranges' = 'all';
+  pageMode: 'all' | 'current' | 'ranges' = 'all';
+  currentPageSnapshot = 1;
   pageRanges = '';
+  pageRangeError = '';
   imageFile: File | null = null;
   imagePreviewUrl = '';
   imageScalePercent = 28;
@@ -75,11 +79,14 @@ export class WatermarkControlsComponent {
     if (this.kind === 'text' && !this.text.trim()) return false;
     if (this.kind === 'image' && !this.imageFile) return false;
     if (this.pageMode === 'ranges' && !this.pageRanges.trim()) return false;
+    if (this.pageMode === 'ranges' && !!this.pageRangeError) return false;
+    if (this.pageMode === 'current' && (!Number.isInteger(this.currentPageSnapshot) || this.currentPageSnapshot < 1 || this.currentPageSnapshot > this.pageCount)) return false;
     return true;
   }
 
   get selectedPageSummary(): string {
     if (this.pageMode === 'all') return `All ${this.pageCount} pages`;
+    if (this.pageMode === 'current') return `Current page ${this.currentPageSnapshot}`;
     return this.pageRanges.trim() ? `Pages ${this.pageRanges.trim()}` : 'Choose page ranges';
   }
 
@@ -96,8 +103,17 @@ export class WatermarkControlsComponent {
     this.rotation = request.rotation;
     this.position = request.position;
     this.tiled = request.tiled;
-    this.pageMode = request.pageSelection.mode;
-    this.pageRanges = request.pageSelection.mode === 'ranges' ? request.pageSelection.ranges : '';
+    this.pageRanges = request.pageSelection.mode === 'ranges' ? request.pageSelection.ranges : this.pageRanges;
+    this.pageRangeError = '';
+    this.currentPageSnapshot = request.pageSelection.mode === 'current'
+      ? request.pageSelection.page
+      : this.currentPage;
+    this.pageMode = request.pageSelection.mode === 'all'
+      ? 'all'
+      : request.pageSelection.mode === 'current'
+        ? 'current'
+        : 'ranges';
+    this.validatePageRanges();
     const nextImage = request.imageFile ?? null;
     if (nextImage !== this.imageFile) {
       this.revokeImagePreview();
@@ -149,11 +165,74 @@ export class WatermarkControlsComponent {
     this.position = 'center';
     this.tiled = false;
     this.pageMode = 'all';
+    this.currentPageSnapshot = this.currentPage;
     this.pageRanges = '';
+    this.pageRangeError = '';
     this.imageFile = null;
     this.imageScalePercent = 28;
     this.imageErrorMessage = '';
     this.emitChange();
+  }
+
+  selectPageMode(mode: 'all' | 'current' | 'ranges'): void {
+    if (this.busy) return;
+
+    this.pageMode = mode;
+    if (mode === 'ranges') {
+      this.validatePageRanges();
+    } else {
+      this.pageRangeError = '';
+    }
+    if (mode === 'current') {
+      this.currentPageSnapshot = this.currentPage;
+    }
+
+    this.emitChange();
+  }
+
+  onPageRangesChange(value: string): void {
+    this.pageRanges = value;
+    this.validatePageRanges();
+    this.emitChange();
+  }
+
+  private validatePageRanges(): boolean {
+    if (this.pageMode !== 'ranges') {
+      this.pageRangeError = '';
+      return true;
+    }
+
+    const value = this.pageRanges.trim();
+    if (!value) {
+      this.pageRangeError = 'Enter at least one page number or range, for example 1-3,5,8-10.';
+      return false;
+    }
+
+    if (!this.pageCount) {
+      this.pageRangeError = 'Page range validation is unavailable until the document page count is known.';
+      return false;
+    }
+
+    // Reject malformed comma-separated expressions before delegating to the
+    // canonical page-selection resolver. This keeps the control-level UX
+    // deterministic even for values such as `1,,3`, `1-`, or whitespace-only
+    // tokens.
+    const tokens = value.split(',').map(token => token.trim());
+    if (tokens.some(token => token.length === 0 || !/^\d+(?:-\d+)?$/.test(token))) {
+      this.pageRangeError = 'Enter valid page numbers or ranges, for example 1-3,5,8-10.';
+      return false;
+    }
+
+    try {
+      resolveWatermarkPageSelection({ mode: 'ranges', ranges: value }, this.pageCount);
+      this.pageRangeError = '';
+      return true;
+    } catch (error: unknown) {
+      this.pageRangeError = error instanceof Error
+        ? error.message
+        : 'Enter valid page numbers or ranges within the document.';
+      return false;
+    }
   }
 
   emitChange(): void {
@@ -180,7 +259,9 @@ export class WatermarkControlsComponent {
       position: this.position,
       pageSelection: this.pageMode === 'all'
         ? { mode: 'all' }
-        : { mode: 'ranges', ranges: this.pageRanges.trim() },
+        : this.pageMode === 'current'
+          ? { mode: 'current', page: this.currentPageSnapshot }
+          : { mode: 'ranges', ranges: this.pageRanges.trim() },
       tiled: this.tiled,
       fontSize: this.fontSize,
       font: this.font,

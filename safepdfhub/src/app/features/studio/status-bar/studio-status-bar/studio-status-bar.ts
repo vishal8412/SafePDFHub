@@ -8,16 +8,17 @@ import {
   SimpleChanges
 } from '@angular/core';
 
+import type { StudioViewMode } from '../../state/studio-state.service';
+
+// Re-export the canonical StudioViewMode type for existing consumers of the
+// status-bar component. The state service remains the single source of truth.
+export type { StudioViewMode } from '../../state/studio-state.service';
+
 export type StudioProcessingState =
   | 'ready'
   | 'processing'
   | 'saving'
   | 'error';
-
-export type StudioViewMode =
-  | 'fit-width'
-  | 'fit-page'
-  | 'zoom';
 
 @Component({
   selector: 'app-studio-status-bar',

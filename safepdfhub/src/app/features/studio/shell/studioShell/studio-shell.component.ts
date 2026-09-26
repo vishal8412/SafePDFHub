@@ -12,7 +12,8 @@ import {
 
 import { StudioHeader } from '../../header/studio-header/studio-header';
 import { StudioToolbar } from '../../toolbar/studio-toolbar/studio-toolbar';
-import { StudioStatusBar, StudioViewMode } from '../../status-bar/studio-status-bar/studio-status-bar';
+import { StudioStatusBar } from '../../status-bar/studio-status-bar/studio-status-bar';
+import type { StudioViewMode } from '../../state/studio-state.service';
 import { StudioWorkspace } from '../../workspace/studio-workspace/studio-workspace';
 import { FormsModule } from '@angular/forms';
 import { PdfSecurityFormComponent } from '../../../../shared/components/pdf-security-form/pdf-security-form.component';

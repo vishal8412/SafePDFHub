@@ -8,9 +8,35 @@
        LEFT SIDEBAR
   ======================================================= -->
 
+  <button
+    type="button"
+    class="studio-responsive-backdrop studio-responsive-backdrop--pages"
+    [class.is-open]="mobilePagesOpen()"
+    aria-label="Close Pages panel"
+    (click)="closeMobilePages()">
+  </button>
+
+  <button
+    type="button"
+    class="studio-responsive-backdrop studio-responsive-backdrop--inspector"
+    [class.is-open]="mobileInspectorOpen() || watermark.isOpen()"
+    aria-label="Close inspector"
+    (click)="watermark.isOpen() ? watermark.close() : closeMobileInspector()">
+  </button>
+
   <aside
     class="studio-workspace__left-sidebar"
+    [class.studio-workspace__left-sidebar--mobile-open]="mobilePagesOpen()"
     aria-label="Document navigation">
+
+    <button
+      type="button"
+      class="studio-responsive-panel-close studio-responsive-panel-close--left"
+      aria-label="Close Pages panel"
+      title="Close Pages"
+      (click)="closeMobilePages()">
+      ×
+    </button>
 
     <div class="sidebar">
 
@@ -507,15 +533,57 @@
 
   </section>
 
+  <div class="studio-responsive-actions" aria-label="Studio panels">
+    <button
+      type="button"
+      class="studio-responsive-action"
+      [class.is-active]="mobilePagesOpen()"
+      aria-label="Open Pages"
+      title="Pages"
+      (click)="openMobilePages()">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="5" y="3" width="11" height="15" rx="1.8" />
+        <path d="M8 7h5M8 10h5M8 13h3" />
+        <path d="M8 18h10a1 1 0 0 0 1-1V6" />
+      </svg>
+      <span>Pages</span>
+    </button>
+
+    <button
+      type="button"
+      class="studio-responsive-action"
+      [class.is-active]="mobileInspectorOpen()"
+      aria-label="Open Inspector"
+      title="Inspector"
+      (click)="openMobileInspector()">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5z" />
+        <path d="M8 7h8M8 11h8M8 15h5" />
+      </svg>
+      <span>Inspect</span>
+    </button>
+  </div>
+
 
   <!-- ======================================================
        RIGHT SIDEBAR — PROPERTY INSPECTOR
   ======================================================= -->
 
-  @if (watermark.isOpen()) {
-    <button type="button" class="studio-watermark-mobile-backdrop" aria-label="Close watermark settings" (click)="watermark.close()"></button>
-  }
-
-  <app-studio-right-sidebar />
+  <aside
+    class="studio-workspace__right-sidebar"
+    [class.studio-workspace__right-sidebar--mobile-open]="mobileInspectorOpen() || watermark.isOpen()"
+    aria-label="Property inspector">
+    @if (!watermark.isOpen()) {
+      <button
+        type="button"
+        class="studio-responsive-panel-close studio-responsive-panel-close--right"
+        aria-label="Close Inspector"
+        title="Close Inspector"
+        (click)="closeMobileInspector()">
+        ×
+      </button>
+    }
+    <app-studio-right-sidebar />
+  </aside>
 
 </main>

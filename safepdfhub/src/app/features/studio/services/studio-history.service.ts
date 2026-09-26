@@ -11,6 +11,7 @@ import type {
 import type {
   StudioObject
 } from '../models/studio-selection.model';
+import type { PdfWatermarkRequest } from '../../../core/watermark/pdf-watermark.types';
 
 export interface StudioHistorySnapshot {
   readonly pages:
@@ -21,6 +22,14 @@ export interface StudioHistorySnapshot {
 
   readonly currentPage:
     number;
+
+  /**
+   * Committed Studio watermark configuration. The image File reference is
+   * retained outside the JSON clone so watermark undo/redo remains lossless
+   * without copying image bytes into every history entry.
+   */
+  readonly watermark:
+    PdfWatermarkRequest | null;
 }
 
 interface StudioHistoryEntry {
@@ -95,6 +104,13 @@ export class StudioHistoryService {
   private undoBytes = 0;
   private redoBytes = 0;
 
+  /**
+   * File identity tokens keep same-metadata image replacements distinguishable
+   * in history without copying the actual image bytes.
+   */
+  private readonly historyFileIds = new WeakMap<object, string>();
+  private nextHistoryFileId = 1;
+
   reset(): void {
     this.undoStack.set([]);
     this.redoStack.set([]);
@@ -121,9 +137,9 @@ export class StudioHistoryService {
     const entry: StudioHistoryEntry = {
       label,
       before:
-        this.cloneFromJson(beforeJson),
+        this.cloneSnapshot(before),
       after:
-        this.cloneFromJson(afterJson),
+        this.cloneSnapshot(after),
       byteSize:
         beforeJson.length +
         afterJson.length
@@ -315,7 +331,34 @@ export class StudioHistoryService {
   private serializeSnapshot(
     snapshot: StudioHistorySnapshot
   ): string {
-    return JSON.stringify(snapshot);
+    return JSON.stringify(snapshot, (_key, value) => {
+      if (_key === 'imageFile' && value && typeof value === 'object') {
+        const file = value as {
+          name?: string;
+          type?: string;
+          size?: number;
+          lastModified?: number;
+        };
+
+        const object = value as object;
+        let id = this.historyFileIds.get(object);
+        if (!id) {
+          id = `file-${this.nextHistoryFileId++}`;
+          this.historyFileIds.set(object, id);
+        }
+
+        return {
+          __studioHistoryFile: true,
+          id,
+          name: file.name ?? '',
+          type: file.type ?? '',
+          size: file.size ?? 0,
+          lastModified: file.lastModified ?? 0,
+        };
+      }
+
+      return value;
+    });
   }
 
   private cloneFromJson(
@@ -327,8 +370,20 @@ export class StudioHistoryService {
   private cloneSnapshot(
     snapshot: StudioHistorySnapshot
   ): StudioHistorySnapshot {
-    return this.cloneFromJson(
+    const clone = this.cloneFromJson(
       this.serializeSnapshot(snapshot)
     );
+
+    if (snapshot.watermark?.imageFile && clone.watermark) {
+      return {
+        ...clone,
+        watermark: {
+          ...clone.watermark,
+          imageFile: snapshot.watermark.imageFile,
+        },
+      };
+    }
+
+    return clone;
   }
 }

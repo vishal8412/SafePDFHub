@@ -125,7 +125,7 @@ export class StudioStateService {
     status: 'ready',
     currentPage: 1,
     pageCount: document.pageCount,
-    zoom: 50,
+    zoom: 100,
     viewMode: 'fit-page',
     activeTool: 'select',
     selectedObjectId: null,
@@ -172,7 +172,8 @@ export class StudioStateService {
 
     this._state.update(state => ({
       ...state,
-      zoom: normalizedZoom
+      zoom: normalizedZoom,
+      viewMode: 'zoom'
     }));
   }
 

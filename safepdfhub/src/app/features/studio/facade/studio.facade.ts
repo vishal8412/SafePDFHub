@@ -46,6 +46,7 @@ import {
 import type { StudioPage } from '../models/studio-page.model';
 import type { StudioPdfDocument } from '../models/pdf-document.model';
 import { StudioWatermarkStateService } from '../state/studio-watermark-state.service';
+import type { PdfWatermarkRequest } from '../../../core/watermark/pdf-watermark.types';
 import { PdfWatermarkService } from '../../../core/watermark/pdf-watermark.service';
 
 @Injectable({
@@ -2204,7 +2205,10 @@ private async resolveBlankPageDimensions(
         this.objectService.snapshot(),
 
       currentPage:
-        this.currentPage()
+        this.currentPage(),
+
+      watermark:
+        this.watermarkState.committed()
     };
   }
 
@@ -2252,6 +2256,10 @@ private async resolveBlankPageDimensions(
 
     this.state.setCurrentPage(
       target
+    );
+
+    this.watermarkState.restoreCommitted(
+      snapshot.watermark
     );
   }
 
@@ -2373,6 +2381,49 @@ goToPage(page: number): void {
     );
   }
 
+
+/**
+ * Commit a Studio watermark change as one history mutation.
+ *
+ * Watermark configuration is part of the same Studio editing timeline as
+ * text/image/page mutations, so Undo/Redo can cross the watermark boundary
+ * without creating a second, competing history stack.
+ */
+commitWatermark(request: PdfWatermarkRequest): boolean {
+  if (!this.hasDocument()) {
+    return false;
+  }
+
+  const hadCommittedWatermark = this.watermarkState.committed() !== null;
+  const before = this.captureHistorySnapshot();
+  this.watermarkState.updateDraft(request);
+  const committed = this.watermarkState.apply();
+
+  if (!committed) {
+    return false;
+  }
+
+  this.watermarkState.close();
+  this.commitHistoryMutation(
+    hadCommittedWatermark ? 'Update Watermark' : 'Add Watermark',
+    before,
+  );
+  return true;
+}
+
+/**
+ * Remove the committed Studio watermark as one history mutation.
+ */
+removeWatermark(): boolean {
+  if (!this.hasDocument() || !this.watermarkState.committed()) {
+    return false;
+  }
+
+  const before = this.captureHistorySnapshot();
+  this.watermarkState.clear();
+  this.commitHistoryMutation('Remove Watermark', before);
+  return true;
+}
 
 /**
  * F1.5 — Export the current Studio document as a new PDF.

@@ -1,5 +1,6 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { LocalProcessingCapabilityService } from '../capacity/local-processing-capability.service';
 import {
   PDFDocument,
   StandardFonts,
@@ -27,7 +28,18 @@ export function resolveWatermarkPageSelection(
   selection: PdfWatermarkRequest['pageSelection'],
   pageCount: number,
 ): number[] {
+  if (!Number.isInteger(pageCount) || pageCount < 1) {
+    throw new PdfWatermarkError('The document must contain at least one page.', 'PAGE_SELECTION_INVALID');
+  }
+
   if (selection.mode === 'all') return Array.from({ length: pageCount }, (_, index) => index + 1);
+
+  if (selection.mode === 'current') {
+    if (!Number.isInteger(selection.page) || selection.page < 1 || selection.page > pageCount) {
+      throw new PdfWatermarkError(`Current page ${selection.page} is outside the document.`, 'PAGE_SELECTION_INVALID');
+    }
+    return [selection.page];
+  }
 
   const pages = new Set<number>();
   const ranges = selection.ranges.split(',').map(item => item.trim()).filter(Boolean);
@@ -51,6 +63,12 @@ export function resolveWatermarkPageSelection(
   return [...pages].sort((a, b) => a - b);
 }
 
+function snapGeometry(value: number, precision = 1e9): number {
+  if (!Number.isFinite(value)) return value;
+  const snapped = Math.round(value * precision) / precision;
+  return Object.is(snapped, -0) ? 0 : snapped;
+}
+
 export function watermarkRotatedBounds(
   width: number,
   height: number,
@@ -60,8 +78,8 @@ export function watermarkRotatedBounds(
   const cos = Math.abs(Math.cos(radians));
   const sin = Math.abs(Math.sin(radians));
   return {
-    width: width * cos + height * sin,
-    height: width * sin + height * cos,
+    width: snapGeometry(width * cos + height * sin),
+    height: snapGeometry(width * sin + height * cos),
   };
 }
 
@@ -122,10 +140,24 @@ export function watermarkDisplayPositionCenter(
   const minY = marginY + bounds.height / 2;
   const maxY = pageHeight - marginY - bounds.height / 2;
 
-  const x = minX <= maxX ? Math.min(maxX, Math.max(minX, targetX)) : pageWidth / 2;
-  const y = minY <= maxY ? Math.min(maxY, Math.max(minY, targetY)) : pageHeight / 2;
+  let x = minX <= maxX ? Math.min(maxX, Math.max(minX, targetX)) : pageWidth / 2;
+  let y = minY <= maxY ? Math.min(maxY, Math.max(minY, targetY)) : pageHeight / 2;
 
-  return { x, y };
+  // Correct only the sub-ulp boundary drift that can appear when a rotated
+  // bound is subtracted from its anchor. Integer/simple cases remain exact;
+  // non-integer trigonometric cases receive a tiny inward correction.
+  const epsilonX = Math.max(1e-9, Math.max(1, pageWidth) * 1e-12);
+  const epsilonY = Math.max(1e-9, Math.max(1, pageHeight) * 1e-12);
+  if (minX <= maxX) {
+    if (x - bounds.width / 2 < marginX) x = marginX + bounds.width / 2 + epsilonX;
+    if (x + bounds.width / 2 > pageWidth - marginX) x = pageWidth - marginX - bounds.width / 2 - epsilonX;
+  }
+  if (minY <= maxY) {
+    if (y - bounds.height / 2 < marginY) y = marginY + bounds.height / 2 + epsilonY;
+    if (y + bounds.height / 2 > pageHeight - marginY) y = pageHeight - marginY - bounds.height / 2 - epsilonY;
+  }
+
+  return { x: snapGeometry(x), y: snapGeometry(y) };
 }
 
 /**
@@ -163,30 +195,71 @@ export function watermarkPositionCenter(
   rotation = 0,
   minimumMargin = 24,
 ): WatermarkPoint {
+  // The display-space helper is the canonical anchor calculation. PDF-space
+  // geometry is the exact vertical inversion of that display-space point.
+  // Keeping one anchor algorithm prevents preview/export drift.
+  const displayCenter = watermarkDisplayPositionCenter(
+    position, pageWidth, pageHeight, width, height, rotation, minimumMargin,
+  );
   const bounds = watermarkRotatedBounds(width, height, rotation);
-  const safeMinimumMargin = Math.max(0, minimumMargin);
-  const marginX = Math.max(safeMinimumMargin, pageWidth * 0.06);
-  const marginY = Math.max(safeMinimumMargin, pageHeight * 0.06);
-  const targetX = position.endsWith('left') ? marginX + bounds.width / 2
-    : position.endsWith('right') ? pageWidth - marginX - bounds.width / 2
-      : pageWidth / 2;
-  const targetY = position.startsWith('top') ? pageHeight - marginY - bounds.height / 2
-    : position.startsWith('bottom') ? marginY + bounds.height / 2
-      : pageHeight / 2;
-
-  // Position presets are visual anchors. Clamp the center so the rotated
-  // watermark's visible bounds remain inside the page whenever the requested
-  // size permits it. If the watermark itself is larger than the safe page
-  // area, centering is the only deterministic fallback.
+  const safeMargin = Math.max(0, minimumMargin);
+  const marginX = Math.max(safeMargin, pageWidth * 0.06);
+  const marginY = Math.max(safeMargin, pageHeight * 0.06);
   const minX = marginX + bounds.width / 2;
   const maxX = pageWidth - marginX - bounds.width / 2;
   const minY = marginY + bounds.height / 2;
   const maxY = pageHeight - marginY - bounds.height / 2;
-  const x = minX <= maxX ? Math.min(maxX, Math.max(minX, targetX)) : pageWidth / 2;
-  const y = minY <= maxY ? Math.min(maxY, Math.max(minY, targetY)) : pageHeight / 2;
-  return { x, y };
+
+  let x = displayCenter.x;
+  let y = pageHeight - displayCenter.y;
+
+  // The display-space helper is already safe, but PDF Y is produced by a
+  // subtraction from pageHeight. That inversion can introduce a sub-ulp
+  // drift at the safe-area boundary (for example 47.5199999995 instead of
+  // 47.52). Re-clamp in PDF space so preview/export geometry has a
+  // deterministic boundary contract too.
+  const epsilonX = Math.max(1e-9, Math.max(1, pageWidth) * 1e-12);
+  const epsilonY = Math.max(1e-9, Math.max(1, pageHeight) * 1e-12);
+  if (minX <= maxX) {
+    if (x < minX) x = minX + epsilonX;
+    if (x > maxX) x = maxX - epsilonX;
+  }
+  if (minY <= maxY) {
+    if (y < minY) y = minY + epsilonY;
+    if (y > maxY) y = maxY - epsilonY;
+  }
+
+  return { x: snapGeometry(x), y: snapGeometry(y) };
 }
 
+/**
+ * Return the scale required to keep a repeated watermark fully visible while
+ * preserving the four fixed normalized centers. The scale is applied to the
+ * visible watermark bounds, not to the anchor positions.
+ */
+export function watermarkTiledScale(
+  pageWidth: number,
+  pageHeight: number,
+  width: number,
+  height: number,
+  rotation = 0,
+  minimumMargin = 18,
+): number {
+  if (!(pageWidth > 0) || !(pageHeight > 0) || !(width > 0) || !(height > 0)) return 1;
+
+  const bounds = watermarkRotatedBounds(width, height, rotation);
+  const marginX = Math.max(0, minimumMargin, pageWidth * 0.04);
+  const marginY = Math.max(0, minimumMargin, pageHeight * 0.04);
+  const availableWidth = Math.max(1, pageWidth * 0.5 - marginX * 2);
+  const availableHeight = Math.max(1, pageHeight * 0.5 - marginY * 2);
+  const scaleX = availableWidth / Math.max(1, bounds.width);
+  const scaleY = availableHeight / Math.max(1, bounds.height);
+  const scale = Math.min(1, scaleX, scaleY);
+  // Leave a tiny deterministic safety epsilon below the theoretical limit so
+  // floating-point subtraction can never move an edge a few ulps outside the
+  // requested safe area. This does not materially change visible geometry.
+  return scale < 1 ? scale * (1 - 1e-9) : 1;
+}
 
 export function watermarkTiledCenters(
   pageWidth: number,
@@ -197,53 +270,21 @@ export function watermarkTiledCenters(
   unitScale = 1,
   rotation = 0,
 ): WatermarkPoint[] {
-  /*
-   * Repeat mode has a deterministic four-copy contract:
-   *
-   *   - always render exactly four copies;
-   *   - start from the same four normalized quadrant anchors;
-   *   - if a rotated watermark would cross a page edge, move that anchor
-   *     inward instead of dropping the copy;
-   *   - use this exact geometry in both preview and export.
-   *
-   * This preserves a stable pattern while preventing large/rotated text such
-   * as CONFIDENTIAL from being visually cut in half at the page edges.
-   */
+  // Repeat mode is a fixed normalized four-anchor contract. The content is
+  // scaled by watermarkTiledScale() when necessary; centers never move.
+  void width;
+  void height;
   void kind;
   void unitScale;
+  void rotation;
 
-  if (!(pageWidth > 0) || !(pageHeight > 0)) {
-    return [];
-  }
-
-  // Repeat mode always renders exactly four copies. The four quadrant anchors
-  // remain deterministic, while each center is moved inward only when the
-  // rotated watermark bounds would otherwise clip the text/image. If the
-  // watermark is physically too large for four non-overlapping copies, we keep
-  // the four-copy contract rather than silently dropping or duplicating copies.
-  const bounds = watermarkRotatedBounds(width, height, rotation);
-  const marginX = Math.max(18, pageWidth * 0.04);
-  const marginY = Math.max(18, pageHeight * 0.04);
-  const minX = marginX + bounds.width / 2;
-  const maxX = pageWidth - marginX - bounds.width / 2;
-  const minY = marginY + bounds.height / 2;
-  const maxY = pageHeight - marginY - bounds.height / 2;
-
-  const clamp = (value: number, min: number, max: number): number =>
-    min <= max ? Math.min(max, Math.max(min, value)) : pageWidth / 2;
-  const clampY = (value: number): number =>
-    minY <= maxY ? Math.min(maxY, Math.max(minY, value)) : pageHeight / 2;
-
-  const leftX = clamp(pageWidth * 0.25, minX, maxX);
-  const rightX = clamp(pageWidth * 0.75, minX, maxX);
-  const topY = clampY(pageHeight * 0.75);
-  const bottomY = clampY(pageHeight * 0.25);
+  if (!(pageWidth > 0) || !(pageHeight > 0)) return [];
 
   return [
-    { x: leftX, y: topY },
-    { x: rightX, y: topY },
-    { x: leftX, y: bottomY },
-    { x: rightX, y: bottomY },
+    { x: pageWidth * 0.25, y: pageHeight * 0.75 },
+    { x: pageWidth * 0.75, y: pageHeight * 0.75 },
+    { x: pageWidth * 0.25, y: pageHeight * 0.25 },
+    { x: pageWidth * 0.75, y: pageHeight * 0.25 },
   ];
 }
 
@@ -295,6 +336,7 @@ export function watermarkDisplayPointToPdfPoint(
 @Injectable({ providedIn: 'root' })
 export class PdfWatermarkService {
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly capability = inject(LocalProcessingCapabilityService);
   private cancelled = false;
 
   cancel(): void {
@@ -313,6 +355,14 @@ export class PdfWatermarkService {
     this.cancelled = false;
     this.assertRequest(request);
 
+    const budget = this.capability.budget;
+    if (sourceFile.size > budget.maxFileBytes) {
+      throw new PdfWatermarkError(
+        `This PDF is larger than the ${this.formatBytes(budget.maxFileBytes)} local limit for this device.`,
+        'INPUT_INVALID',
+      );
+    }
+
     const sourceBytes = new Uint8Array(await sourceFile.arrayBuffer());
     this.throwIfCancelled();
 
@@ -326,6 +376,13 @@ export class PdfWatermarkService {
     const pages = pdf.getPages();
     if (!pages.length) {
       throw new PdfWatermarkError('The PDF does not contain any pages.', 'INPUT_INVALID');
+    }
+
+    if (pages.length > budget.maxPages) {
+      throw new PdfWatermarkError(
+        `This PDF contains ${pages.length.toLocaleString()} pages, above the ${budget.maxPages.toLocaleString()} page local limit for this device.`,
+        'INPUT_INVALID',
+      );
     }
 
     const pageNumbers = this.resolvePageNumbers(request.pageSelection, pages.length);
@@ -488,24 +545,15 @@ export class PdfWatermarkService {
     const color = this.hexToRgb(request.color);
     const localRotation = this.displayRotationToPdfRotation(request.rotation, pageRotation);
 
-    const draw = (displayCenter: WatermarkPoint): void => {
+    const drawTextAtCenter = (displayCenter: WatermarkPoint, drawSize = size): void => {
       const center = this.displayPointToPdfPoint(displayCenter, pageWidth, pageHeight, pageRotation);
+      const drawWidth = font.widthOfTextAtSize(text, drawSize);
       const radians = localRotation * Math.PI / 180;
       const cos = Math.cos(radians);
       const sin = Math.sin(radians);
-      // pdf-lib rotates text around the draw origin. Solve the inverse
-      // transform from the desired visual center back to that origin. Keeping
-      // this calculation in one place makes the preview/export contract
-      // deterministic for every position and rotation.
-      const halfWidth = textWidth / 2;
-      // pdf-lib positions text from the baseline, while the browser preview
-      // rotates the DOM element around its visual box center. The visual glyph
-      // box extends from the font descender to the ascender, so its center is
-      // halfway between those two metrics. Using ascender / 2 here shifts the
-      // exported watermark noticeably for diagonal text and was the source of
-      // a preview-vs-export placement mismatch.
-      const ascenderHeight = font.heightAtSize(size, { descender: false });
-      const totalTextHeight = font.heightAtSize(size);
+      const halfWidth = drawWidth / 2;
+      const ascenderHeight = font.heightAtSize(drawSize, { descender: false });
+      const totalTextHeight = font.heightAtSize(drawSize);
       const descenderHeight = Math.max(0, totalTextHeight - ascenderHeight);
       const centerToBaseline = (ascenderHeight - descenderHeight) / 2;
       const origin: WatermarkPoint = {
@@ -515,7 +563,7 @@ export class PdfWatermarkService {
       page.drawText(text, {
         x: origin.x,
         y: origin.y,
-        size,
+        size: drawSize,
         font,
         color: rgb(color.r, color.g, color.b),
         opacity: request.opacity,
@@ -524,13 +572,13 @@ export class PdfWatermarkService {
     };
 
     if (request.tiled) {
-      for (const center of watermarkTiledCenters(displayWidth, displayHeight, textWidth, textHeight, 'text', 1, request.rotation)) {
-        draw(center);
-      }
+      const repeatScale = watermarkTiledScale(displayWidth, displayHeight, textWidth, textHeight, request.rotation);
+      const repeatCenters = watermarkTiledCenters(displayWidth, displayHeight, textWidth * repeatScale, textHeight * repeatScale, 'text', 1, request.rotation);
+      for (const center of repeatCenters) drawTextAtCenter(center, size * repeatScale);
       return;
     }
 
-    draw(this.positionCenter(request.position, displayWidth, displayHeight, textWidth, textHeight, request.rotation));
+    drawTextAtCenter(this.positionCenter(request.position, displayWidth, displayHeight, textWidth, textHeight, request.rotation));
   }
 
   private drawImageWatermark(page: PDFPage, image: PDFImage, request: PdfWatermarkRequest): void {
@@ -546,13 +594,15 @@ export class PdfWatermarkService {
     const alpha = Math.max(0.05, Math.min(1, request.opacity));
     const localRotation = this.displayRotationToPdfRotation(request.rotation, pageRotation);
 
-    const draw = (displayCenter: WatermarkPoint): void => {
+    const drawScaled = (displayCenter: WatermarkPoint, scale = 1): void => {
       const center = this.displayPointToPdfPoint(displayCenter, pageWidth, pageHeight, pageRotation);
+      const drawWidth = width * scale;
+      const drawHeight = height * scale;
       const radians = localRotation * Math.PI / 180;
       const cos = Math.cos(radians);
       const sin = Math.sin(radians);
-      const halfWidth = width / 2;
-      const halfHeight = height / 2;
+      const halfWidth = drawWidth / 2;
+      const halfHeight = drawHeight / 2;
       const origin: WatermarkPoint = {
         x: center.x - (halfWidth * cos - halfHeight * sin),
         y: center.y - (halfWidth * sin + halfHeight * cos),
@@ -560,21 +610,23 @@ export class PdfWatermarkService {
       page.drawImage(image, {
         x: origin.x,
         y: origin.y,
-        width,
-        height,
+        width: drawWidth,
+        height: drawHeight,
         opacity: alpha,
         rotate: degrees(localRotation),
       });
     };
 
     if (request.tiled) {
-      for (const center of watermarkTiledCenters(displayWidth, displayHeight, width, height, 'image', 1, request.rotation)) {
-        draw(center);
+      const repeatScale = watermarkTiledScale(displayWidth, displayHeight, width, height, request.rotation);
+      const repeatCenters = watermarkTiledCenters(displayWidth, displayHeight, width * repeatScale, height * repeatScale, 'image', 1, request.rotation);
+      for (const center of repeatCenters) {
+        drawScaled(center, repeatScale);
       }
       return;
     }
 
-    draw(this.positionCenter(request.position, displayWidth, displayHeight, width, height, request.rotation));
+    drawScaled(this.positionCenter(request.position, displayWidth, displayHeight, width, height, request.rotation));
   }
 
   private displayPointToPdfPoint(point: WatermarkPoint, pageWidth: number, pageHeight: number, rotation: 0 | 90 | 180 | 270): WatermarkPoint {
@@ -611,6 +663,14 @@ export class PdfWatermarkService {
       case 'Courier': return StandardFonts.Courier;
       default: return StandardFonts.Helvetica;
     }
+  }
+
+  private formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    const MB = 1024 * 1024;
+    const GB = 1024 * MB;
+    if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
+    return `${(bytes / MB).toFixed(bytes >= 100 * MB ? 0 : 1)} MB`;
   }
 
   private hexToRgb(value: string): { r: number; g: number; b: number } {

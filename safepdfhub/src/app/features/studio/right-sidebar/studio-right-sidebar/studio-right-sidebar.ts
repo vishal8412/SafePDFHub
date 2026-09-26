@@ -393,22 +393,17 @@ export class StudioRightSidebar {
   }
 
   applyWatermark(request: PdfWatermarkRequest): void {
-    this.watermark.updateDraft(request);
-    const committed = this.watermark.apply();
-
-    if (committed) {
-      // A successful Add/Update is a Studio edit, not an export action.
-      // Close the inspector so the canvas becomes the focus immediately.
-      this.watermark.close();
-    }
+    // Add/Update is a normal Studio mutation and therefore enters the shared
+    // Undo/Redo timeline through the Facade.
+    this.facade.commitWatermark(request);
   }
 
   removeWatermark(): void {
     if (this.watermark.busy() || !this.watermark.committed()) return;
 
-    // Removal is a committed Studio edit. Clear both draft and committed
-    // state so no stale preview can remain when the inspector is reopened.
-    this.watermark.clear();
+    // Removal is also a committed Studio mutation, not an inspector-only
+    // state change. The Facade records it in the same history timeline.
+    this.facade.removeWatermark();
   }
 
   closeWatermark(): void {

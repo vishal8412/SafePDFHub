@@ -15,6 +15,7 @@ export type PdfWatermarkFont = 'Helvetica' | 'Times-Roman' | 'Courier';
 
 export type PdfWatermarkPageSelection =
   | { readonly mode: 'all' }
+  | { readonly mode: 'current'; readonly page: number }
   | { readonly mode: 'ranges'; readonly ranges: string };
 
 export interface PdfWatermarkRequest {

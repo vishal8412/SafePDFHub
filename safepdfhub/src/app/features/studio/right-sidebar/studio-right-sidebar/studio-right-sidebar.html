@@ -17,6 +17,7 @@
     <div class="studio-watermark-inspector__body">
       <app-watermark-controls
         [pageCount]="pageCount()"
+        [currentPage]="currentPage()"
         [request]="watermark.draft()"
         [busy]="watermark.busy()"
         [errorMessage]="watermark.error()"
