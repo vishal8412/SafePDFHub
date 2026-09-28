@@ -226,11 +226,13 @@
   [estimatedFinalSize]="compressionState.estimatedFinalSize"
 
   [compressionLevel]="compressionState.compressionLevel"
+  [loading]="workspace.loading"
   [pdfInsights]="compressionState.pdfInsights"
 
   (compressionLevelChange)="compressionState.compressionLevel = $event; analyzeCompression();"
   (compress)="compressPdf()"
   (replaceFile)="triggerUpload()"
+  (smartTool)="goToTool($event)"
 />
 
   <!-- =====================

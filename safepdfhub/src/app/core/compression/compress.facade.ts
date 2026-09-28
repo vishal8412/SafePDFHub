@@ -4,107 +4,101 @@ import { CompressEngine } from '../engines/compress.engine';
 import { CompressionEstimate } from './compression.models';
 import { CompressionPlanner } from './compression-planner';
 import { PdfAnalyzer } from './pdf-analyzer.service';
-@Injectable({
-    providedIn: 'root'
-})
+import { PdfFileAnalysis } from './pdf-analysis.models';
+
+@Injectable({ providedIn: 'root' })
 export class CompressionFacade {
+  private readonly analysisCache = new WeakMap<File, PdfFileAnalysis>();
 
-    constructor(private pdfAnalyzer: PdfAnalyzer, 
-        private compressEngine: CompressEngine, 
-        private compressionPlanner: CompressionPlanner,
-        public state: CompressionState) { }
+  constructor(
+    private readonly pdfAnalyzer: PdfAnalyzer,
+    private readonly compressEngine: CompressEngine,
+    private readonly compressionPlanner: CompressionPlanner,
+    public readonly state: CompressionState,
+  ) {}
 
-    async analyze(file: File): Promise<CompressionEstimate> {
-        const sizeMB = file.size / 1024 / 1024;
-        const result = await this.pdfAnalyzer.analyzeFile(file);
-        this.state.analyzedPdfType = result.type;
-        this.state.pdfInsights = result.analysis;
-        // const pages = result.pages;
-        // let reduction = 0;
-        // const imageRatio = result.analysis.imageRatio;
-        // const dpi = result.analysis.estimatedDpi;
-        // reduction = imageRatio * 50;
+  async analyze(file: File): Promise<CompressionEstimate> {
+    const result = await this.getAnalysis(file);
+    const sizeMB = file.size / 1024 / 1024;
+    const plan = this.compressionPlanner.createPlan(
+      result.analysis,
+      result.pages,
+      this.state.compressionLevel,
+    );
 
-        const plan = this.compressionPlanner.createPlan(result.analysis,result.pages,this.state.compressionLevel);
+    this.state.analyzedPdfType = result.type;
+    this.state.pdfInsights = result.analysis;
+    this.state.estimatedReduction = plan.estimatedReduction;
+    this.state.estimatedFinalSize = Math.max(0, sizeMB * (1 - plan.estimatedReduction / 100));
+    this.state.stage = 'analysis';
 
-        this.state.estimatedReduction = plan.estimatedReduction;
+    return {
+      estimatedReduction: plan.estimatedReduction,
+      estimatedFinalSize: this.state.estimatedFinalSize,
+    };
+  }
 
-        this.state.estimatedFinalSize = sizeMB * (1 - plan.estimatedReduction / 100);
+  async compress(file: File): Promise<File> {
+    const startedAt = performance.now();
+    const result = await this.getAnalysis(file);
+    const plan = this.compressionPlanner.createPlan(
+      result.analysis,
+      result.pages,
+      this.state.compressionLevel,
+    );
 
-        // if (dpi > 250) {
-        //     reduction += 15;
-        // }
-        // if (result.analysis.largePages) {
-        //     reduction += 10;
-        // }
-        // switch (this.state.compressionLevel) {
-        //     case 'light':
-        //         reduction *= 0.6;
-        //         break;
-        //     case 'recommended':
-        //         reduction *= 1;
-        //         break;
-        //     case 'strong':
-        //         reduction *= 1.4;
-        //         break;
-        // }
+    this.state.compressing = true;
+    this.state.progress = 0;
+    this.state.stage = 'optimization';
 
-        // reduction = Math.min(Math.round(reduction), 80);
+    try {
+      const compressed = await this.compressEngine.compress(
+        file,
+        this.state.compressionLevel,
+        plan,
+        result,
+        (progress) => {
+          this.state.progress = progress;
+        },
+      );
 
-        // // very huge PDFs
-        // if (pages > 1000) {
-        //     reduction = Math.min(reduction, 10);
-        // }
+      this.state.compressedFile = compressed;
+      this.state.originalSize = file.size;
+      this.state.finalSize = compressed.size;
+      this.state.reduction = Math.max(
+        0,
+        Math.round(((file.size - compressed.size) / file.size) * 100),
+      );
+      this.state.duration = `${((performance.now() - startedAt) / 1000).toFixed(1)}s`;
+      this.state.estimatedFinalSize = compressed.size / 1024 / 1024;
+      this.state.estimatedReduction = this.state.reduction;
+      this.state.stage = 'complete';
+      return compressed;
+    } finally {
+      this.state.compressing = false;
+      this.state.progress = 100;
+    }
+  }
 
-        // this.state.estimatedReduction = reduction;
-        // this.state.estimatedFinalSize = sizeMB * (1 - reduction / 100);
+  reset(): void {
+    this.state.reset();
+  }
 
-        console.log('CompressionFacade');
-        console.log({
-          analysis: result.analysis,
-          plan,
-          estimatedReduction: this.state.estimatedReduction,
-          estimatedFinalSize: this.state.estimatedFinalSize
-        });
-        return {
-            estimatedReduction: plan.estimatedReduction,
-            estimatedFinalSize: this.state.estimatedFinalSize
-        };
+  invalidate(file?: File): void {
+    if (file) this.analysisCache.delete(file);
+    this.state.analysisResult = null;
+  }
 
+  private async getAnalysis(file: File): Promise<PdfFileAnalysis> {
+    const cached = this.analysisCache.get(file);
+    if (cached) {
+      this.state.analysisResult = cached;
+      return cached;
     }
 
-    async compress(file: File): Promise<File> {
-      const startedAt = performance.now();
-      const analysis = await this.pdfAnalyzer.analyzeFile(file);
-      const plan = this.compressionPlanner.createPlan(analysis.analysis,analysis.pages,this.state.compressionLevel);
-
-      this.state.compressing = true;
-      this.state.progress = 0;
-      this.state.stage = 'analysis';
-      try {
-       const result = await this.compressEngine.compress(file,this.state.compressionLevel,plan,(p) => {
-        this.state.progress = p;
-       });
-        this.state.compressedFile = result;  
-        this.state.originalSize = file.size;  
-        this.state.finalSize = result.size;  
-        this.state.reduction = Math.max(0,Math.round(((this.state.originalSize - this.state.finalSize) / this.state.originalSize) * 100));  
-        this.state.duration = ((performance.now() - startedAt) / 1000).toFixed(1) + 's';  
-        this.state.estimatedFinalSize = result.size / 1024 / 1024;  
-        this.state.estimatedReduction = this.state.reduction;  
-        return result;  
-      }
-      finally {  
-        this.state.compressing = false;  
-        this.state.progress = 100;  
-      }
-
-    }
-
-    reset() { }
-
-    replacePdf() { }
-
-    download() { }
-
+    const result = await this.pdfAnalyzer.analyzeFile(file);
+    this.analysisCache.set(file, result);
+    this.state.analysisResult = result;
+    return result;
+  }
 }

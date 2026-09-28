@@ -12,9 +12,11 @@ export interface CompressionEstimate {
 }
 
 export interface CompressionAnalysis {
-    avgTextDensity: number;
-    estimatedDpi: number;
-    largePages: boolean;
-    imageHeavy: boolean;
-    imageRatio: number;
+  avgTextDensity: number;
+  largePages: boolean;
+  imageHeavy: boolean;
+  imageRatio: number;
+  imageCount: number;
+  vectorOperatorCount: number;
+  pagesAnalyzed: number;
 }

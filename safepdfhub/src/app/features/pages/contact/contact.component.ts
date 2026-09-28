@@ -58,9 +58,9 @@ export class ContactComponent {
     const subject = this.subject.trim();
     const message = this.message.trim();
 
-    this.setTrimValidationError(form, 'name', name.length < 2);
-    this.setTrimValidationError(form, 'subject', subject.length < 2);
-    this.setTrimValidationError(form, 'message', message.length < 10);
+    this.setTrimValidationError(form.controls['name'], name.length < 2);
+    this.setTrimValidationError(form.controls['subject'], subject.length < 2);
+    this.setTrimValidationError(form.controls['message'], message.length < 10);
 
     if (form.invalid || name.length < 2 || subject.length < 2 || message.length < 10 || !this.isValidEmail(email)) {
       this.submitState = 'error';
@@ -126,17 +126,10 @@ export class ContactComponent {
     }
   }
 
-private setTrimValidationError(
-  form: NgForm,
-  fieldName: string,
+  private setTrimValidationError(
+  control: AbstractControl,
   invalid: boolean
 ): void {
-  const control = form.controls[fieldName];
-
-  if (!control) {
-    return;
-  }
-
   if (invalid) {
     control.setErrors({
       ...(control.errors ?? {}),

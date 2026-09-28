@@ -1,48 +1,31 @@
+export type PdfContentType =
+  | 'text'
+  | 'scanned'
+  | 'mixed';
+
 export interface PdfAnalysis {
-
-    type:
-        | 'text'
-        | 'scanned'
-        | 'mixed';
-
-    avgTextDensity: number;
-
-    estimatedDpi: number;
-
-    largePages: boolean;
-
-    imageHeavy: boolean;
-
-    imageRatio: number;
-
+  type: PdfContentType;
+  avgTextDensity: number;
+  largePages: boolean;
+  imageHeavy: boolean;
+  imageRatio: number;
+  imageCount: number;
+  vectorOperatorCount: number;
+  pagesAnalyzed: number;
 }
 
 export interface PdfFileAnalysis {
-
-    type:
-        | 'text'
-        | 'scanned'
-        | 'mixed';
-
-    analysis: PdfAnalysis;
-
-    pages: number;
-
+  type: PdfContentType;
+  analysis: PdfAnalysis;
+  pages: number;
 }
 
 export interface PageAnalysis {
-
-    type:
-        | 'text'
-        | 'scanned'
-        | 'mixed';
-
-    textDensity: number;
-
-    estimatedImageArea: number;
-
-    estimatedPhotoPage: boolean;
-
-    shouldRasterize: boolean;
-
+  type: PdfContentType;
+  textDensity: number;
+  imageCount: number;
+  vectorOperatorCount: number;
+  estimatedImageArea: number;
+  estimatedPhotoPage: boolean;
+  shouldRasterize: boolean;
 }

@@ -34,6 +34,7 @@ export class CompressWorkspaceComponent {
   @Output() compressionLevelChange = new EventEmitter<'light' | 'recommended' | 'strong'>();
   @Output() compress = new EventEmitter<void>();
   @Output() replaceFile = new EventEmitter<void>();
+  @Output() smartTool = new EventEmitter<'split-pdf' | 'protect-pdf'>();
 
   formatFileSize(bytes: number): string {
     const mb = bytes / 1024 / 1024;
@@ -62,6 +63,10 @@ export class CompressWorkspaceComponent {
 
   triggerReplace() {
     this.replaceFile.emit();
+  }
+
+  openSmartTool(slug: 'split-pdf' | 'protect-pdf'): void {
+    this.smartTool.emit(slug);
   }
 
 }

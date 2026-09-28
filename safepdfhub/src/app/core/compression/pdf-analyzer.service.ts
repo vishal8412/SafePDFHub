@@ -1,191 +1,185 @@
-import { Injectable } from '@angular/core';
-import { PdfAnalysis, PdfFileAnalysis, PageAnalysis } from './pdf-analysis.models';
+import { Injectable, PLATFORM_ID, inject } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { PdfAnalysis, PdfFileAnalysis, PageAnalysis, PdfContentType } from './pdf-analysis.models';
+import { PdfJsLoaderService } from '../pdf/pdfjs-loader.service';
 
-let pdfjsPromise: Promise<any> | null = null;
-
-async function loadPdfJs() {
-
-    if (!pdfjsPromise) {
-        pdfjsPromise = new Promise((resolve) => {
-            if ((window as any).pdfjsLib) {
-                resolve((window as any).pdfjsLib);
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-            script.onload = () => {
-                const lib = (window as any).pdfjsLib;
-                lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                resolve(lib);
-            };
-            document.body.appendChild(script);
-        });
-    }
-    return pdfjsPromise;
-}
-
-@Injectable({
-    providedIn: 'root'
-})
-
+@Injectable({ providedIn: 'root' })
 export class PdfAnalyzer {
+  private readonly platformId = inject(PLATFORM_ID);
 
-    async analyzeFile(file: File): Promise<PdfFileAnalysis> {
-        const pdfjs = await loadPdfJs();
-        const buffer = await file.arrayBuffer();
-        const pdf = await pdfjs.getDocument({data: buffer}).promise;
-        const type = await this.detectPdfType(pdf);
-        const analysis = await this.analyzePdfStructure(pdf);
-        const pages = pdf.numPages;
-        pdf.destroy();
-        return {type,analysis,pages};
+  constructor(private readonly pdfJsLoader: PdfJsLoaderService) {}
+
+  async analyzeFile(file: File): Promise<PdfFileAnalysis> {
+    if (!isPlatformBrowser(this.platformId)) {
+      throw new Error('PDF compression analysis is available only in the browser.');
     }
 
-    private getSamplePages(totalPages: number): number[] {
-        if (totalPages <= 10) {
-            return Array.from({ length: totalPages },(_, i) => i + 1);
+    const pdfjs = await this.pdfJsLoader.load();
+    const data = new Uint8Array(await file.arrayBuffer());
+    const loadingTask = pdfjs.getDocument({ data });
+    const pdf = await loadingTask.promise;
+
+    try {
+      const analysis = await this.analyzePdfStructure(pdf);
+      return {
+        type: analysis.type,
+        analysis,
+        pages: pdf.numPages,
+      };
+    } finally {
+      await pdf.destroy();
+    }
+  }
+
+  async analyzePdfStructure(pdf: any): Promise<PdfAnalysis> {
+    const pdfjs = await this.pdfJsLoader.load();
+    const pagesToCheck = Math.min(pdf.numPages, 8);
+    let textItems = 0;
+    let imagePages = 0;
+    let imageCount = 0;
+    let vectorOperatorCount = 0;
+    let largePages = false;
+
+    for (let i = 1; i <= pagesToCheck; i++) {
+      const page = await pdf.getPage(i);
+      try {
+        const viewport = page.getViewport({ scale: 1, rotation: 0 });
+        if (viewport.width > 1000 || viewport.height > 1400) {
+          largePages = true;
         }
 
-        return [
-            1,
-            Math.floor(totalPages * 0.25),
-            Math.floor(totalPages * 0.50),
-            Math.floor(totalPages * 0.75),
-            totalPages
-        ];
+        const [text, operatorList] = await Promise.all([
+          page.getTextContent(),
+          page.getOperatorList(),
+        ]);
 
+        const pageTextItems = text.items?.length ?? 0;
+        const pageImageCount = this.countImageOperators(operatorList, pdfjs.OPS);
+        const pageVectorOperators = Math.max(0, (operatorList.fnArray?.length ?? 0) - pageImageCount);
+
+        textItems += pageTextItems;
+        imageCount += pageImageCount;
+        vectorOperatorCount += pageVectorOperators;
+
+        if (pageImageCount > 0) {
+          imagePages++;
+        }
+      } catch {
+        // A page that cannot be fully inspected should not make the entire
+        // analysis fail. The engine will still validate the final PDF.
+      } finally {
+        try { page.cleanup(); } catch { /* best effort */ }
+      }
     }
 
-    async detectPdfType(pdf: any): Promise<'text' | 'scanned' | 'mixed'> {
+    const avgTextDensity = pagesToCheck > 0 ? textItems / pagesToCheck : 0;
+    const imageRatio = pagesToCheck > 0 ? imagePages / pagesToCheck : 0;
+    const imageHeavy = imageRatio >= 0.4 || (imageCount >= pagesToCheck * 2 && avgTextDensity < 80);
+    const type = this.classifyDocument({
+      avgTextDensity,
+      imageRatio,
+      imageCount,
+      vectorOperatorCount,
+    });
 
-        let textPages = 0;
-        let scannedPages = 0;
-        const samplePages = this.getSamplePages(pdf.numPages);
+    return {
+      type,
+      avgTextDensity,
+      largePages,
+      imageHeavy,
+      imageRatio,
+      imageCount,
+      vectorOperatorCount,
+      pagesAnalyzed: pagesToCheck,
+    };
+  }
 
-        for (const pageNo of samplePages) {
-            const page = await pdf.getPage(pageNo);
-            try {
-                const text = await page.getTextContent();
-                if (text.items.length > 120) {
-                    textPages++;
-                }
-                else {
-                    scannedPages++;
-                }
-            }
-            catch {
-                scannedPages++;
-            }
-            page.cleanup();
-        }
+  async analyzePage(page: any): Promise<PageAnalysis> {
+    const pdfjs = await this.pdfJsLoader.load();
+    const viewport = page.getViewport({ scale: 1, rotation: 0 });
+    const pageArea = Math.max(1, viewport.width * viewport.height);
 
-        if (textPages === samplePages.length) {
-            return 'text';
-        }
+    let textItems = 0;
+    let imageCount = 0;
+    let vectorOperatorCount = 0;
 
-        if (scannedPages === samplePages.length) {
-            return 'scanned';
-        }
-
-        return 'mixed';
+    try {
+      const [text, operatorList] = await Promise.all([
+        page.getTextContent(),
+        page.getOperatorList(),
+      ]);
+      textItems = text.items?.length ?? 0;
+      imageCount = this.countImageOperators(operatorList, pdfjs.OPS);
+      vectorOperatorCount = Math.max(0, (operatorList.fnArray?.length ?? 0) - imageCount);
+    } catch {
+      // Keep conservative defaults. The caller can still fall back to a safe
+      // vector-preserving copy if analysis is inconclusive.
     }
 
-    async analyzePdfStructure(pdf: any): Promise<PdfAnalysis> {
+    const hasImages = imageCount > 0;
+    const estimatedImageArea = hasImages
+      ? pageArea * (textItems < 30 ? 0.95 : textItems < 120 ? 0.60 : 0.35)
+      : 0;
 
-        let textItems = 0;
-        let largePages = false;
-        let imageHeavyPages = 0;
-        const pagesToCheck = Math.min(5, pdf.numPages);
+    const type = this.classifyDocument({
+      avgTextDensity: textItems,
+      imageRatio: hasImages ? 1 : 0,
+      imageCount,
+      vectorOperatorCount,
+    });
 
-        for (let i = 1; i <= pagesToCheck; i++) {
+    // Rasterize only when the page actually contains image content. A PDF
+    // with little text but only vector drawing commands should remain vector.
+    const shouldRasterize = hasImages;
 
-            const page = await pdf.getPage(i);
+    return {
+      type,
+      textDensity: textItems,
+      imageCount,
+      vectorOperatorCount,
+      estimatedImageArea,
+      estimatedPhotoPage: estimatedImageArea > pageArea * 0.5,
+      shouldRasterize,
+    };
+  }
 
-            const viewport = page.getViewport({scale: 1});
+  private classifyDocument(input: {
+    avgTextDensity: number;
+    imageRatio: number;
+    imageCount: number;
+    vectorOperatorCount: number;
+  }): PdfContentType {
+    const { avgTextDensity, imageRatio, imageCount, vectorOperatorCount } = input;
 
-            if (viewport.width > 1000 || viewport.height > 1400) {
-                largePages = true;
-            }
-
-            try {
-                const text = await page.getTextContent();
-                textItems += text.items.length;
-                if (text.items.length < 50) {
-                    imageHeavyPages++;
-                }
-            }
-            catch { }
-
-            page.cleanup();
-        }
-
-        const avgTextDensity = textItems / pagesToCheck;
-        const estimatedDpi = largePages ? 300 : avgTextDensity > 150 ? 200 : 150;
-        const imageRatio = imageHeavyPages / pagesToCheck;
-        let type:
-            | 'text'
-            | 'scanned'
-            | 'mixed';
-
-        if (avgTextDensity > 120 && imageRatio < 0.15) {
-            type = 'text';
-        }
-        else if (avgTextDensity < 30) {
-            type = 'scanned';
-        }
-        else {
-            type = 'mixed';
-        }
-
-        return {type, avgTextDensity, estimatedDpi, largePages, imageHeavy: imageRatio > 0.4, imageRatio};
-
+    if (imageCount === 0) {
+      // No image XObjects/inline images means there is no safe reason to
+      // rasterize the document. Text and vector-only documents stay native.
+      return vectorOperatorCount > 0 || avgTextDensity > 0 ? 'text' : 'mixed';
     }
 
-    async analyzePage(page: any): Promise<PageAnalysis> {
-        let textItems = 0;
-        try {
-            const text = await page.getTextContent();
-            textItems = text.items.length;
-        }
-        catch { }
-
-        const viewport = page.getViewport({scale: 1});
-        const pageArea = viewport.width * viewport.height;
-        let estimatedImageArea = 0;
-
-        if (textItems < 40) {
-            estimatedImageArea = pageArea * 0.95;
-        }
-        else if (textItems < 120) {
-            estimatedImageArea = pageArea * 0.60;
-        }
-        else {
-            estimatedImageArea = pageArea * 0.20;
-        }
-
-        let type:
-            | 'text'
-            | 'mixed'
-            | 'scanned';
-
-        if (textItems > 120) {
-            type = 'text';
-        }
-        else if (textItems < 30) {
-            type = 'scanned';
-        }
-        else {
-            type = 'mixed';
-        }
-
-        return {
-            type,
-            textDensity: textItems,
-            estimatedImageArea,
-            estimatedPhotoPage: estimatedImageArea > pageArea * 0.5,
-            shouldRasterize: type !== 'text'
-        };
+    if (imageRatio >= 0.6 && avgTextDensity < 45) {
+      return 'scanned';
     }
+
+    if (imageRatio >= 0.4 || imageCount >= 2) {
+      return avgTextDensity >= 45 ? 'mixed' : 'scanned';
+    }
+
+    return avgTextDensity >= 80 ? 'mixed' : 'scanned';
+  }
+
+  private countImageOperators(operatorList: any, ops: any): number {
+    const fnArray: number[] = operatorList?.fnArray ?? [];
+    const imageOps = new Set<number>([
+      ops.paintImageMaskXObject,
+      ops.paintImageMaskXObjectRepeat,
+      ops.paintImageXObject,
+      ops.paintImageXObjectRepeat,
+      ops.paintInlineImageXObject,
+      ops.paintInlineImageXObjectGroup,
+      ops.paintSolidColorImageMask,
+    ].filter((value): value is number => typeof value === 'number'));
+    return fnArray.reduce((count, fn) => count + (imageOps.has(fn) ? 1 : 0), 0);
+  }
 
 }

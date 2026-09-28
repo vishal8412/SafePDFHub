@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { CompressionLevel, CompressionStage } from './compression.types';
+import { PdfFileAnalysis } from './pdf-analysis.models';
 import { CompressionAnalysis } from './compression.models';
 @Injectable({
   providedIn: 'root'
@@ -21,6 +22,7 @@ export class CompressionState {
     duration = '';
     showResult = false;
     showCompressResult = false;
+    analysisResult: PdfFileAnalysis | null = null;
 
     reset(): void {
     this.compressionLevel = 'recommended';
@@ -38,6 +40,7 @@ export class CompressionState {
     this.duration = '';
     this.showResult = false;
     this.showCompressResult = false;
+    this.analysisResult = null;
 }
 
 }

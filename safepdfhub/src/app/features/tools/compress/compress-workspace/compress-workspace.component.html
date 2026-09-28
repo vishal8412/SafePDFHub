@@ -18,8 +18,8 @@
       </div>
 
       <div class="preview-image-wrap">
-        <img *ngIf="previews[0]" [src]="previews[0]" class="preview-image"/>
-        <div class="progress-overlay" *ngIf="compressing">
+        <img *ngIf="previews[0]" [src]="previews[0]" class="preview-image" alt="First page preview of the selected PDF"/>
+        <div class="progress-overlay" *ngIf="compressing" role="status" aria-live="polite" aria-label="Compression progress">
           <div class="progress-circle">
             {{ progress }}%
           </div>
@@ -56,7 +56,7 @@
 </div>
 
   <!-- ACTION -->
-<button class="compress-v2-btn" (click)="startCompress()" [disabled]="compressing">
+<button type="button" class="compress-v2-btn" (click)="startCompress()" [disabled]="loading || compressing" [attr.aria-busy]="compressing" [attr.aria-disabled]="loading || compressing">
   <ng-container *ngIf="!compressing">
     Compress PDF
   </ng-container>
@@ -189,9 +189,10 @@
     <div class="compression-modes">
 
       <!-- HIGH -->
-      <button
+      <button type="button"
         class="mode-card"
         [class.active]="compressionLevel === 'light'"
+        [attr.aria-pressed]="compressionLevel === 'light'"
         (click)="selectLevel('light')"
       >
 
@@ -206,9 +207,10 @@
       </button>
 
       <!-- SMART -->
-      <button
+      <button type="button"
         class="mode-card recommended"
         [class.active]="compressionLevel === 'recommended'"
+        [attr.aria-pressed]="compressionLevel === 'recommended'"
         (click)="selectLevel('recommended')"
       >
 
@@ -227,9 +229,10 @@
       </button>
 
       <!-- MAX -->
-      <button
+      <button type="button"
         class="mode-card"
         [class.active]="compressionLevel === 'strong'"
+        [attr.aria-pressed]="compressionLevel === 'strong'"
         (click)="selectLevel('strong')"
       >
 
@@ -291,25 +294,6 @@
   </strong>
 </div>
 
-<!-- DPI -->
-<div
-  class="analysis-item"
-  *ngIf="pdfInsights?.estimatedDpi"
->
-  🖼 Estimated DPI:
-  <strong>
-    {{ pdfInsights?.estimatedDpi }}
-  </strong>
-</div>
-
-<div *ngIf="pdfInsights?.imageHeavy">
-    🖼 Image-heavy document detected
-</div>
-
-<div *ngIf="pdfInsights?.largePages">
-    📐 Large page dimensions detected
-</div>
-
 <!-- IMAGE HEAVY -->
 <div
   class="analysis-item"
@@ -349,15 +333,11 @@
 
     <div class="smart-tools-list">
 
-      <button class="tool-chip">
-        Convert to Word
-      </button>
-
-      <button class="tool-chip">
+      <button type="button" class="tool-chip" (click)="openSmartTool('split-pdf')">
         Split PDF
       </button>
 
-      <button class="tool-chip">
+      <button type="button" class="tool-chip" (click)="openSmartTool('protect-pdf')">
         Protect PDF
       </button>
 

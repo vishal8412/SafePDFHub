@@ -55,8 +55,15 @@ export class WorkflowService {
       else if (step === 'compress') {
         const analysis = await this.pdfAnalyzer.analyzeFile(workingFiles[0]);
         const plan = this.compressionPlanner.createPlan(analysis.analysis,analysis.pages,'recommended');
-        const compressed = await this.compressEngine.compress(workingFiles[0],'recommended',plan,(p) => {
-            onProgress?.(this.mapProgress(p,currentStep,totalSteps),'compress');});
+        const compressed = await this.compressEngine.compress(
+          workingFiles[0],
+          'recommended',
+          plan,
+          analysis,
+          (p) => {
+            onProgress?.(this.mapProgress(p, currentStep, totalSteps), 'compress');
+          },
+        );
             
         workingFiles = [compressed];
       }

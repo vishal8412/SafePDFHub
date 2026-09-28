@@ -1,43 +1,17 @@
 import { Injectable } from '@angular/core';
-
-let pdfjsPromise: Promise<any> | null = null;
-
-async function loadPdfJs() {
-  if (!pdfjsPromise) {
-    pdfjsPromise = new Promise((resolve) => {
-      if ((window as any).pdfjsLib) {
-        resolve((window as any).pdfjsLib);
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-
-      script.onload = () => {
-        const lib = (window as any).pdfjsLib;
-        lib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-        resolve(lib);
-      };
-
-      document.body.appendChild(script);
-    });
-  }
-
-  return pdfjsPromise;
-}
+import { PdfJsLoaderService } from '../pdf/pdfjs-loader.service';
 
 @Injectable({ providedIn: 'root' })
 export class PreviewService {
+
+  constructor(private readonly pdfJsLoader: PdfJsLoaderService) {}
 
   async generatePreview(
     file: File,
     onProgress?: (p: number) => void
   ): Promise<{ preview: string; pages: number }> {
 
-    const pdfjs = await loadPdfJs();
+    const pdfjs = await this.pdfJsLoader.load();
     const buffer = await file.arrayBuffer();
 
     const loadingTask = pdfjs.getDocument({ data: buffer });
@@ -89,7 +63,7 @@ private async canvasToBlobUrl(
 }
 
 async generateViewerPages(file: File): Promise<string[]> {
-  const pdfjs = await loadPdfJs();
+  const pdfjs = await this.pdfJsLoader.load();
   const buffer = await file.arrayBuffer();
 
   const pdf = await pdfjs.getDocument({ data: buffer }).promise;
