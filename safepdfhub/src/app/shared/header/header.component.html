@@ -13,15 +13,18 @@
       <a href="/#features" (click)="navigateToHomeSection($event, 'features')">Why SafePDFHub</a>
       <a href="/#tools" (click)="navigateToHomeSection($event, 'tools')">Tools</a>
       <a href="/#how-it-works" (click)="navigateToHomeSection($event, 'how-it-works')">How it works</a>
-      <a routerLink="/studio" class="nav-cta">Open Editor <b>→</b></a>
+      <a routerLink="/studio" class="nav-cta">
+        <span>Open PDF Editor</span>
+        <lucide-icon [img]="icons.ArrowRight" size="16" aria-hidden="true"></lucide-icon>
+      </a>
     </nav>
 
     <button
       class="menu-btn"
       type="button"
       [attr.aria-expanded]="mobileMenuOpen"
-      aria-label="Open menu"
-      (click)="mobileMenuOpen = !mobileMenuOpen">
+      [attr.aria-label]="mobileMenuOpen ? 'Close menu' : 'Open menu'"
+      (click)="toggleMobileMenu()">
       <span></span><span></span>
     </button>
   </div>
@@ -30,6 +33,9 @@
     <a href="/#features" (click)="navigateToHomeSection($event, 'features')">Why SafePDFHub</a>
     <a href="/#tools" (click)="navigateToHomeSection($event, 'tools')">Tools</a>
     <a href="/#how-it-works" (click)="navigateToHomeSection($event, 'how-it-works')">How it works</a>
-    <a routerLink="/studio" class="mobile-cta" (click)="mobileMenuOpen = false">Open PDF Editor →</a>
+    <a routerLink="/studio" class="mobile-cta" (click)="mobileMenuOpen = false">
+      <span>Open PDF Editor</span>
+      <lucide-icon [img]="icons.ArrowRight" size="16" aria-hidden="true"></lucide-icon>
+    </a>
   </div>
 </header>

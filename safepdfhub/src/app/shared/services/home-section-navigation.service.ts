@@ -4,29 +4,47 @@ import { Router } from '@angular/router';
 @Injectable({ providedIn: 'root' })
 export class HomeSectionNavigationService {
   private readonly router = inject(Router);
+  private navigationRequestId = 0;
 
   /**
    * Navigate to a Home-page section and place that section directly below
-   * the sticky site header. Native Angular anchor scrolling is intentionally
-   * disabled for this application; this service owns the complete operation
-   * so lazy-route rendering and layout shifts cannot move the viewport after
-   * we calculate the destination.
+   * the sticky site header.
+   *
+   * This deliberately owns the whole operation instead of relying on native
+   * hash scrolling. A navigation from a long tool page can otherwise carry
+   * the previous document scroll offset into the newly rendered Home page.
    */
   navigateToSection(event: Event, fragment: string): void {
     event.preventDefault();
 
+    const requestId = ++this.navigationRequestId;
     const currentPath = this.router.url.split('#')[0].split('?')[0] || '/';
+
+    // Clear the previous route's scroll position before replacing its content.
+    // This prevents the browser/router from carrying a tool-page offset into
+    // the Home page while the lazy Home component is being rendered.
+    this.resetScrollPosition();
+
     const navigation = currentPath === '/'
       ? this.router.navigate([], { fragment })
       : this.router.navigate(['/'], { fragment });
 
-    void navigation.then(() => this.waitForStableTarget(fragment));
+    void navigation.then(success => {
+      if (!success || requestId !== this.navigationRequestId) {
+        return;
+      }
+
+      void this.waitForStableTarget(fragment, requestId);
+    });
   }
 
-  private async waitForStableTarget(fragment: string): Promise<void> {
-    const target = await this.waitForTarget(fragment);
+  private async waitForStableTarget(
+    fragment: string,
+    requestId: number
+  ): Promise<void> {
+    const target = await this.waitForTarget(fragment, requestId);
 
-    if (!target) {
+    if (!target || requestId !== this.navigationRequestId) {
       return;
     }
 
@@ -40,24 +58,35 @@ export class HomeSectionNavigationService {
       }
     }
 
-    // Let Angular, the browser, and any lazy Home content finish their layout
-    // work. Three consecutive frames also gives us a stable measurement point.
+    // Allow Angular, the browser, and lazy Home content to complete layout.
     await this.nextFrame();
     await this.nextFrame();
     await this.nextFrame();
+
+    if (requestId !== this.navigationRequestId) {
+      return;
+    }
 
     this.scrollToTarget(target);
   }
 
-  private waitForTarget(fragment: string): Promise<HTMLElement | null> {
-    const maxAttempts = 80;
+  private waitForTarget(
+    fragment: string,
+    requestId: number
+  ): Promise<HTMLElement | null> {
+    const maxAttempts = 120;
     let attempts = 0;
 
     return new Promise(resolve => {
       const check = () => {
+        if (requestId !== this.navigationRequestId) {
+          resolve(null);
+          return;
+        }
+
         const target = document.getElementById(fragment);
 
-        if (target) {
+        if (target && target.isConnected) {
           resolve(target);
           return;
         }
@@ -77,6 +106,17 @@ export class HomeSectionNavigationService {
 
   private nextFrame(): Promise<void> {
     return new Promise(resolve => requestAnimationFrame(() => resolve()));
+  }
+
+  private resetScrollPosition(): void {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'auto'
+    });
+
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
   }
 
   private scrollToTarget(target: HTMLElement): void {

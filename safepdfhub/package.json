@@ -17,7 +17,8 @@
     "sign:audit": "node scripts/sign-pdf-security-audit.mjs",
     "sign:ux:audit": "node scripts/sign-pdf-ux-audit.mjs",
     "watermark:audit": "node scripts/watermark-audit.mjs",
-    "watermark:qa:audit": "node scripts/watermark-qa-audit.mjs"
+    "watermark:qa:audit": "node scripts/watermark-qa-audit.mjs",
+    "start:ssr": "npm run build && npm run serve:ssr:safepdfhub"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

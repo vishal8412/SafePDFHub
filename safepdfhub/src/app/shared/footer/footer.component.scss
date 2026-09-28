@@ -6,12 +6,17 @@
 
 .footer-main {
   width: min(1180px, calc(100% - 48px));
-  margin: auto;
+  margin: 0 auto;
   padding: 72px 0 52px;
+
   display: grid;
   grid-template-columns: 1.65fr repeat(4, 1fr);
   gap: 38px;
 }
+
+/* =========================================================
+   BRAND
+   ========================================================= */
 
 .footer-logo {
   display: block;
@@ -32,7 +37,7 @@
 
 .footer-brand p {
   max-width: 320px;
-  margin: 16px 0 16px;
+  margin: 16px 0;
   font-size: 13px;
   line-height: 1.72;
   color: #7892a6;
@@ -47,11 +52,16 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
+
   color: #19ead3;
   text-decoration: none;
+
   font-size: 12px;
   font-weight: 700;
-  transition: color 0.2s ease, transform 0.2s ease;
+
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
 }
 
 .footer-action:hover {
@@ -59,18 +69,25 @@
 }
 
 .footer-action-arrow {
-  font-size: 17px;
-  line-height: 1;
-  transition: transform 0.2s ease;
+  display: inline-flex;
+
+  transition:
+    transform 0.2s ease;
 }
 
 .footer-action:hover .footer-action-arrow {
   transform: translateX(3px);
 }
 
+/* =========================================================
+   FOOTER COLUMNS
+   ========================================================= */
+
 .footer-col h4 {
   margin: 0 0 18px;
+
   color: #edf4f8;
+
   font: 600 13px 'Space Grotesk', system-ui, sans-serif;
 }
 
@@ -82,17 +99,42 @@
 .footer-col a,
 .footer-col span {
   display: block;
+
   margin: 11px 0;
+
   color: #7d97aa;
   text-decoration: none;
+
   font-size: 12px;
   line-height: 1.35;
+
   transition: color 0.2s ease;
 }
 
 .footer-col a:hover {
   color: #19ead3;
 }
+
+/*
+ * Principles intentionally use the SAME visual treatment
+ * as the other footer columns.
+ *
+ * No card.
+ * No background.
+ * No borders.
+ * No chips.
+ */
+.footer-principles {
+  min-width: 0;
+}
+
+.footer-principles span {
+  margin: 11px 0;
+}
+
+/* =========================================================
+   FOCUS STATES
+   ========================================================= */
 
 .footer-col a:focus-visible,
 .footer-action:focus-visible,
@@ -102,15 +144,23 @@
   border-radius: 5px;
 }
 
+/* =========================================================
+   TRUST STRIP
+   ========================================================= */
+
 .footer-strip {
   width: min(1180px, calc(100% - 48px));
-  margin: auto;
+  margin: 0 auto;
+
   padding: 16px 0;
+
   border-top: 1px solid rgba(160, 190, 215, 0.08);
   border-bottom: 1px solid rgba(160, 190, 215, 0.08);
+
   display: flex;
   justify-content: center;
   align-items: center;
+
   gap: 34px;
   flex-wrap: wrap;
 }
@@ -119,20 +169,17 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
+
   color: #648096;
+
   font-size: 10px;
   line-height: 1;
+
   white-space: nowrap;
 }
 
-.footer-proof svg {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.footer-proof lucide-icon {
+  display: inline-flex;
   flex: 0 0 auto;
 }
 
@@ -140,19 +187,22 @@
   color: #19ead3;
 }
 
-.footer-proof--primary svg {
-  fill: currentColor;
-  stroke: none;
-}
+/* =========================================================
+   BOTTOM
+   ========================================================= */
 
 .footer-bottom {
   width: min(1180px, calc(100% - 48px));
-  margin: auto;
+  margin: 0 auto;
+
   padding: 21px 0 26px;
+
   display: flex;
   justify-content: space-between;
   align-items: center;
+
   gap: 20px;
+
   font-size: 10px;
   color: #506b7e;
 }
@@ -161,31 +211,103 @@
   color: #6e899c;
 }
 
+/* =========================================================
+   TABLET
+   621px - 900px
+   ========================================================= */
+
 @media (max-width: 900px) {
+
+  /*
+   * Two-column footer system.
+   *
+   * Brand remains full width.
+   * The remaining four sections form:
+   *
+   * Popular tools | Product
+   * Company       | Principles
+   *
+   * Principles stays visually identical to desktop.
+   */
   .footer-main {
-    grid-template-columns: 1.5fr 1fr 1fr;
-    gap: 35px;
+    width: min(100% - 40px, 760px);
+
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+
+    column-gap: 32px;
+    row-gap: 32px;
+
+    padding: 56px 0 42px;
   }
 
   .footer-brand {
-    grid-column: span 3;
+    grid-column: 1 / -1;
   }
 
-  .footer-col:last-child {
-    display: none;
+  .footer-principles {
+    grid-column: auto;
+
+    display: block;
+
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .footer-principles h4 {
+    margin: 0 0 18px;
+  }
+
+  .footer-principles span {
+    display: block;
+
+    min-height: auto;
+
+    margin: 11px 0;
+    padding: 0;
+
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .footer-strip,
+  .footer-bottom {
+    width: min(100% - 40px, 760px);
+  }
+
+  .footer-strip {
+    gap: 28px;
   }
 }
 
+/* =========================================================
+   MOBILE
+   <= 620px
+   ========================================================= */
+
 @media (max-width: 620px) {
+
   .footer-main {
     width: calc(100% - 30px);
-    grid-template-columns: 1fr 1fr;
-    padding: 52px 0 38px;
-    gap: 30px;
+
+    grid-template-columns:
+      minmax(0, 1fr)
+      minmax(0, 1fr);
+
+    column-gap: 18px;
+    row-gap: 26px;
+
+    padding: 42px 0 30px;
   }
 
+  /* -----------------------------------------
+     Brand
+     ----------------------------------------- */
+
   .footer-brand {
-    grid-column: span 2;
+    grid-column: 1 / -1;
   }
 
   .footer-logo {
@@ -196,25 +318,170 @@
     max-height: 64px;
   }
 
-  .footer-strip,
-  .footer-bottom {
-    width: calc(100% - 30px);
+  .footer-brand p {
+    max-width: 330px;
+
+    margin-top: 14px;
+    margin-bottom: 15px;
+
+    font-size: 11px;
+    line-height: 1.65;
   }
 
-  .footer-bottom {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 7px;
-    padding-bottom: 23px;
+  .footer-action {
+    font-size: 11px;
   }
 
-  .footer-strip {
-    gap: 16px 20px;
-    justify-content: flex-start;
+  /* -----------------------------------------
+     Columns
+     ----------------------------------------- */
+
+  .footer-col h4 {
+    margin-bottom: 15px;
+
+    font-size: 12px;
+  }
+
+  .footer-col .footer-subheading {
+    margin-top: 22px;
+    margin-bottom: 12px;
   }
 
   .footer-col a,
   .footer-col span {
+    margin: 9px 0;
+
+    font-size: 10px;
+    line-height: 1.4;
+  }
+
+  /*
+   * IMPORTANT:
+   * Principles is a normal column.
+   * No card/chips/background/borders.
+   */
+  .footer-principles {
+    grid-column: auto;
+
+    display: block;
+
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .footer-principles h4 {
+    margin-bottom: 15px;
+  }
+
+  .footer-principles span {
+    display: block;
+
+    min-height: auto;
+
+    margin: 9px 0;
+    padding: 0;
+
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  /* -----------------------------------------
+     Trust strip
+     ----------------------------------------- */
+
+  .footer-strip {
+    width: calc(100% - 30px);
+
+    justify-content: flex-start;
+
+    gap: 12px 16px;
+
+    padding: 14px 0;
+  }
+
+  .footer-proof {
+    font-size: 9px;
+  }
+
+  /* -----------------------------------------
+     Bottom
+     ----------------------------------------- */
+
+  .footer-bottom {
+    width: calc(100% - 30px);
+
+    flex-direction: column;
+    align-items: flex-start;
+
+    gap: 7px;
+
+    padding: 17px 0 22px;
+
+    font-size: 9px;
+  }
+}
+
+/* =========================================================
+   SMALL PHONES
+   <= 400px
+   ========================================================= */
+
+@media (max-width: 400px) {
+
+  .footer-main {
+    width: calc(100% - 24px);
+
+    column-gap: 14px;
+    row-gap: 24px;
+
+    padding-top: 36px;
+  }
+
+  .footer-logo {
+    width: min(250px, 100%);
+  }
+
+  .footer-logo img {
+    max-height: 57px;
+  }
+
+  .footer-brand p {
+    font-size: 10px;
+  }
+
+  .footer-col h4 {
     font-size: 11px;
+    margin-bottom: 13px;
+  }
+
+  .footer-col a,
+  .footer-col span {
+    font-size: 9px;
+    margin: 8px 0;
+  }
+
+  .footer-col .footer-subheading {
+    margin-top: 20px;
+  }
+
+  .footer-strip,
+  .footer-bottom {
+    width: calc(100% - 24px);
+  }
+
+  .footer-strip {
+    gap: 10px 13px;
+  }
+
+  .footer-proof {
+    font-size: 8px;
+    gap: 5px;
+  }
+
+  .footer-bottom {
+    font-size: 8px;
   }
 }

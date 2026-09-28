@@ -21,7 +21,7 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  width: 238px;
+  width: 224px;
   text-decoration: none;
   line-height: 0;
 }
@@ -81,11 +81,14 @@
   transform: translateY(-1px);
 }
 
-.nav-cta b {
+.nav-cta lucide-icon {
   color: #19ead3;
-  font-size: 17px;
-  font-weight: 500;
-  line-height: 1;
+  display: inline-flex;
+  transition: transform 0.2s ease;
+}
+
+.nav-cta:hover lucide-icon {
+  transform: translateX(2px);
 }
 
 .menu-btn {
@@ -118,7 +121,7 @@
   }
 
   .logo {
-    width: 224px;
+    width: 220px;
   }
 
   .desktop-nav {
@@ -176,6 +179,10 @@
   }
 
   .mobile-menu .mobile-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
     color: #071827;
     background: linear-gradient(110deg, #19ead3, #7acfff);
     border-radius: 10px;

@@ -1,75 +1,206 @@
 <main class="contact-page">
-  <section class="contact-hero">
+  <section class="contact-hero" aria-labelledby="contact-title">
     <div class="contact-shell">
-      <span class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>CONTACT SAFEPDFHUB</span>
-      <h1>Let's make PDF work <span>better.</span></h1>
-      <p>Have a question, found a problem, or want to talk about SafePDFHub? We'd like to hear from you.</p>
+      <span class="eyebrow">
+        <span class="eyebrow-dot" aria-hidden="true"></span>
+        CONTACT SAFEPDFHUB
+      </span>
+
+      <h1 id="contact-title">Let's make PDF work <span>better.</span></h1>
+
+      <p>
+        Have a question, found a problem, or want to share feedback? We'd like to hear from you.
+      </p>
     </div>
   </section>
 
-  <section class="contact-body">
+  <section class="contact-body" aria-labelledby="contact-form-title">
     <div class="contact-shell contact-grid">
       <aside class="contact-info">
         <span class="section-label">GET IN TOUCH</span>
         <h2>Tell us what you need.</h2>
-        <p>Choose the route that fits your message. For support issues, include the tool name and a short description of what happened.</p>
+        <p>
+          Choose the route that fits your message. For support issues, include the tool name and a short description of what happened.
+        </p>
 
-        <div class="contact-cards">
+        <a class="contact-email" [href]="'mailto:' + contactEmail">
+          <span>EMAIL</span>
+          <strong>{{ contactEmail }}</strong>
+        </a>
+
+        <div class="contact-cards" aria-label="Contact topics">
           <div>
-            <span class="contact-card-icon" aria-hidden="true">?</span>
+            <span class="contact-card-icon" aria-hidden="true">
+              <lucide-icon [img]="icons.CircleHelp" [size]="15" [strokeWidth]="1.8"></lucide-icon>
+            </span>
             <strong>General questions</strong>
             <small>Product, tools, roadmap, or anything else.</small>
           </div>
+
           <div>
-            <span class="contact-card-icon" aria-hidden="true">!</span>
+            <span class="contact-card-icon" aria-hidden="true">
+              <lucide-icon [img]="icons.CircleAlert" [size]="15" [strokeWidth]="1.8"></lucide-icon>
+            </span>
             <strong>Report a problem</strong>
             <small>Tell us what you expected and what happened instead.</small>
           </div>
+
           <div>
-            <span class="contact-card-icon" aria-hidden="true">◇</span>
+            <span class="contact-card-icon" aria-hidden="true">
+              <lucide-icon [img]="icons.ShieldCheck" [size]="15" [strokeWidth]="1.8"></lucide-icon>
+            </span>
             <strong>Privacy questions</strong>
             <small>Questions about how SafePDFHub handles information.</small>
           </div>
+
           <div>
-            <span class="contact-card-icon" aria-hidden="true">↗</span>
-            <strong>Business & partnerships</strong>
+            <span class="contact-card-icon" aria-hidden="true">
+              <lucide-icon [img]="icons.Handshake" [size]="15" [strokeWidth]="1.8"></lucide-icon>
+            </span>
+            <strong>Business &amp; partnerships</strong>
             <small>Ideas, collaborations, and commercial enquiries.</small>
           </div>
         </div>
+
+        <p class="direct-email-note">
+          Prefer your email app?
+          <a [href]="'mailto:' + contactEmail">Email us directly</a>.
+        </p>
       </aside>
 
-      <form class="contact-form" (ngSubmit)="sendEmail()">
+      <form
+        class="contact-form"
+        #contactForm="ngForm"
+        (ngSubmit)="sendMessage(contactForm)"
+        novalidate
+        aria-describedby="contact-form-note"
+      >
         <div class="form-heading">
           <span class="section-label">SEND A MESSAGE</span>
-          <h2>We'll hear from you through your email app.</h2>
-          <p>This form prepares an email on your device; it does not upload your message to a SafePDFHub server.</p>
+          <h2 id="contact-form-title">Send us a message.</h2>
+          <p id="contact-form-note">
+            Your message is sent securely to SafePDFHub. We don't store contact messages in the PDF processing system.
+          </p>
         </div>
 
         <div class="form-row">
           <label>
-            <span>Name</span>
-            <input name="name" type="text" [(ngModel)]="name" autocomplete="name" placeholder="Your name" />
+            <span>Name <em aria-hidden="true">*</em></span>
+            <input
+              name="name"
+              type="text"
+              [(ngModel)]="name"
+              autocomplete="name"
+              placeholder="Your name"
+              maxlength="100"
+              minlength="2"
+              required
+              #nameControl="ngModel"
+              [attr.aria-invalid]="nameControl.invalid && (nameControl.touched || contactForm.submitted) ? 'true' : null"
+            />
+            @if (nameControl.invalid && (nameControl.touched || contactForm.submitted)) {
+              <small class="field-error">Please enter a valid name (at least 2 characters).</small>
+            }
           </label>
+
           <label>
-            <span>Email</span>
-            <input name="email" type="email" [(ngModel)]="email" autocomplete="email" placeholder="you@example.com" />
+            <span>Email <em aria-hidden="true">*</em></span>
+            <input
+              name="email"
+              type="email"
+              [(ngModel)]="email"
+              autocomplete="email"
+              placeholder="you@example.com"
+              maxlength="254"
+              required
+              #emailControl="ngModel"
+              [attr.aria-invalid]="emailControl.invalid && (emailControl.touched || contactForm.submitted) ? 'true' : null"
+            />
+            @if (emailControl.invalid && (emailControl.touched || contactForm.submitted)) {
+              <small class="field-error">Please enter a valid email address.</small>
+            }
           </label>
         </div>
 
         <label>
-          <span>Subject</span>
-          <input name="subject" type="text" [(ngModel)]="subject" placeholder="How can we help?" />
+          <span>Subject <em aria-hidden="true">*</em></span>
+          <input
+            name="subject"
+            type="text"
+            [(ngModel)]="subject"
+            autocomplete="off"
+            placeholder="How can we help?"
+            maxlength="160"
+            minlength="2"
+            required
+            #subjectControl="ngModel"
+            [attr.aria-invalid]="subjectControl.invalid && (subjectControl.touched || contactForm.submitted) ? 'true' : null"
+          />
+          @if (subjectControl.invalid && (subjectControl.touched || contactForm.submitted)) {
+            <small class="field-error">Please enter a valid subject (at least 2 characters).</small>
+          }
         </label>
 
         <label>
-          <span>Message</span>
-          <textarea name="message" rows="7" [(ngModel)]="message" required placeholder="Tell us a little more..."></textarea>
+          <span>Message <em aria-hidden="true">*</em></span>
+          <textarea
+            name="message"
+            rows="7"
+            [(ngModel)]="message"
+            placeholder="Tell us a little more..."
+            minlength="10"
+            maxlength="5000"
+            required
+            #messageControl="ngModel"
+            [attr.aria-invalid]="messageControl.invalid && (messageControl.touched || contactForm.submitted) ? 'true' : null"
+          ></textarea>
+          @if (messageControl.invalid && (messageControl.touched || contactForm.submitted)) {
+            <small class="field-error">Please enter at least 10 characters in your message.</small>
+          }
         </label>
+
+        <!-- Honeypot: intentionally hidden from real users. -->
+        <div class="website-field" aria-hidden="true">
+          <label>
+            Website
+            <input
+              name="website"
+              type="text"
+              [(ngModel)]="website"
+              tabindex="-1"
+              autocomplete="off"
+            />
+          </label>
+        </div>
 
         <div class="form-bottom">
-          <p><strong>Privacy note:</strong> Please don't include passwords, payment details, or confidential documents in your message.</p>
-          <button type="submit">Open email <span aria-hidden="true">→</span></button>
+          <p>
+            <strong>Privacy note:</strong>
+            Please don't include passwords, payment details, or confidential documents in your message.
+          </p>
+
+          <button type="submit" [disabled]="isSubmitting">
+            @if (isSubmitting) {
+              <lucide-icon class="button-spinner" [img]="icons.LoaderCircle" [size]="15" [strokeWidth]="2"></lucide-icon>
+              <span>Sending...</span>
+            } @else {
+              <span>Send message</span>
+              <lucide-icon [img]="icons.ArrowRight" [size]="16" [strokeWidth]="2"></lucide-icon>
+            }
+          </button>
         </div>
+
+        @if (submitMessage) {
+          <div
+            class="submit-status"
+            [class.success]="submitState === 'success'"
+            [class.error]="submitState === 'error'"
+            role="status"
+            aria-live="polite"
+          >
+            {{ submitMessage }}
+          </div>
+        }
       </form>
     </div>
   </section>

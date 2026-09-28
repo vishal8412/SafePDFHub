@@ -5,15 +5,32 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express from 'express';
+import type { Request } from 'express';
 import { join } from 'node:path';
+import { loadEnvFile } from 'node:process';
 
 import { TOOLS } from './app/config/tools.config';
 import { SITE_CONFIG } from './app/config/site.config';
+import { getContactMailConfig, sendContactMessage } from './server/contact-mail';
+
+try {
+  loadEnvFile(join(process.cwd(), '.env'));
+} catch {
+  // Production environments normally inject environment variables directly.
+  // A missing local .env file is not an application error.
+}
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 const angularApp = new AngularNodeAppEngine();
+
+const contactRateLimit = new Map<string, number[]>();
+const CONTACT_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const CONTACT_RATE_LIMIT_MAX = 5;
+
+app.use(express.json({ limit: '20kb' }));
+
 
 const legacyToolRedirects = new Map<string, string>([
   ['/compress-pdf', '/tools/compress-pdf'],
@@ -24,6 +41,92 @@ const legacyToolRedirects = new Map<string, string>([
   ['/remove-password', '/tools/unlock-pdf'],
   ['/pdf-to-word', '/']
 ]);
+
+/**
+ * First-party contact endpoint.
+ *
+ * Contact messages are not persisted by SafePDFHub. The endpoint validates the
+ * request, applies a lightweight in-process rate limit and forwards the message
+ * through the configured transactional email provider.
+ */
+app.post('/api/contact', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const body = isRecord(req.body) ? req.body : {};
+  const name = cleanSingleLine(body['name']);
+  const email = cleanSingleLine(body['email']);
+  const subject = cleanSingleLine(body['subject']);
+  const message = cleanMessage(body['message']);
+  const website = cleanSingleLine(body['website']);
+  const startedAt = Number(body['startedAt']);
+
+  if (website) {
+    res.status(200).json({ message: 'Your message has been sent. Thank you for contacting SafePDFHub.' });
+    return;
+  }
+
+  if (!name || name.length > 100) {
+    res.status(400).json({ message: 'Please enter your name.' });
+    return;
+  }
+
+  if (!isValidEmail(email)) {
+    res.status(400).json({ message: 'Please enter a valid email address.' });
+    return;
+  }
+
+  if (!subject || subject.length > 160) {
+    res.status(400).json({ message: 'Please enter a valid subject.' });
+    return;
+  }
+
+  if (message.length < 10 || message.length > 5000) {
+    res.status(400).json({ message: 'Please provide a little more detail in your message.' });
+    return;
+  }
+
+  if (!Number.isFinite(startedAt) || Date.now() - startedAt < 1200) {
+    res.status(400).json({ message: 'Please take a moment to complete the form and try again.' });
+    return;
+  }
+
+  const rateLimitKey = getRateLimitKey(req);
+  if (!allowContactRequest(rateLimitKey)) {
+    res.status(429).json({ message: 'Too many messages from this connection. Please try again later.' });
+    return;
+  }
+
+  const mailConfig = getContactMailConfig(process.env);
+  if (!mailConfig) {
+    console.error('Contact form is not configured: missing RESEND_API_KEY, CONTACT_FROM_EMAIL or CONTACT_TO_EMAIL.');
+    res.status(503).json({ message: 'Contact email is temporarily unavailable. Please email us directly instead.' });
+    return;
+  }
+
+  try {
+    const result = await sendContactMessage(
+      { name, email, subject, message },
+      mailConfig
+    );
+
+    if (!result.ok) {
+      console.error('Contact email provider rejected the message.', {
+        status: result.status,
+        providerMessage: result.providerMessage
+      });
+      res.status(502).json({ message: 'We could not send your message right now. Please try again or email us directly.' });
+      return;
+    }
+
+    res.status(200).json({
+      message: 'Your message has been sent. Thank you for contacting SafePDFHub.'
+    });
+  } catch (error) {
+    console.error('Contact email delivery failed.', error);
+    res.status(502).json({
+      message: 'We could not send your message right now. Please try again or email us directly.'
+    });
+  }
+});
 
 /**
  * Root-level crawler endpoints must be handled before the static-file and
@@ -121,6 +224,62 @@ app.use((req, res, next) => {
     )
     .catch(next);
 });
+
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function cleanSingleLine(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/[\r\n]+/g, ' ').trim() : '';
+}
+
+function cleanMessage(value: unknown): string {
+  return typeof value === 'string'
+    ? value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+    : '';
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
+}
+
+function getRateLimitKey(req: Request): string {
+  const trustProxy = process.env['TRUST_PROXY'] === 'true';
+  if (trustProxy) {
+    const forwarded = req.header('x-forwarded-for')?.split(',')[0]?.trim();
+    if (forwarded) {
+      return forwarded;
+    }
+  }
+
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+function allowContactRequest(key: string): boolean {
+  const now = Date.now();
+  const recent = (contactRateLimit.get(key) || []).filter(
+    timestamp => now - timestamp < CONTACT_RATE_LIMIT_WINDOW_MS
+  );
+
+  if (recent.length >= CONTACT_RATE_LIMIT_MAX) {
+    contactRateLimit.set(key, recent);
+    return false;
+  }
+
+  recent.push(now);
+  contactRateLimit.set(key, recent);
+
+  if (contactRateLimit.size > 1000) {
+    for (const [rateKey, timestamps] of contactRateLimit) {
+      if (timestamps.every(timestamp => now - timestamp >= CONTACT_RATE_LIMIT_WINDOW_MS)) {
+        contactRateLimit.delete(rateKey);
+      }
+    }
+  }
+
+  return true;
+}
 
 /**
  * Escape XML text nodes used by the generated sitemap.

@@ -42,7 +42,10 @@ export class SeoService {
     const config = PAGE_SEO[path] ?? NON_INDEXABLE_PAGE_SEO[path];
 
     if (config) {
-      this.update({ ...config });
+      this.update({
+        ...config,
+        breadcrumbs: undefined
+      });
       return;
     }
 
@@ -89,7 +92,41 @@ export class SeoService {
     this.setMetaName('twitter:title', options.title);
     this.setMetaName('twitter:description', options.description);
 
-    this.setJsonLd('safepdfhub-organization-jsonld', this.organizationSchema());
+    const canonicalPath = this.normalizePath(options.canonicalPath);
+
+    // Google recommends Organization markup on the home page or a dedicated
+    // organization page such as About, rather than repeating it everywhere.
+    if (canonicalPath === '/' || canonicalPath === '/about') {
+      this.setJsonLd('safepdfhub-organization-jsonld', this.organizationSchema());
+    } else {
+      this.removeJsonLd('safepdfhub-organization-jsonld');
+    }
+
+    // WebSite structured data is intentionally limited to the domain home
+    // page because Google uses it to determine the preferred site name.
+    if (canonicalPath === '/') {
+      this.setJsonLd('safepdfhub-website-jsonld', this.websiteSchema());
+    } else {
+      this.removeJsonLd('safepdfhub-website-jsonld');
+    }
+
+    if (canonicalPath === '/about') {
+      this.setJsonLd(
+        'safepdfhub-aboutpage-jsonld',
+        this.aboutPageSchema(canonicalUrl)
+      );
+    } else {
+      this.removeJsonLd('safepdfhub-aboutpage-jsonld');
+    }
+
+    if (canonicalPath === '/contact') {
+      this.setJsonLd(
+        'safepdfhub-contactpage-jsonld',
+        this.contactPageSchema(canonicalUrl)
+      );
+    } else {
+      this.removeJsonLd('safepdfhub-contactpage-jsonld');
+    }
 
     if (options.webApplication) {
       this.setJsonLd(
@@ -117,7 +154,52 @@ export class SeoService {
       '@id': `${SITE_CONFIG.url}/#organization`,
       name: SITE_CONFIG.name,
       url: SITE_CONFIG.url,
-      logo: SITE_CONFIG.logoUrl
+      logo: SITE_CONFIG.logoUrl,
+      description: SITE_CONFIG.description,
+      email: SITE_CONFIG.contactEmail,
+      contactPoint: {
+        '@type': 'ContactPoint',
+        email: SITE_CONFIG.contactEmail,
+        contactType: 'customer support',
+        url: `${SITE_CONFIG.url}/contact`
+      }
+    };
+  }
+
+  private websiteSchema(): Record<string, unknown> {
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      '@id': `${SITE_CONFIG.url}/#website`,
+      name: SITE_CONFIG.name,
+      url: SITE_CONFIG.url
+    };
+  }
+
+  private aboutPageSchema(canonicalUrl: string): Record<string, unknown> {
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'AboutPage',
+      '@id': `${canonicalUrl}#webpage`,
+      url: canonicalUrl,
+      name: 'About SafePDFHub',
+      description: PAGE_SEO['/about'].description,
+      inLanguage: 'en',
+      isPartOf: { '@id': `${SITE_CONFIG.url}/#website` },
+      publisher: { '@id': `${SITE_CONFIG.url}/#organization` },
+      mainEntity: { '@id': `${SITE_CONFIG.url}/#organization` }
+    };
+  }
+
+  private contactPageSchema(canonicalUrl: string): Record<string, unknown> {
+    return {
+      '@context': 'https://schema.org',
+      '@type': 'ContactPage',
+      '@id': `${canonicalUrl}#webpage`,
+      url: canonicalUrl,
+      name: 'Contact SafePDFHub',
+      description: PAGE_SEO['/contact'].description,
+      mainEntity: { '@id': `${SITE_CONFIG.url}/#organization` }
     };
   }
 
