@@ -69,7 +69,8 @@ export class CompressionFacade {
         0,
         Math.round(((file.size - compressed.size) / file.size) * 100),
       );
-      this.state.duration = `${((performance.now() - startedAt) / 1000).toFixed(1)}s`;
+      this.state.durationMs = performance.now() - startedAt;
+      this.state.duration = `${(this.state.durationMs / 1000).toFixed(1)}s`;
       this.state.estimatedFinalSize = compressed.size / 1024 / 1024;
       this.state.estimatedReduction = this.state.reduction;
       this.state.stage = 'complete';

@@ -16,6 +16,16 @@
     </ol>
   </nav>
 
+  <!-- Workspace page identity: keep the tool H1 outside the interactive workspace. -->
+  <header
+    *ngIf="isWorkspaceMode && isCompressTool && !compressionState.compressedFile"
+    class="tool-page-heading"
+    aria-labelledby="compress-page-title"
+  >
+    <h1 id="compress-page-title">Compress PDF</h1>
+    <p>Reduce PDF file size with smart browser-side optimization.</p>
+  </header>
+
   <input
     #fileInput
     class="global-tool-file-input"
@@ -228,11 +238,17 @@
   [compressionLevel]="compressionState.compressionLevel"
   [loading]="workspace.loading"
   [pdfInsights]="compressionState.pdfInsights"
+  [resultFile]="compressionState.compressedFile"
+  [originalFileName]="workspace.files[0]?.name || ''"
+  [durationMs]="compressionState.durationMs"
 
   (compressionLevelChange)="compressionState.compressionLevel = $event; analyzeCompression();"
   (compress)="compressPdf()"
   (replaceFile)="triggerUpload()"
   (smartTool)="goToTool($event)"
+  (downloadResult)="downloadCompressionResult()"
+  (processAnother)="processAnotherCompressionPdf()"
+  (editAgain)="editCompressionAgain()"
 />
 
   <!-- =====================

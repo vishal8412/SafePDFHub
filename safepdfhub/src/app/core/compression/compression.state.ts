@@ -20,9 +20,21 @@ export class CompressionState {
     finalSize = 0;
     reduction = 0;
     duration = '';
+    durationMs = 0;
     showResult = false;
     showCompressResult = false;
     analysisResult: PdfFileAnalysis | null = null;
+
+    clearResult(): void {
+    this.compressedFile = null;
+    this.finalSize = 0;
+    this.reduction = 0;
+    this.duration = '';
+    this.durationMs = 0;
+    this.showResult = false;
+    this.showCompressResult = false;
+    this.stage = this.analysisResult ? 'analysis' : 'idle';
+}
 
     reset(): void {
     this.compressionLevel = 'recommended';
@@ -38,6 +50,7 @@ export class CompressionState {
     this.finalSize = 0;
     this.reduction = 0;
     this.duration = '';
+    this.durationMs = 0;
     this.showResult = false;
     this.showCompressResult = false;
     this.analysisResult = null;

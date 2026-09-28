@@ -1,4 +1,27 @@
-<div class="compress-v2">
+<div class="compress-v2" [class.compress-v2--result]="!!resultFile">
+  <app-operation-result
+    *ngIf="resultFile"
+    [file]="resultFile"
+    [originalFileName]="originalFileName"
+    [durationMs]="durationMs"
+    eyebrow="COMPRESSION COMPLETE"
+    title="Your compressed PDF is ready"
+    description="Your PDF was compressed locally and is ready to download."
+    operationLabel="Compressed PDF"
+    icon="compress"
+    actionLabel="Download compressed PDF"
+    actionDescription="Save your optimized PDF to your device"
+    privacyHeading="Your PDF stayed on this device."
+    privacyDescription="SafePDFHub did not upload or receive your document."
+    [showEditAgain]="true"
+    editAgainLabel="Back to compression settings"
+    processAnotherLabel="Compress another PDF"
+    (download)="downloadResult.emit()"
+    (editAgain)="editAgain.emit()"
+    (processAnother)="processAnother.emit()"
+  />
+
+  <ng-container *ngIf="!resultFile">
 
   <!-- LEFT -->
   <div class="preview-section">
@@ -73,7 +96,7 @@
   </div>
 
   <div class="trust-item">
-    ⚡ Instant Processing
+    ⚡ Local Processing
   </div>
 
   <div class="trust-item">
@@ -94,7 +117,7 @@
     <div class="panel-top">
 
       <div class="panel-label">
-        AI Optimization Engine
+        Smart Optimization Engine
       </div>
 
       <h2>
@@ -135,7 +158,7 @@
     </div>
 
     <div class="stat-title">
-      Optimized Size
+      Estimated Optimized Size
     </div>
 </div>
     <div class="stat-value">
@@ -168,7 +191,7 @@
 
       <div class="savings-header">
 
-        <span>Space Saved</span>
+        <span>Estimated Space Saved</span>
 
         <span>{{ estimatedReduction }}%</span>
 
@@ -182,6 +205,8 @@
         ></div>
 
       </div>
+
+      <p class="estimate-note">Final file size is calculated after compression; this value is an estimate.</p>
 
     </div>
 
@@ -347,5 +372,5 @@
   
   </div>
   
+</ng-container>
 </div>
-

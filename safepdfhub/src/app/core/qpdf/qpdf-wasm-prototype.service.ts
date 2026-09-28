@@ -212,6 +212,62 @@ export class QpdfWasmPrototypeService {
   }
 
   /**
+   * Compression-specific qpdf pass.
+   *
+   * Unlike the generic optimize() path used by Studio, this pass is allowed
+   * to rewrite non-JPEG images when qpdf can prove that the JPEG result is
+   * smaller. It also recompresses existing Flate streams at level 9.
+   * qpdf 12.2.0 (the version bundled by @neslinesli93/qpdf-wasm 0.3.0)
+   * supports --optimize-images and --jpeg-quality.
+   */
+  async optimizeForCompression(
+    file: File,
+    jpegQuality = 72,
+    onProgress?: (progress: number) => void,
+    runnerFactory: QpdfWasmRunnerFactory = createBrowserQpdfRunnerFactory()
+  ): Promise<File> {
+    this.cancelled = false;
+    onProgress?.(5);
+
+    const inputName = this.uniqueName(file.name || 'input.pdf', 0);
+    const outputName = 'compressed-qpdf-output.pdf';
+    const quality = Math.min(95, Math.max(40, Math.round(jpegQuality)));
+    const request: QpdfRunRequest = {
+      inputs: { [inputName]: new Uint8Array(await file.arrayBuffer()) },
+      args: [
+        inputName,
+        '--compress-streams=y',
+        '--decode-level=generalized',
+        '--recompress-flate',
+        '--compression-level=9',
+        '--optimize-images',
+        `--jpeg-quality=${quality}`,
+        '--object-streams=generate',
+        '--',
+        outputName,
+      ],
+      outputs: [outputName],
+    };
+
+    const result = await this.runtime.run(
+      request,
+      progress => onProgress?.(10 + Math.round(progress * 0.85)),
+      runnerFactory
+    );
+
+    this.throwIfCancelled();
+    if (!result.ok || result.exitCode !== 0) {
+      throw new Error(this.formatQpdfError(result));
+    }
+
+    const output = result.outputs[outputName];
+    if (!output) throw new Error('QPDF compression optimization did not return an output PDF.');
+
+    onProgress?.(100);
+    return new File([toArrayBuffer(output)], file.name, { type: 'application/pdf' });
+  }
+
+  /**
    * qpdf-run's runner is backed by its own Worker.
    * Destroying that runner is our cancellation mechanism.
    */

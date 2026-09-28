@@ -6,12 +6,30 @@
   align-items: start;
 }
 
+.compress-v2--result {
+  display: block;
+}
+
+.compress-v2--result > app-operation-result {
+  display: block;
+}
+
 /* =========================
    LEFT PREVIEW
 ========================= */
 .preview-section {
   position: relative;
   align-self: start;
+}
+
+/* Keep the uploaded-document context visible while the longer optimization
+   panel scrolls on large desktop screens. Reset below 1024px so tablet/mobile
+   retain normal document flow. */
+@media (min-width: 1025px) {
+  .preview-section {
+    position: sticky;
+    top: 24px;
+  }
 }
 
 .preview-card {
@@ -291,6 +309,14 @@
   margin-top: 16px;
 }
 
+.estimate-note {
+  margin: 10px 0 0;
+  color: var(--text-muted, #7890a6);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+
 .savings-header {
 
   display: flex;
@@ -386,8 +412,8 @@
   position: relative;
 
   // text-align: left;
-  padding: 16px 18px;
-  min-height: 68px;
+  padding: 12px 18px;
+  min-height: 64px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -448,8 +474,8 @@
 
   position: absolute;
 
-  top: 16px;
-  right: 16px;
+  top: 12px;
+  right: 14px;
 
   padding: 6px 10px;
 

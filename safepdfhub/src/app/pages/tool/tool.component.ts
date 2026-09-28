@@ -509,6 +509,9 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.watermarkErrorMessage = null;
       this.watermarkProgress = 0;
     }
+    if (this.isCompressTool) {
+      this.compressionState.reset();
+    }
 
     const selected = this.validateFiles(files);
     if (this.workspace.files.length && this.workspace.activeIndex === -1) {
@@ -1455,14 +1458,10 @@ export class ToolComponent implements OnInit, OnDestroy {
 
     this.workspace.loading = true;
     try {
-      const result = await this.compressionFacade.compress(this.workspace.files[0]);
-      this.downloadFile(result);
-      await this.workspaceOutput.showResult({
-        file: result,
-        previewGenerator: this.generatePreview.bind(this)
-      });
+      await this.compressionFacade.compress(this.workspace.files[0]);
       this.loader.setText('Done ✨');
       this.toast.show('Optimization completed', 'success');
+      this.compressionState.showResult = true;
       this.compressionState.showCompressResult = true;
     }
     catch (e) {
@@ -1475,6 +1474,28 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.workspace.loading = false;
       this.cd.detectChanges();
     }
+  }
+
+  downloadCompressionResult(): void {
+    const file = this.compressionState.compressedFile;
+    if (!file) return;
+    this.downloadFile(file);
+  }
+
+  editCompressionAgain(): void {
+    if (this.workspace.loading) return;
+    this.compressionState.clearResult();
+    this.cd.markForCheck();
+  }
+
+  processAnotherCompressionPdf(): void {
+    if (this.workspace.loading) return;
+    this.compressionState.reset();
+    this.workspaceOps.clear();
+    this.workspace.activeIndex = -1;
+    this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
+    this.cd.markForCheck();
+    setTimeout(() => this.triggerUpload());
   }
 
   resetAfterCompression(): void {

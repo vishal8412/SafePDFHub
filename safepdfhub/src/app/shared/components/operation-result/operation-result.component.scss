@@ -843,6 +843,25 @@
   stroke-linejoin: round;
 }
 
+.operation-result__compress-arrow {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.operation-result__compress-check-badge {
+  fill: rgba(7, 22, 36, .98);
+  stroke: currentColor;
+  stroke-width: 2.1;
+}
+
+.operation-result__success-mark--compress .operation-result__compress-arrow {
+  animation: compress-arrow-in 560ms 220ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+
 @media (max-width: 760px) {
   :host {
     width: 100%;
@@ -850,6 +869,17 @@
   }
 }
 
+
+@keyframes compress-arrow-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
 
 @keyframes watermark-line-in {
   from { opacity: 0; transform: translate(-3px, 3px); }

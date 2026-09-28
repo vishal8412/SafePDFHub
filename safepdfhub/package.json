@@ -19,7 +19,8 @@
     "watermark:audit": "node scripts/watermark-audit.mjs",
     "watermark:qa:audit": "node scripts/watermark-qa-audit.mjs",
     "start:ssr": "npm run build && npm run serve:ssr:safepdfhub",
-    "compress:c6:audit": "node scripts/compress-c6-audit.mjs"
+    "compress:c6:audit": "node scripts/compress-c6-audit.mjs",
+    "compress:c6.2:browser": "python scripts/c62-real-browser-validation.py --start-server"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

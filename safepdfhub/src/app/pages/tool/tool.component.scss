@@ -76,6 +76,35 @@ $muted: #8FA3B8;
   font-weight: 600;
 }
 
+/* =========================
+   WORKSPACE PAGE HEADING
+   The tool identity stays at page level so the interactive workspace can
+   retain its own internal headings and controls.
+========================= */
+.tool-page-heading {
+  width: min(100%, 1320px);
+  margin: 18px auto 24px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+
+.tool-page-heading h1 {
+  margin: 0 0 7px;
+  color: #eaf4ff;
+  font-size: clamp(32px, 3vw, 44px);
+  line-height: 1.1;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.tool-page-heading p {
+  margin: 0;
+  max-width: 760px;
+  color: rgba(218, 229, 239, 0.72);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
 .hero {
   text-align: center;
   margin-bottom: 28px;
@@ -1066,6 +1095,22 @@ $muted: #8FA3B8;
     padding: 14px;
   }
 
+  .tool-page-heading {
+    margin-top: 16px;
+    margin-bottom: 20px;
+    padding: 0;
+  }
+
+  .tool-page-heading h1 {
+    font-size: 30px;
+    line-height: 1.16;
+  }
+
+  .tool-page-heading p {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
   .hero {
     margin-bottom: 22px;
     padding-top: 20px;
@@ -1210,6 +1255,19 @@ $muted: #8FA3B8;
 }
 
 @media (max-width: 480px) {
+
+  .tool-page-heading {
+    margin-top: 13px;
+    margin-bottom: 18px;
+  }
+
+  .tool-page-heading h1 {
+    font-size: 25px;
+  }
+
+  .tool-page-heading p {
+    font-size: 13px;
+  }
 
   .hero h1 {
     font-size: 24px;

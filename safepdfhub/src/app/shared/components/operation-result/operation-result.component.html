@@ -38,10 +38,12 @@
         </svg>
       }
       @case ('compress') {
-        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
-          <path class="operation-result__icon-stroke" d="M17 17h30v30H17z" />
-          <path class="operation-result__icon-stroke" d="m25 25 6 6-6 6M39 25l-6 6 6 6" />
-          <path class="operation-result__check" d="m39 45 4 4 7-8" />
+        <svg class="operation-result__success-mark operation-result__success-mark--standard operation-result__success-mark--compress" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M17 7h21l9 9v41H17z" />
+          <path class="operation-result__icon-stroke operation-result__icon-fold" d="M38 7v10h9" />
+          <path class="operation-result__compress-arrow" d="M22 24h7v7M22 24l8 8M42 24h-7v7M42 24l-8 8M22 43h7v-7M22 43l8-8M42 43h-7v-7M42 43l-8-8" />
+          <circle class="operation-result__compress-check-badge" cx="47" cy="47" r="8.5" />
+          <path class="operation-result__check operation-result__check--badge" d="m43 47 2.5 2.5 5-6" />
         </svg>
       }
       @case ('watermark') {
