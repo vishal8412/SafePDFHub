@@ -1840,3 +1840,10 @@ border:
     transition: none;
   }
 }
+
+.tool-guide { max-width: 880px; margin: 48px auto; padding: 0 20px; text-align: left; }
+.tool-guide h2 { margin: 28px 0 16px; font-size: 24px; }
+.tool-guide h3 { margin: 24px 0 8px; font-size: 18px; }
+.tool-guide p, .tool-guide li { line-height: 1.7; }
+.tool-guide li { margin: 8px 0; }
+.tool-guide a { text-decoration: underline; }

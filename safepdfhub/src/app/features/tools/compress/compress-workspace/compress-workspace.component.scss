@@ -1322,3 +1322,11 @@
 
   gap: 28px;
 }
+.target-size-panel { margin: 20px 0; padding: 20px; border: 1px solid #328398; border-radius: 16px; color: #dce7ee; }
+.target-size-panel label { display: block; margin-bottom: 12px; }
+.target-size-panel input[type=number] { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 8px; border: 1px solid #328398; background: #102332; color: #fff; }
+.target-size-panel p { line-height: 1.5; color: #bacbd5; }
+.target-presets { display: flex; gap: 8px; margin-top: 12px; }
+.target-presets button { padding: 8px 16px; border: 1px solid #328398; border-radius: 8px; background: #102332; color: white; cursor: pointer; }
+.mode-card:disabled, .target-presets button:disabled { opacity: .6; cursor: wait; }
+.stat-value { overflow-wrap: anywhere; }

@@ -1,6 +1,9 @@
+import { LargeCompressionCapabilityService } from '../../core/compression/large/large-compression-capability.service';
+import { LARGE_COMPRESSION_THRESHOLD, LOSSLESS_ONLY_THRESHOLD } from '../../core/compression/large/large-compression-policy';
 import { Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { TOOL_GUIDES } from '../../config/tool-guides.config';
 import { TOOLS, Tool } from '../../config/tools.config';
 import { LoaderService } from '../../shared/services/loader.service';
 import { ToastService } from '../../shared/services/toast.service';
@@ -62,6 +65,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   tool!: Tool;
   behavior!: ToolBehavior;
+  get guide() { return this.tool ? TOOL_GUIDES[this.tool.slug] : undefined; }
   recommendedTools: Tool[] = [];
   suggestions: { label: string; action: () => void }[] = [];
   suggestionTitle = 'Suggested for you';
@@ -137,6 +141,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     private mergeEngine: QpdfProductionMergeRouterService,
     public compressionState: CompressionState,
     private compressionFacade: CompressionFacade,
+    readonly compressionCapability: LargeCompressionCapabilityService,
     private compressEngine: CompressEngine,
     private splitEngine: SplitEngine,
     private splitExportService: SplitExportService,
@@ -167,6 +172,11 @@ export class ToolComponent implements OnInit, OnDestroy {
       const match = TOOLS.find(t => t.slug === slug);
       if (!match) {
         void this.router.navigate(['/']);
+        return;
+      }
+
+      if (this.route.snapshot.routeConfig?.path === 'tool/:slug') {
+        void this.router.navigate(['/tools', match.slug], { replaceUrl: true });
         return;
       }
 
@@ -306,6 +316,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get maxFileMB(): number {
+    if (this.isCompressTool) return this.compressionCapability.maxFileBytes / 1_000_000;
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) return 1024;
     return Math.round(this.localCapability.budget.maxFileBytes / (1024 * 1024));
   }
@@ -335,6 +346,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get capacitySummary(): string {
+    if (this.isCompressTool) return `Up to ${this.maxFileMB} MB on this device • up to 500 MB on supported desktops`;
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {
       return 'Up to 1 GB per file • processed locally';
     }
@@ -356,6 +368,9 @@ export class ToolComponent implements OnInit, OnDestroy {
     const assessment = this.workloadAssessment;
     if (!assessment || !this.workspace.files.length) return '';
     if (this.isSecurityTool && !assessment.workload.knownPageCount) return 'Ready for local PDF security processing; large files use the dedicated browser engine.';
+    if (this.isCompressTool && this.workspace.files[0]?.size > LARGE_COMPRESSION_THRESHOLD) return this.workspace.files[0].size > LOSSLESS_ONLY_THRESHOLD
+      ? 'Above 200 MB: lossless compression with temporary disk storage. Previews are disabled.'
+      : 'Disk-backed compression: all modes are available. Previews are disabled to conserve memory.';
     if (!assessment.workload.knownPageCount) return 'Checking PDF workload; page limits will be verified before processing.';
     if (assessment.risk === 'blocked') return assessment.reasons[0] ?? 'This workload cannot be processed locally on this device.';
     if (assessment.risk === 'large' || assessment.risk === 'high-risk') {
@@ -367,7 +382,12 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   private refreshWorkloadAssessment(): void {
-    this.workloadAssessment = this.isSecurityTool
+    this.workloadAssessment = this.isCompressTool
+      ? this.pdfWorkloadAnalyzer.assessWithBudget(this.workspace.files, this.workspace.pageCounts, {
+          ...this.localCapability.budget, maxFileBytes: this.compressionCapability.maxFileBytes,
+          maxTotalBytes: this.compressionCapability.maxFileBytes, maxFiles: 1, maxPages: this.compressionCapability.budget.maxPages,
+          largeWorkloadBytes: LARGE_COMPRESSION_THRESHOLD })
+      : this.isSecurityTool
       ? this.pdfWorkloadAnalyzer.assessSecurity(this.workspace.files, this.workspace.pageCounts)
       : this.pdfWorkloadAnalyzer.assess(this.workspace.files, this.workspace.pageCounts);
     this.applyWorkspaceValidationState();
@@ -480,13 +500,15 @@ export class ToolComponent implements OnInit, OnDestroy {
     }
   }
 
-  private downloadFile(file: File) {
+  private downloadFile(file: File, lifetimeMs = 3000) {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');
     a.href = url;
     a.download = file.name;
+    document.body.appendChild(a);
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), lifetimeMs);
   }
 
   // =====================
@@ -510,7 +532,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.watermarkProgress = 0;
     }
     if (this.isCompressTool) {
-      this.compressionState.reset();
+      this.compressionFacade.reset();
     }
 
     const selected = this.validateFiles(files);
@@ -679,8 +701,10 @@ export class ToolComponent implements OnInit, OnDestroy {
     const valid: File[] = [];
     const existing = [...this.workspace.files];
 
-    for (const file of newFiles) {
-      const result = this.isSecurityTool
+    for (const file of (this.isCompressTool ? newFiles.slice(0, 1) : newFiles)) {
+      const result = this.isCompressTool
+        ? this.pdfValidation.validateCompressionSelection(file)
+        : this.isSecurityTool
         ? this.pdfValidation.validateSecuritySelection(file)
         : this.pdfValidation.validateSelection(
             file,
@@ -892,6 +916,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   // PREVIEW
   // =====================
   private async generatePreview(file: File, id: string) {
+    if (this.isCompressTool && file.size > LARGE_COMPRESSION_THRESHOLD) return;
     const item = this.workspace.workspaceFiles.find(x => x.id === id);
     if (!item) return;
     if (!this.isBrowser) return;
@@ -1389,10 +1414,13 @@ export class ToolComponent implements OnInit, OnDestroy {
 
     const requestId = ++this.analysisRequestId;
     const file = this.workspace.files[0];
-    await this.compressionFacade.analyze(file);
+    try {
+      await this.compressionFacade.analyze(file);
+    } catch (error) {
+      if (this.compressionFacade.isCancellation(error)) return;
+      throw error;
+    }
     
-    console.log('ToolComponent');
-    console.log(this.compressionState);
 
     if (requestId !== this.analysisRequestId) {
       return;
@@ -1448,6 +1476,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   async compressPdf() {
+    if (this.workspace.loading || this.compressionState.compressing) return;
     if (!this.workspace.files.length) {
       this.toast.show('Please add a PDF first', 'error');
       return;
@@ -1455,6 +1484,10 @@ export class ToolComponent implements OnInit, OnDestroy {
 
     this.loader.show();
     this.loader.setText('Optimizing PDF...');
+    this.unregisterLoaderCancellation?.();
+    this.unregisterLoaderCancellation = this.loader.registerCancellationHandler(() => {
+      this.compressionFacade.cancel();
+    });
 
     this.workspace.loading = true;
     try {
@@ -1465,21 +1498,36 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.compressionState.showCompressResult = true;
     }
     catch (e) {
-      console.error(e);
-      this.loader.setText('Optimization failed');
-      this.toast.show('Optimization failed', 'error');
+      if (this.compressionFacade.isCancellation(e)) {
+        this.loader.setText('Optimization cancelled');
+        this.toast.show('Optimization cancelled', 'info');
+      } else {
+        console.error(e);
+        this.loader.setText('Optimization failed');
+        this.toast.show(e instanceof Error ? e.message : 'Optimization failed', 'error');
+      }
     }
     finally {
+      this.unregisterLoaderCancellation?.();
+      this.unregisterLoaderCancellation = null;
       this.loader.hide();
       this.workspace.loading = false;
       this.cd.detectChanges();
     }
   }
 
-  downloadCompressionResult(): void {
+  async downloadCompressionResult(): Promise<void> {
     const file = this.compressionState.compressedFile;
-    if (!file) return;
-    this.downloadFile(file);
+    if (!file || this.workspace.loading) return;
+    this.workspace.loading = true;
+    try {
+      this.compressionFacade.retainLargeResultForDownload();
+      this.downloadFile(file, 300_000);
+    } catch (error) {
+      if (!(error instanceof Error && error.name === 'AbortError')) {
+        this.toast.show('The PDF could not be saved. Check free disk space and try again.', 'error');
+      }
+    } finally { this.workspace.loading = false; this.cd.markForCheck(); }
   }
 
   editCompressionAgain(): void {
@@ -1490,7 +1538,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   processAnotherCompressionPdf(): void {
     if (this.workspace.loading) return;
-    this.compressionState.reset();
+    this.compressionFacade.reset();
     this.workspaceOps.clear();
     this.workspace.activeIndex = -1;
     this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
@@ -1499,7 +1547,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   resetAfterCompression(): void {
-    this.compressionState.reset();
+    this.compressionFacade.reset();
   }
 
   // =====================================
@@ -1567,6 +1615,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.isCompressTool) this.compressionFacade.reset();
     this.dragDepth = 0;
     this.isDragOver = false;
     this.unregisterLoaderCancellation?.();

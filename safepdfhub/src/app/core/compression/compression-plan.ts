@@ -1,4 +1,5 @@
 export interface CompressionPlan {
+    targetBytes?: number;
     strategy: 'safe' | 'smart' | 'strong';
 
     quality: number;

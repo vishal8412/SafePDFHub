@@ -15,3 +15,13 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated delivery and local benchmark evidence
+deployment/
+benchmark-results/
+__pycache__/
+*.pyc
+compression-v2-memory-cancellation-stress.json
+
+# Netlify CLI build and local edge-function outputs
+.netlify/

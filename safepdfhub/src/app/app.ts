@@ -1,3 +1,4 @@
+import { TOOLS } from './config/tools.config';
 import { Component, DestroyRef, inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
@@ -55,7 +56,7 @@ export class App {
       .subscribe(event => {
         const url = event.urlAfterRedirects;
 
-        if (!url.startsWith('/tools/')) {
+        if (!TOOLS.some(tool => url.split(/[?#]/)[0].replace(/\/+$/, '') === `/tools/${tool.slug}`)) {
           this.seo.updateForUrl(url);
         }
 

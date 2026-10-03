@@ -27,10 +27,12 @@ const xml = [
   ''
 ].join('\n');
 
-const robots = [
+const disableIndexing = process.env.INDEXING_DISABLED === 'true' || ['deploy-preview', 'branch-deploy'].includes(process.env.CONTEXT ?? '');
+const robots = disableIndexing ? 'User-agent: *\nDisallow: /\n' : [
   'User-agent: *',
   'Allow: /',
   'Disallow: /__dev/',
+  'Disallow: /api/',
   '',
   `Sitemap: ${siteUrl}/sitemap.xml`,
   ''

@@ -45,8 +45,9 @@ export class OperationResultComponent {
 
   get sizeLabel(): string {
     const bytes = this.file?.size ?? 0;
-    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    if (bytes < 1000) return `${bytes} bytes`;
+    if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(2)} KB`;
+    return `${(bytes / 1_000_000).toFixed(2)} MB`;
   }
 
   get durationLabel(): string {

@@ -1,0 +1,107 @@
+<div class="shell">
+  <h1>QPDF-R5 — Runtime Boundary Resolution</h1>
+  <p>
+    Development-only diagnostic page. R5 removes the page-selection workload ladder and isolates
+    qpdf PDF-output operations against the original PDF. Each probe uses a fresh qpdf-run
+    invocation. Production compression routing, candidate selection, certification, and capacity
+    limits are not changed by this investigation.
+  </p>
+
+  <section class="panel">
+    <label for="pdf">Source PDF</label>
+    <input
+      id="pdf"
+      type="file"
+      accept="application/pdf,.pdf"
+      (change)="onFileSelected($event)"
+      [disabled]="running()"
+    />
+
+    <div class="actions">
+      <button type="button" (click)="run(false)" [disabled]="running() || !selectedFile || !browserAvailable">
+        {{ running() ? 'Running...' : 'Run R5 investigation' }}
+      </button>
+      <button type="button" class="secondary" (click)="cancel()" [disabled]="!running()">Cancel</button>
+      @if (report()) {
+        <button type="button" class="secondary" (click)="run(true)" [disabled]="running() || !selectedFile || !browserAvailable">Run fresh probe</button>
+        <button type="button" class="secondary" (click)="downloadReport()">Download JSON report</button>
+      }
+    </div>
+
+    <div class="progress" aria-hidden="true"><div [style.width.%]="progress()"></div></div>
+    <p>{{ statusMessage() }}</p>
+
+    @if (report(); as currentReport) {
+      <div class="result">
+        <h2>R5 Investigation Report</h2>
+        <dl>
+          <dt>Source</dt><dd>{{ currentReport.sourceFileName }}</dd>
+          <dt>Source bytes</dt><dd>{{ currentReport.sourceFileBytes | number }}</dd>
+          <dt>Source pages</dt><dd>{{ currentReport.sourcePageCount | number }}</dd>
+          <dt>Evidence cache</dt><dd>{{ currentReport.cacheHit ? 'reused — no repeat OOM' : 'fresh probe' }}</dd>
+          <dt>Production interpretation</dt><dd>{{ currentReport.productionInterpretation }}</dd>
+          <dt>Page-count probe</dt>
+          <dd class="status" [class.pass]="currentReport.pageCountProbe.status === 'passed'" [class.fail]="currentReport.pageCountProbe.status === 'failed' || currentReport.pageCountProbe.status === 'oom'">
+            {{ currentReport.pageCountProbe.status }}
+          </dd>
+          <dt>Page-count duration</dt><dd>{{ formatDuration(currentReport.pageCountProbe.durationMs) }}</dd>
+          <dt>First output boundary</dt>
+          <dd class="status" [class.pass]="currentReport.boundary === 'none'" [class.fail]="currentReport.boundary !== 'none'">
+            {{ currentReport.boundary }}
+          </dd>
+          <dt>Probes recorded</dt><dd>{{ currentReport.operations.length }}</dd>
+        </dl>
+
+        @if (currentReport.pageCountProbe.errorMessage) {
+          <p class="fail">Page-count error: {{ currentReport.pageCountProbe.errorMessage }}</p>
+        }
+
+        @for (operation of currentReport.operations; track operation.probe) {
+          <section class="workload">
+            <h3>{{ operation.probe }}</h3>
+            <dl>
+              <dt>Status</dt>
+              <dd class="status"
+                [class.pass]="operation.status === 'passed'"
+                [class.fail]="operation.status === 'failed' || operation.status === 'oom'"
+                [class.warn]="operation.status === 'skipped'">
+                {{ operation.status }}
+              </dd>
+              <dt>Duration</dt><dd>{{ formatDuration(operation.durationMs) }}</dd>
+              <dt>Exit code</dt><dd>{{ operation.exitCode ?? '—' }}</dd>
+              <dt>Output bytes</dt><dd>{{ operation.outputBytes ?? '—' }}</dd>
+              <dt>Diagnostic</dt><dd>{{ operation.diagnosticCode }}</dd>
+              <dt>Action</dt><dd>{{ operation.recommendedAction }}</dd>
+              <dt>Runtime phase</dt><dd>{{ operation.runtimePhase ?? '—' }}</dd>
+              <dt>Arguments</dt><dd class="args">{{ operation.args.join(' ') }}</dd>
+              @if (operation.errorMessage) {
+                <dt>Error</dt><dd class="fail">{{ operation.errorMessage }}</dd>
+              }
+            </dl>
+          </section>
+        }
+
+        @if (currentReport.boundary === 'baseline-output') {
+          <div class="workload">
+            <h3 class="fail">QPDF PDF-output boundary confirmed</h3>
+            <p>Baseline PDF writing exhausted browser WASM memory. The remaining output-producing probes are intentionally not executed because they would repeat the same high-risk writer path. SafePDFHub should return the certified non-qpdf result instead of retrying qpdf for this document.</p>
+          </div>
+        }
+
+        <p class="note warn">
+          WASM peak memory is not exposed by qpdf-run's public runner API. Browser JS heap
+          observations are auxiliary evidence only and must not be interpreted as qpdf Worker WASM
+          peak memory.
+        </p>
+      </div>
+    }
+
+    <p class="note">
+      R5 interpretation: the investigation is now repeat-safe. The exact PDF is cached by SHA-256 after a completed run, so the same known OOM boundary is not repeatedly re-triggered. Baseline PDF output establishes whether qpdf can create any transformed
+      PDF from this input. If it passes, each following probe adds one independent capability:
+      stream compression, Flate recompression, object streams, and image optimization. A failure
+      identifies the first operation that crosses the observed runtime boundary; later probes are
+      intentionally skipped rather than generating repeated high-risk failures.
+    </p>
+  </section>
+</div>

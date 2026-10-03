@@ -51,8 +51,8 @@ export class SeoService {
 
     // Unknown application pages are not part of the public SEO inventory.
     this.update({
-      title: 'SafePDFHub — Private PDF Tools',
-      description: SITE_CONFIG.description,
+      title: 'Page Not Found | SafePDFHub',
+      description: 'This address does not match an available SafePDFHub page or PDF tool.',
       canonicalPath: path || '/',
       indexable: false
     });
@@ -88,7 +88,7 @@ export class SeoService {
     this.setMetaProperty('og:type', 'website');
     this.setMetaProperty('og:site_name', SITE_CONFIG.name);
 
-    this.setMetaName('twitter:card', 'summary_large_image');
+    this.setMetaName('twitter:card', 'summary');
     this.setMetaName('twitter:title', options.title);
     this.setMetaName('twitter:description', options.description);
 
@@ -211,9 +211,14 @@ export class SeoService {
     return {
       '@context': 'https://schema.org',
       '@type': 'WebApplication',
+      '@id': `${canonicalUrl}#application`,
       name,
       description,
       url: canonicalUrl,
+      inLanguage: 'en',
+      isAccessibleForFree: true,
+      browserRequirements: 'Requires JavaScript and a supported modern browser.',
+      publisher: { '@id': `${SITE_CONFIG.url}/#organization` },
       applicationCategory: 'BusinessApplication',
       operatingSystem: 'Web Browser'
     };

@@ -118,6 +118,16 @@
 
  </div>
 
+  <section class="tool-guide" *ngIf="!isWorkspaceMode && guide as help" aria-labelledby="tool-guide-title">
+    <h2 id="tool-guide-title">How to {{ tool.label.toLowerCase() }}</h2>
+    <ol><li *ngFor="let step of help.steps">{{ step }}</li></ol>
+    <h2>Questions about {{ tool.label.toLowerCase() }}</h2>
+    <article *ngFor="let item of help.questions">
+      <h3>{{ item.question }}</h3><p>{{ item.answer }}</p>
+    </article>
+    <p>Documents are processed in your browser. Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> for help.</p>
+  </section>
+
   <!-- =====================
        FILE LIST (HORIZONTAL)
   ===================== -->
@@ -236,6 +246,9 @@
   [estimatedFinalSize]="compressionState.estimatedFinalSize"
 
   [compressionLevel]="compressionState.compressionLevel"
+  [targetSizeMB]="compressionState.targetSizeMB"
+  [compressionResult]="compressionState.compressionResult"
+  (targetSizeMBChange)="compressionState.targetSizeMB = $event"
   [loading]="workspace.loading"
   [pdfInsights]="compressionState.pdfInsights"
   [resultFile]="compressionState.compressedFile"

@@ -34,7 +34,7 @@ export const TOOLS: Tool[] = [
   {
     slug: 'compress-pdf',
     title: 'Compress PDF Online Free | Reduce PDF Size',
-    description: 'Compress PDF files online for free. Reduce file size without losing quality. 100% secure and private.',
+    description: 'Reduce PDF size locally with lossless or image compression, or try a target size in MB. Up to 500 MB on supported desktops; device limits apply.',
     keywords: 'compress pdf, reduce pdf size, pdf compressor online',
     category: 'compress',
     label: 'Compress PDF',
@@ -58,7 +58,7 @@ export const TOOLS: Tool[] = [
   {
     slug: 'split-pdf',
     title: 'Split PDF Online Free',
-    description: 'Split PDF into multiple pages instantly. No upload required.',
+    description: 'Extract pages or split a PDF into separate files locally in your browser. No document upload required.',
     keywords: 'split pdf, extract pdf pages',
     category: 'split',
     label: 'Split PDF',

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 
+import { QpdfRuntimeError, sanitizeQpdfRuntimeErrorMessage } from './qpdf-runtime-error';
 import type {
   QpdfRunRequest,
   QpdfRunResult,
@@ -10,27 +11,58 @@ import type {
 @Injectable({ providedIn: 'root' })
 export class QpdfWasmRuntimeService {
   private activeRunner: QpdfWasmRunner | null = null;
-  private cancelled = false;
+  private generation = 0;
 
   async run(
     request: QpdfRunRequest,
     onProgress?: (progress: number) => void,
     runnerFactory: QpdfWasmRunnerFactory = createBrowserQpdfRunnerFactory()
   ): Promise<QpdfRunResult> {
-    this.cancelled = false;
-
+    const generation = ++this.generation;
     onProgress?.(0);
 
-    const runner = await runnerFactory.create();
+    let runner: QpdfWasmRunner;
+    try {
+      runner = await runnerFactory.create();
+    } catch (error) {
+      throw new QpdfRuntimeError(
+        'runner-create',
+        sanitizeQpdfRuntimeErrorMessage(error),
+        error,
+      );
+    }
+
+    if (generation !== this.generation) {
+      try {
+        await runner.destroy?.();
+      } catch {
+        // Cancellation has already won; cleanup failure must not mask it.
+      }
+      throw new QpdfRuntimeError(
+        'runner-run',
+        'QPDF operation was cancelled.',
+        undefined,
+        true,
+      );
+    }
     this.activeRunner = runner;
 
     try {
-      this.throwIfCancelled();
+      this.throwIfCancelled(generation);
       onProgress?.(10);
 
-      const result = await runner.run(request);
+      let result: QpdfRunResult;
+      try {
+        result = await runner.run(request);
+      } catch (error) {
+        throw new QpdfRuntimeError(
+          'runner-run',
+          sanitizeQpdfRuntimeErrorMessage(error),
+          error,
+        );
+      }
 
-      this.throwIfCancelled();
+      this.throwIfCancelled(generation);
       onProgress?.(100);
 
       return result;
@@ -39,12 +71,20 @@ export class QpdfWasmRuntimeService {
         this.activeRunner = null;
       }
 
-      await runner.destroy?.();
+      try {
+        await runner.destroy?.();
+      } catch (error) {
+        // Never replace a successful qpdf result with a destroy-only failure.
+        // If the operation is already failing, the original error remains the
+        // useful diagnostic. Cleanup failures are intentionally not surfaced
+        // as candidate failures.
+        void error;
+      }
     }
   }
 
   async cancel(): Promise<void> {
-    this.cancelled = true;
+    this.generation += 1;
 
     const runner = this.activeRunner;
     this.activeRunner = null;
@@ -52,9 +92,9 @@ export class QpdfWasmRuntimeService {
     await runner?.destroy?.();
   }
 
-  private throwIfCancelled(): void {
-    if (this.cancelled) {
-      throw new Error('QPDF operation was cancelled.');
+  private throwIfCancelled(generation: number): void {
+    if (generation !== this.generation) {
+      throw new QpdfRuntimeError('runner-run', 'QPDF operation was cancelled.', undefined, true);
     }
   }
 }

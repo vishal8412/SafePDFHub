@@ -52,7 +52,10 @@
             "server": "src/main.server.ts",
             "outputMode": "server",
             "security": {
-              "allowedHosts": []
+              "allowedHosts": [
+                "safepdfhub.com",
+                "www.safepdfhub.com"
+              ]
             },
             "ssr": {
               "entry": "src/server.ts"
@@ -60,7 +63,8 @@
             "webWorkerTsConfig": "tsconfig.worker.json",
             "allowedCommonJsDependencies": [
               "@neslinesli93/qpdf-wasm"
-            ]
+            ],
+            "deleteOutputPath": true
           },
           "configurations": {
             "production": {
@@ -76,7 +80,48 @@
                   "maximumError": "50kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "fileReplacements": [
+                {
+                  "replace": "src/app/app.routes.development.ts",
+                  "with": "src/app/app.routes.production.ts"
+                }
+              ],
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "src/assets",
+                  "output": "assets",
+                  "ignore": [
+                    "**/*.md",
+                    "qpdf/f2r2/**",
+                    "pdf.worker.mjs",
+                    "safepdfhub-icon-final.png",
+                    "safepdfhub-logo-final.png"
+                  ]
+                },
+                {
+                  "glob": "pdf.worker.min.mjs",
+                  "input": "node_modules/pdfjs-dist/build/",
+                  "output": "assets/pdfjs/"
+                },
+                {
+                  "glob": "qpdf.wasm",
+                  "input": "node_modules/@neslinesli93/qpdf-wasm/dist/",
+                  "output": "assets/qpdf/"
+                },
+                {
+                  "glob": "robots.txt",
+                  "input": "src/seo",
+                  "output": "/"
+                },
+                {
+                  "glob": "sitemap.xml",
+                  "input": "src/seo",
+                  "output": "/"
+                }
+              ],
+              "sourceMap": false
             },
             "development": {
               "optimization": false,

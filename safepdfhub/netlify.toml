@@ -1,0 +1,9 @@
+[build]
+command = "npm run build"
+publish = "dist/safepdfhub/browser"
+
+[build.environment]
+NODE_VERSION = "24.19.0"
+
+[[plugins]]
+package = "@netlify/angular-runtime"

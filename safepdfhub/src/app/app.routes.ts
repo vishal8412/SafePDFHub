@@ -1,35 +1,9 @@
-import { isDevMode } from '@angular/core';
+import { developmentRoutes } from './app.routes.development';
 import { Routes } from '@angular/router';
+import { TOOLS } from './config/tools.config';
 
 export const routes: Routes = [
-  {
-    path: '__dev/qpdf-benchmark',
-    canMatch: [() => isDevMode()],
-    loadComponent: () =>
-      import('./pages/dev/qpdf-benchmark/qpdf-benchmark.component')
-        .then(m => m.QpdfBenchmarkComponent)
-  },
-  {
-    path: '__dev/large-pdf-security-benchmark',
-    canMatch: [() => isDevMode()],
-    loadComponent: () =>
-      import('./pages/dev/large-pdf-security-benchmark/large-pdf-security-benchmark.component')
-        .then(m => m.LargePdfSecurityBenchmarkComponent)
-  },
-  {
-    path: '__dev/sign-pdf-benchmark',
-    canMatch: [() => isDevMode()],
-    loadComponent: () =>
-      import('./pages/dev/sign-pdf-benchmark/sign-pdf-benchmark.component')
-        .then(m => m.SignPdfBenchmarkComponent)
-  },
-  {
-    path: '__dev/qpdf-smoke',
-    canMatch: [() => isDevMode()],
-    loadComponent: () =>
-      import('./pages/dev/qpdf-smoke/qpdf-smoke.component')
-        .then(m => m.QpdfSmokeComponent)
-  },
+  ...developmentRoutes,
   {
     path: '',
     loadComponent: () =>
@@ -86,6 +60,7 @@ export const routes: Routes = [
   // Canonical SEO tool URLs.
   {
     path: 'tools/:slug',
+    canMatch: [(_route, segments) => TOOLS.some(tool => tool.slug === segments[1]?.path)],
     loadComponent: () =>
       import('./pages/tool/tool.component')
         .then(m => m.ToolComponent)
@@ -94,7 +69,8 @@ export const routes: Routes = [
   // Legacy internal route used by earlier navigation code.
   {
     path: 'tool/:slug',
-    redirectTo: 'tools/:slug',
+    canMatch: [(_route, segments) => TOOLS.some(tool => tool.slug === segments[1]?.path)],
+    loadComponent: () => import('./pages/tool/tool.component').then(m => m.ToolComponent),
     pathMatch: 'full'
   },
 
@@ -125,23 +101,9 @@ export const routes: Routes = [
     redirectTo: 'tools/unlock-pdf',
     pathMatch: 'full'
   },
-  // Reserved legacy URL for a not-yet-implemented tool. Keep it out of the
-  // public SEO inventory instead of rendering an incomplete tool page.
-  {
-    path: 'pdf-to-word',
-    redirectTo: '',
-    pathMatch: 'full'
-  },
-
-  // Keep the existing fallback behavior for unknown slugs.
-  {
-    path: ':slug',
-    loadComponent: () =>
-      import('./pages/tool/tool.component')
-        .then(m => m.ToolComponent)
-  },
+  { path: 'watermark-pdf', redirectTo: 'tools/watermark-pdf', pathMatch: 'full' },
   {
     path: '**',
-    redirectTo: ''
+    loadComponent: () => import('./features/pages/not-found/not-found.component').then(m => m.NotFoundComponent)
   }
 ];

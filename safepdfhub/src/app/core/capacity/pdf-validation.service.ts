@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { LargeCompressionCapabilityService } from '../compression/large/large-compression-capability.service';
+import { Injectable, Optional } from '@angular/core';
 import { LocalProcessingCapabilityService } from './local-processing-capability.service';
 import { FileValidationResult } from './local-processing-capability.model';
 import { LargePdfSecurityCapabilityService } from '../security/large-file/large-pdf-security-capability.service';
@@ -7,7 +8,8 @@ import { LargePdfSecurityCapabilityService } from '../security/large-file/large-
 export class PdfValidationService {
   constructor(
     private readonly capabilityService: LocalProcessingCapabilityService,
-    private readonly securityCapability: LargePdfSecurityCapabilityService
+    private readonly securityCapability: LargePdfSecurityCapabilityService,
+    @Optional() private readonly compressionCapability?: LargeCompressionCapabilityService
   ) {}
 
   validateSelection(
@@ -54,6 +56,15 @@ export class PdfValidationService {
     }
 
     return { valid: true, code: 'ok' };
+  }
+
+  validateCompressionSelection(file: File): FileValidationResult {
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) return { valid: false, code: 'invalid-type', message: 'Only PDF files are allowed.' };
+    try {
+      if (!this.compressionCapability) throw new Error('Compression capability is unavailable.');
+      this.compressionCapability.assertFile(file);
+      return { valid: true, code: 'ok' };
+    } catch (error) { return { valid: false, code: 'file-too-large', message: (error as Error).message }; }
   }
 
   validateSecuritySelection(file: File): FileValidationResult {

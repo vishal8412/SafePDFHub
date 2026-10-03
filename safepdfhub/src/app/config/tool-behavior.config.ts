@@ -96,7 +96,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
 
     acceptedTypes: '.pdf,application/pdf',
 
-    heroTitle: 'Merge PDFs instantly',
+    heroTitle: 'Merge PDF files privately',
 
     heroDescription:
       'Fast and private browser-based processing. No uploads required.',
@@ -127,10 +127,10 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
 
     acceptedTypes: '.pdf,application/pdf',
 
-    heroTitle: 'Compress PDFs instantly',
+    heroTitle: 'Compress PDF files privately',
 
     heroDescription:
-      'Reduce PDF size without losing quality',
+      'Choose lossless optimization, stronger image compression, or a target size. Your PDF stays on your device.',
 
     uploadTitle: 'Drop your PDF here',
 
@@ -160,7 +160,7 @@ export const TOOL_BEHAVIORS: ToolBehavior[] = [
 
     acceptedTypes: '.pdf,application/pdf',
 
-    heroTitle: 'Split PDFs instantly',
+    heroTitle: 'Split and extract PDF pages',
 
     heroDescription:
       'Extract pages securely in your browser.',

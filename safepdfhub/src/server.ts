@@ -5,13 +5,16 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express from 'express';
-import type { Request } from 'express';
+import { AngularAppEngine, createRequestHandler as createAngularRequestHandler } from '@angular/ssr';
+import { getAllowedHosts, getContext, getTrustProxyHeaders } from '@netlify/angular-runtime/app-engine.js';
+import { isDevMode } from '@angular/core';
+import type { Request as ExpressRequest } from 'express';
 import { join } from 'node:path';
 import { loadEnvFile } from 'node:process';
 
-import { TOOLS } from './app/config/tools.config';
 import { SITE_CONFIG } from './app/config/site.config';
-import { getContactMailConfig, sendContactMessage } from './server/contact-mail';
+import { indexingDisabled, robotsText, seoRedirect, sitemapXml } from './server/seo-http';
+import { createContactResponse } from './server/contact-request';
 
 try {
   loadEnvFile(join(process.cwd(), '.env'));
@@ -23,24 +26,23 @@ try {
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
+const angularApp = new AngularNodeAppEngine({
+  allowedHosts: [new URL(SITE_CONFIG.url).hostname, `www.${new URL(SITE_CONFIG.url).hostname}`,
+    ...(process.env['SSR_ALLOWED_HOSTS'] ?? '').split(',').map(host => host.trim()).filter(Boolean)]
+});
 
-const contactRateLimit = new Map<string, number[]>();
-const CONTACT_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const CONTACT_RATE_LIMIT_MAX = 5;
 
+app.use((req, res, next) => {
+  if (indexingDisabled(process.env) || req.path === '/studio' || req.path.startsWith('/studio/') || req.path.startsWith('/api/')) res.set('X-Robots-Tag', 'noindex, nofollow');
+  next();
+});
 app.use(express.json({ limit: '20kb' }));
 
+// Development URLs are not public application routes.
+if (!isDevMode()) {
+  app.use('/__dev', (_req, res) => { res.status(404).type('text/plain').send('Not found'); });
+}
 
-const legacyToolRedirects = new Map<string, string>([
-  ['/compress-pdf', '/tools/compress-pdf'],
-  ['/merge-pdf', '/tools/merge-pdf'],
-  ['/split-pdf', '/tools/split-pdf'],
-  ['/protect-pdf', '/tools/protect-pdf'],
-  ['/unlock-pdf', '/tools/unlock-pdf'],
-  ['/remove-password', '/tools/unlock-pdf'],
-  ['/pdf-to-word', '/']
-]);
 
 /**
  * First-party contact endpoint.
@@ -50,82 +52,10 @@ const legacyToolRedirects = new Map<string, string>([
  * through the configured transactional email provider.
  */
 app.post('/api/contact', async (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  const body = isRecord(req.body) ? req.body : {};
-  const name = cleanSingleLine(body['name']);
-  const email = cleanSingleLine(body['email']);
-  const subject = cleanSingleLine(body['subject']);
-  const message = cleanMessage(body['message']);
-  const website = cleanSingleLine(body['website']);
-  const startedAt = Number(body['startedAt']);
-
-  if (website) {
-    res.status(200).json({ message: 'Your message has been sent. Thank you for contacting SafePDFHub.' });
-    return;
-  }
-
-  if (!name || name.length > 100) {
-    res.status(400).json({ message: 'Please enter your name.' });
-    return;
-  }
-
-  if (!isValidEmail(email)) {
-    res.status(400).json({ message: 'Please enter a valid email address.' });
-    return;
-  }
-
-  if (!subject || subject.length > 160) {
-    res.status(400).json({ message: 'Please enter a valid subject.' });
-    return;
-  }
-
-  if (message.length < 10 || message.length > 5000) {
-    res.status(400).json({ message: 'Please provide a little more detail in your message.' });
-    return;
-  }
-
-  if (!Number.isFinite(startedAt) || Date.now() - startedAt < 1200) {
-    res.status(400).json({ message: 'Please take a moment to complete the form and try again.' });
-    return;
-  }
-
-  const rateLimitKey = getRateLimitKey(req);
-  if (!allowContactRequest(rateLimitKey)) {
-    res.status(429).json({ message: 'Too many messages from this connection. Please try again later.' });
-    return;
-  }
-
-  const mailConfig = getContactMailConfig(process.env);
-  if (!mailConfig) {
-    console.error('Contact form is not configured: missing RESEND_API_KEY, CONTACT_FROM_EMAIL or CONTACT_TO_EMAIL.');
-    res.status(503).json({ message: 'Contact email is temporarily unavailable. Please email us directly instead.' });
-    return;
-  }
-
-  try {
-    const result = await sendContactMessage(
-      { name, email, subject, message },
-      mailConfig
-    );
-
-    if (!result.ok) {
-      console.error('Contact email provider rejected the message.', {
-        status: result.status,
-        providerMessage: result.providerMessage
-      });
-      res.status(502).json({ message: 'We could not send your message right now. Please try again or email us directly.' });
-      return;
-    }
-
-    res.status(200).json({
-      message: 'Your message has been sent. Thank you for contacting SafePDFHub.'
-    });
-  } catch (error) {
-    console.error('Contact email delivery failed.', error);
-    res.status(502).json({
-      message: 'We could not send your message right now. Please try again or email us directly.'
-    });
-  }
+  const response = await createContactResponse(req.body, process.env, getRateLimitKey(req));
+  res.status(response.status);
+  response.headers.forEach((value, key) => res.set(key, value));
+  res.send(await response.text());
 });
 
 /**
@@ -133,73 +63,18 @@ app.post('/api/contact', async (req, res) => {
  * Angular SSR middleware so they are returned with the correct content type.
  */
 app.get('/robots.txt', (_req, res) => {
-  res
-    .type('text/plain')
-    .set('Cache-Control', 'public, max-age=3600')
-    .send([
-      'User-agent: *',
-      'Allow: /',
-      'Disallow: /__dev/',
-      '',
-      `Sitemap: ${SITE_CONFIG.url}/sitemap.xml`,
-      ''
-    ].join('\n'));
+  res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsText(indexingDisabled(process.env)));
 });
-
 app.get('/sitemap.xml', (_req, res) => {
-  const urls = [
-    ...SITE_CONFIG.staticIndexablePaths,
-    ...TOOLS.map(tool => `/tools/${tool.slug}`)
-  ];
-
-  const uniqueUrls = [...new Set(urls)];
-  const xml = [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...uniqueUrls.map(path => [
-      '  <url>',
-      `    <loc>${escapeXml(`${SITE_CONFIG.url}${path === '/' ? '' : path}`)}</loc>`,
-      '  </url>'
-    ].join('\n')),
-    '</urlset>',
-    ''
-  ].join('\n');
-
-  res
-    .type('application/xml')
-    .set('Cache-Control', 'public, max-age=3600')
-    .send(xml);
+  res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml());
 });
-
-/**
- * Legacy public tool URLs receive HTTP 301 redirects at the server boundary.
- * Angular routes below provide the equivalent client-side redirect after the
- * application is already loaded.
- */
-app.get([...legacyToolRedirects.keys()], (req, res) => {
-  const target = legacyToolRedirects.get(req.path);
-
-  if (!target) {
-    res.sendStatus(404);
+app.use((req, res, next) => {
+  const target = seoRedirect(req.path);
+  if (target && ['GET', 'HEAD'].includes(req.method)) {
+    res.redirect(301, target + (req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''));
     return;
   }
-
-  res.redirect(301, target);
-});
-
-/**
- * Older internal navigation used /tool/:slug. Keep it working while the
- * canonical public URL is /tools/:slug.
- */
-app.get('/tool/:slug', (req, res, next) => {
-  const toolExists = TOOLS.some(tool => tool.slug === req.params['slug']);
-
-  if (!toolExists) {
-    next();
-    return;
-  }
-
-  res.redirect(301, `/tools/${encodeURIComponent(req.params['slug'])}`);
+  next();
 });
 
 /**
@@ -207,7 +82,8 @@ app.get('/tool/:slug', (req, res, next) => {
  */
 app.use(
   express.static(browserDistFolder, {
-    maxAge: '1y',
+    // Assets such as WASM use stable filenames: revalidate after deployments.
+    maxAge: 0,
     index: false,
     redirect: false,
   }),
@@ -226,25 +102,7 @@ app.use((req, res, next) => {
 });
 
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function cleanSingleLine(value: unknown): string {
-  return typeof value === 'string' ? value.replace(/[\r\n]+/g, ' ').trim() : '';
-}
-
-function cleanMessage(value: unknown): string {
-  return typeof value === 'string'
-    ? value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
-    : '';
-}
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) && value.length <= 254;
-}
-
-function getRateLimitKey(req: Request): string {
+function getRateLimitKey(req: ExpressRequest): string {
   const trustProxy = process.env['TRUST_PROXY'] === 'true';
   if (trustProxy) {
     const forwarded = req.header('x-forwarded-for')?.split(',')[0]?.trim();
@@ -256,42 +114,60 @@ function getRateLimitKey(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
-function allowContactRequest(key: string): boolean {
-  const now = Date.now();
-  const recent = (contactRateLimit.get(key) || []).filter(
-    timestamp => now - timestamp < CONTACT_RATE_LIMIT_WINDOW_MS
-  );
+/** Angular/Netlify fetch handler. The adapter converts this export to an Edge Function. */
+const netlifyAngularEngine = new AngularAppEngine({
+  allowedHosts: getAllowedHosts(),
+  trustProxyHeaders: getTrustProxyHeaders()
+});
 
-  if (recent.length >= CONTACT_RATE_LIMIT_MAX) {
-    contactRateLimit.set(key, recent);
-    return false;
+export async function netlifyAppEngineHandler(request: Request): Promise<Response> {
+  const response = await handleNetlifyRequest(request);
+  const path = new URL(request.url).pathname;
+  if (indexingDisabled(process.env) || path === '/studio' || path.startsWith('/studio/') || path.startsWith('/api/')) {
+    const headers = new Headers(response.headers);
+    headers.set('X-Robots-Tag', 'noindex, nofollow');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   }
+  return response;
+}
 
-  recent.push(now);
-  contactRateLimit.set(key, recent);
-
-  if (contactRateLimit.size > 1000) {
-    for (const [rateKey, timestamps] of contactRateLimit) {
-      if (timestamps.every(timestamp => now - timestamp >= CONTACT_RATE_LIMIT_WINDOW_MS)) {
-        contactRateLimit.delete(rateKey);
-      }
+async function handleNetlifyRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+  if (pathname === '/__dev' || pathname.startsWith('/__dev/')) return new Response('Not found', { status: 404 });
+  if (pathname === '/api/contact') {
+    if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST', 'Cache-Control': 'no-store' } });
+    const contentLength = Number(request.headers.get('content-length') || 0);
+    if (contentLength > 20_000) return Response.json({ message: 'Your message is too large.' }, { status: 413, headers: { 'Cache-Control': 'no-store' } });
+    let body: unknown;
+    try {
+      const raw = await request.text();
+      if (new TextEncoder().encode(raw).byteLength > 20_000) return Response.json({ message: 'Your message is too large.' }, { status: 413, headers: { 'Cache-Control': 'no-store' } });
+      body = JSON.parse(raw);
+    } catch {
+      return Response.json({ message: 'Please submit a valid contact request.' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
     }
+    const context = getContext();
+    return createContactResponse(body, process.env, context?.ip ?? 'unknown');
   }
-
-  return true;
+  if (pathname === '/robots.txt') {
+    return new Response(robotsText(indexingDisabled(process.env)), { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  }
+  if (pathname === '/sitemap.xml') {
+    return new Response(sitemapXml(), { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  }
+  const target = seoRedirect(pathname);
+  if (target && ['GET', 'HEAD'].includes(request.method)) {
+    const destination = new URL(target, url);
+    destination.search = url.search;
+    return Response.redirect(destination, 301);
+  }
+  const rendered = await netlifyAngularEngine.handle(request, getContext());
+  return rendered ?? new Response('Not found', { status: 404 });
 }
 
-/**
- * Escape XML text nodes used by the generated sitemap.
- */
-function escapeXml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-}
+// Netlify's Angular adapter recognizes this named handler; Angular CLI uses reqHandler below.
+export const netlifyRequestHandler = createAngularRequestHandler(netlifyAppEngineHandler);
 
 /**
  * Start the server if this module is the main entry point, or it is ran via PM2.

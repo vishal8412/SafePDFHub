@@ -29,7 +29,7 @@ export class PdfWorkloadAnalyzerService {
     return this.assessWithBudget(files, pageCounts, budget);
   }
 
-  private assessWithBudget(
+  assessWithBudget(
     files: readonly File[],
     pageCounts: readonly number[],
     budget: ProcessingBudget

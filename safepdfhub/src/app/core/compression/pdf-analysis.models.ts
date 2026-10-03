@@ -18,6 +18,8 @@ export interface PdfFileAnalysis {
   type: PdfContentType;
   analysis: PdfAnalysis;
   pages: number;
+  /** V2.1 forensic object/resource intelligence. Optional for backwards compatibility. */
+  forensic?: import('./pdf-forensic.models').PdfForensicAnalysis;
 }
 
 export interface PageAnalysis {
