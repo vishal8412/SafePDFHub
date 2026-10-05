@@ -175,12 +175,13 @@ export class StudioObjectService {
             transform: [...block.transform],
             detectedFontSize: block.detectedFontSize,
             rotation: block.rotation,
+            displayRotation: block.displayRotation,
             lineHeight: block.lineHeight,
             sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
             sourceFontCssFamily: block.sourceFontCssFamily,
             sourceFontWeight: block.fontWeight as StudioTextFontWeight,
             sourceFontStyle: block.fontStyle,
-            textColor: block.textColor ?? currentSource.textColor ?? '#000000',
+            textColor: currentSource.edited ? currentSource.textColor : block.textColor ?? currentSource.textColor ?? '#000000',
             ascent: block.ascent,
             descent: block.descent,
             ascentPdf: block.ascentPdf,
@@ -195,15 +196,13 @@ export class StudioObjectService {
             transformScaleY: block.transformScaleY,
             baselineXPdf: block.baselineXPdf,
             baselineYPdf: block.baselineYPdf,
-            sourceRuns: block.sourceRuns
+            sourceLines: block.sourceLines, sourceRuns: block.sourceRuns
           };
           const sourceBounds = this.resolvePdfSourceTextBounds(block);
           const refreshed: StudioObject = {
             ...existing,
-            // Only move an unedited source overlay to newly detected geometry.
-            // Once the user edits the text, preserve any intentional Studio
-            // bounds changes.
-            bounds: currentSource.edited ? existing.bounds : this.normalizeBounds(sourceBounds),
+            pageNumber: block.pageNumber,
+            bounds: sourceBounds,
             pdfText: refreshedSource,
             textStyle: existing.textStyle
               ? {
@@ -236,6 +235,7 @@ export class StudioObjectService {
         edited: false,
         detectedFontSize: block.detectedFontSize,
         rotation: block.rotation,
+            displayRotation: block.displayRotation,
         lineHeight: block.lineHeight,
         sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
         sourceFontCssFamily: block.sourceFontCssFamily,
@@ -256,12 +256,12 @@ export class StudioObjectService {
         transformScaleY: block.transformScaleY,
         baselineXPdf: block.baselineXPdf,
         baselineYPdf: block.baselineYPdf,
-        sourceRuns: block.sourceRuns,
+        sourceLines: block.sourceLines, sourceRuns: block.sourceRuns,
         // Source-PDF covers never use horizontal padding. The legacy field is
         // retained for backwards compatibility but is normalized to zero.
         coverPadding: 0,
         // Source PDF typography must never silently shrink when text is edited.
-        fitMode: 'original',
+        fitMode: 'flow',
         metricScaleX: 1,
         typographyLocked: true,
         backgroundColor: '#ffffff'
@@ -273,7 +273,7 @@ export class StudioObjectService {
         id: block.id,
         pageNumber: block.pageNumber,
         type: 'text',
-        bounds: this.normalizeBounds(sourceBounds),
+        bounds: sourceBounds,
         text: block.text,
         textStyle: {
           ...DEFAULT_TEXT_STYLE,
@@ -302,86 +302,10 @@ export class StudioObjectService {
   private resolvePdfSourceTextBounds(block: PdfExistingTextBlock): {
     x: number; y: number; width: number; height: number;
   } {
-    /*
-     * LIVE EDITOR GEOMETRY
-     * --------------------
-     * PDF.js already gives us the exact text-item width/height in device
-     * space. Those values are the geometry used by PDF.js's own text layer
-     * and are a much safer overlay/cover rectangle than reconstructing a new
-     * box from ascent/descent. Reconstructing that box can make the cover
-     * taller than the actual source run and can cover the line below.
-     *
-     * Keep the original transform/baseline separately in pdfText for export;
-     * this method is only responsible for the DOM hit/edit rectangle.
-     */
-    const rotation = Number.isFinite(block.rotation)
-      ? Math.abs(block.rotation)
-      : 0;
-
-    const rawBounds = {
-      x: Math.min(1, Math.max(0, block.x)),
-      y: Math.min(1, Math.max(0, block.y)),
-      width: Math.max(0.002, Math.min(1, block.width)),
-      height: Math.max(0.012, Math.min(1, block.height))
-    };
-
-    /*
-     * Horizontal/near-horizontal PDF text is the common case and should use
-     * the exact PDF.js item rectangle without any extra padding.
-     */
-    if (rotation < 0.5) {
-      return rawBounds;
-    }
-
-    /*
-     * Rotated source runs still need an axis-aligned DOM rectangle. Rebuild
-     * that rectangle from the preserved PDF transform and font metrics.
-     * Export never relies on this fallback rectangle.
-     */
-    const pageWidth = Math.max(1, block.pageWidthPdf);
-    const pageHeight = Math.max(1, block.pageHeightPdf);
-    const [a, b, c, d, e, f] = block.transform;
-    const uxLength = Math.hypot(a, b) || 1;
-    const vyLength = Math.hypot(c, d) || 1;
-    const ux = a / uxLength;
-    const uy = b / uxLength;
-    const vx = c / vyLength;
-    const vy = d / vyLength;
-    const ascent = Math.max(
-      0.01,
-      block.ascentPdf ?? block.fontSizePdf * 0.9
-    );
-    const descent = Math.min(
-      -0.001,
-      block.descentPdf ?? -block.fontSizePdf * 0.2
-    );
-    const width = Math.max(
-      0.01,
-      block.textWidthPdf
-    );
-
-    const corners = [
-      [e, f],
-      [e + ux * width, f + uy * width],
-      [e + vx * ascent, f + vy * ascent],
-      [e + vx * descent, f + vy * descent],
-      [e + ux * width + vx * ascent, f + uy * width + vy * ascent],
-      [e + ux * width + vx * descent, f + uy * width + vy * descent],
-    ];
-
-    const xs = corners.map(point => point[0]);
-    const ys = corners.map(point => point[1]);
-
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
     return {
-      x: minX / pageWidth,
-      y: (pageHeight - maxY) / pageHeight,
-      width: Math.max(0.002, (maxX - minX) / pageWidth),
-      height: Math.max(0.012, (maxY - minY) / pageHeight),
+      x: block.x, y: block.y,
+      width: Math.max(0.002, block.width),
+      height: Math.max(0.004, block.height)
     };
   }
 
@@ -390,13 +314,17 @@ export class StudioObjectService {
     let changed = false;
     for (const block of blocks) {
       const existing = this.objects.get(block.id);
-      if (existing) continue;
+      if (existing?.pdfImage) {
+        this.objects.set(block.id, { ...existing, pageNumber: block.pageNumber, pdfImage: { ...existing.pdfImage, displayRotation: block.displayRotation, sourceBounds: {x:block.x,y:block.y,width:block.width,height:block.height} }, bounds: existing.pdfImage.replaced ? existing.bounds : { x:block.x,y:block.y,width:block.width,height:block.height } });
+        changed = true; continue;
+      }
       const object: StudioPdfImageObject = {
         id: block.id,
         pageNumber: block.pageNumber,
         type: 'image',
         bounds: this.normalizeBounds({ x: block.x, y: block.y, width: Math.max(block.width, 0.01), height: Math.max(block.height, 0.01) }),
-        pdfImage: { sourceName: block.sourceName, confidence: block.confidence, rotation: block.rotation, replaced: false, fitMode: 'fit', backgroundMode: 'auto', backgroundColor: '#ffffff', backgroundConfidence: 'low' }
+        pdfImage: { sourceBounds: {x:block.x,y:block.y,width:block.width,height:block.height}, displayRotation: block.displayRotation, sourceName: block.sourceName, confidence: block.confidence, rotation: block.rotation,
+            replaced: false, fitMode: 'fit', backgroundMode: 'auto', backgroundColor: '#ffffff', backgroundConfidence: 'low' }
       };
       this.objects.set(object.id, object);
       changed = true;
@@ -407,13 +335,14 @@ export class StudioObjectService {
   /** Update source appearance without changing text semantics. Used by 5B.2 sampling and inspector controls. */
   updatePdfTextAppearance(
     objectId: string,
-    patch: Partial<Pick<StudioPdfTextSource, 'backgroundColor' | 'textColor' | 'rotation' | 'detectedFontSize' | 'lineHeight' | 'sourceFontFamily' | 'sourceFontWeight' | 'sourceFontStyle' | 'ascent' | 'descent' | 'coverPadding' | 'fitMode' | 'metricScaleX' | 'typographyLocked'>>
+    patch: Partial<Pick<StudioPdfTextSource, 'backgroundColor' | 'textColor' | 'rotation' | 'detectedFontSize' | 'lineHeight' | 'sourceFontFamily' | 'sourceFontWeight' | 'sourceFontStyle' | 'ascent' | 'descent' | 'coverPadding' | 'fitMode' | 'metricScaleX' | 'typographyLocked'>>,
+    markEdited = false
   ): StudioObject | null {
     const object = this.objects.get(objectId);
     if (!object || object.type !== 'text' || !object.pdfText) return null;
     const updated: StudioObject = {
       ...object,
-      pdfText: { ...object.pdfText, ...patch }
+      pdfText: { ...object.pdfText, ...patch, edited: object.pdfText.edited || markEdited }
     };
     this.objects.set(objectId, updated);
     this.touch();
@@ -1101,6 +1030,7 @@ export class StudioObjectService {
     const { image: _image, ...rest } = object;
     const updated: StudioPdfImageObject = {
       ...rest,
+      bounds: { ...(object.pdfImage.sourceBounds ?? object.bounds) },
       pdfImage: { ...object.pdfImage, replaced: false }
     };
 
@@ -1213,7 +1143,7 @@ export class StudioObjectService {
         text,
         pdfText: {
           ...object.pdfText,
-          edited: text !== object.pdfText.originalText
+          edited: object.pdfText.edited || text !== object.pdfText.originalText
         }
       };
 
@@ -1324,7 +1254,8 @@ export class StudioObjectService {
     const updated: StudioObject = {
       ...object,
       bounds: adjustedBounds,
-      textStyle: nextStyle
+      textStyle: nextStyle,
+      ...(object.pdfText ? { pdfText: { ...object.pdfText, edited: object.pdfText.edited || nextStyle.textAlign !== currentStyle.textAlign } } : {})
     };
 
     this.objects.set(
@@ -1418,14 +1349,16 @@ export class StudioObjectService {
     if (changed) this.touch();
   }
 
-  duplicatePage(sourcePageNumber: number,targetPageNumber: number): void {
+  duplicatePage(sourcePageNumber: number,targetPageNumber: number, logicalPageId?: string): void {
 
   const sourceObjects = this.listForPage(sourcePageNumber);
   for (const source of sourceObjects) {
 
     const clone: StudioObject = {
       ...structuredClone(source),
-      id: this.createObjectId(),
+      id: logicalPageId && (source.pdfText || source.pdfImage) && source.id.includes(':pdf-')
+        ? logicalPageId + source.id.slice(source.id.indexOf(':pdf-'))
+        : this.createObjectId(),
       pageNumber: targetPageNumber
     };
 

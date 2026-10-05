@@ -1,0 +1,100 @@
+import { TestBed } from '@angular/core/testing';
+import { PLATFORM_ID } from '@angular/core';
+import { vi } from 'vitest';
+import { PDFDocument } from 'pdf-lib';
+import { StudioPdfExportService } from './studio-pdf-export.service';
+import { QpdfWasmPrototypeService } from '../../../core/qpdf/qpdf-wasm-prototype.service';
+import { SigningPdfTextService } from '../../../core/signing/services/signing-pdf-text.service';
+
+describe('Studio PDF export regressions', () => {
+  let service: any;
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [
+      { provide: PLATFORM_ID, useValue: 'browser' },
+      { provide: QpdfWasmPrototypeService, useValue: {} },
+      { provide: SigningPdfTextService, useValue: {} },
+    ] });
+    service = TestBed.inject(StudioPdfExportService);
+  });
+  it('preserves metadata and editable form fields for ordinary edits', async () => {
+    const pdf = await PDFDocument.create(); const page = pdf.addPage([600,800]);
+    pdf.setTitle('Keep my metadata');
+    const field = pdf.getForm().createTextField('name'); field.setText('Original');
+    field.addToPage(page, { x:20,y:20,width:100,height:20 });
+    const bytes = await pdf.save();
+    const file = { arrayBuffer: async () => bytes.slice().buffer } as File;
+    const blob = await service.exportTextObjects(file, [], [{id:'one',kind:'source',sourcePageNumber:1,rotation:0}]);
+    const outputBytes = await new Promise<ArrayBuffer>((resolve,reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(reader.result as ArrayBuffer); reader.onerror = reject; reader.readAsArrayBuffer(blob);
+    });
+    const result = await PDFDocument.load(outputBytes);
+    expect(result.getTitle()).toBe('Keep my metadata');
+    expect(result.getForm().getTextField('name').getText()).toBe('Original');
+  });
+  it('keeps replacement orientation and CropBox offsets on a rotated page', () => {
+    const drawImage = vi.fn();
+    service.drawImageObject({ drawImage, getCropBox: () => ({x:20,y:30}) }, {
+      bounds: {x:370/740,y:30/550,width:120/740,height:240/550},
+      pdfImage: {displayRotation:90,fitMode:'fit'},
+    }, {width:240,height:120}, 740,550,90);
+    const options = drawImage.mock.calls[0][1];
+    expect(options.x).toBeCloseTo(50);
+    expect(options.y).toBeCloseTo(400);
+    expect(options.width).toBeCloseTo(240);
+    expect(options.height).toBeCloseTo(120);
+    expect(options.rotate.angle).toBe(0);
+  });
+  it('draws the whole replacement and progresses new lines downward using fitted spacing', () => {
+    const drawText = vi.fn();
+    const font = {widthOfTextAtSize: (t: string, size: number) => t.length * size / 2};
+    service.drawEditedPdfTextFromSourceGeometry({drawText}, {
+      textStyle: {}, pdfText: {transform:[18,0,0,18,50,680],fontSizePdf:18,lineHeightPdf:18,textWidthPdf:200}
+    }, ['Longer replacement suffix', 'Second line'], font, 12, 14);
+    expect(drawText.mock.calls[0][0]).toBe('Longer replacement suffix');
+    expect(drawText.mock.calls[0][1].y).toBe(680);
+    expect(drawText.mock.calls[1][1].y).toBe(666);
+  });
+  it('shrinks longer replacements to the source area and refuses text that cannot fit', () => {
+    const font = { widthOfTextAtSize: (text: string, size: number) => text.length * size / 2 };
+    const object = { text: 'A longer replacement sentence', textStyle: {}, pdfText: {fitMode:'auto',lineHeightPdf:18} };
+    const fit = service.resolveTextFit(object, font, 18, 150, 18, 800);
+    expect(fit.fontSize).toBeLessThan(18);
+    expect(fit.lines.length * fit.lineHeight).toBeLessThanOrEqual(18 + fit.fontSize * .15);
+    expect(() => service.resolveTextFit({...object,text:'word '.repeat(1000)},font,18,150,18,800)).toThrow('too long');
+  });
+  it('ignores line separators when checking font coverage', () => {
+    expect(service.fontSupportsText({getCharacterSet:()=>[65,66]}, 'A\nB')).toBe(true);
+    expect(service.fontSupportsText({getCharacterSet:()=>[65,66]}, 'AΩ')).toBe(false);
+  });
+
+  it('reflows paragraphs at the requested size and retains explicit blank lines', () => {
+    const font={widthOfTextAtSize:(text:string,size:number)=>text.length*size/2};
+    const object={text:'First line with more words\n\nLast line',textStyle:{},pdfText:{fitMode:'flow',lineHeightPdf:14}};
+    const fit=service.resolveTextFit(object,font,10,60,10,800);
+    expect(fit.fontSize).toBe(10);
+    expect(fit.lineHeight).toBe(14);
+    expect(fit.lines).toEqual(['First line','with more','words','','Last line']);
+  });
+  it('rejects an overflowing final paragraph even when no later objects move', async () => {
+    const pdf=await PDFDocument.create();pdf.addPage([600,800]);
+    const bytes=await pdf.save();
+    const file={arrayBuffer:async()=>bytes.slice().buffer} as File;
+    vi.spyOn(service,'collectSourceFontBytes').mockResolvedValue(new Map());
+    const object={id:'last',type:'text',pageNumber:1,text:'One\nTwo\nThree',bounds:{x:.1,y:.94,width:.5,height:.015},textStyle:{},pdfText:{edited:true,fitMode:'flow',transform:[12,0,0,12,60,38],fontSizePdf:12,textWidthPdf:300,textHeightPdf:12,lineHeightPdf:18,ascentPdf:10,descentPdf:-2}};
+    await expect(service.exportTextObjects(file,[object])).rejects.toThrow('exceed the available space');
+  });
+
+  it('prepares just the selected logical page and applies its rotation once', async () => {
+    const pdf=await PDFDocument.create();pdf.addPage([600,800]);pdf.addPage([400,500]);
+    const bytes=await pdf.save();
+    const file={arrayBuffer:async()=>bytes.slice().buffer} as File;
+    const preview=await service.createPreviewFile(file,{id:'two',kind:'source',sourcePageNumber:2,rotation:90});
+    const output=await new Promise<ArrayBuffer>((resolve,reject)=>{
+      const reader=new FileReader();reader.onload=()=>resolve(reader.result as ArrayBuffer);reader.onerror=reject;reader.readAsArrayBuffer(preview);
+    });
+    const result=await PDFDocument.load(output);
+    expect(result.getPageCount()).toBe(1);
+    expect(result.getPage(0).getWidth()).toBe(400);
+    expect(result.getPage(0).getRotation().angle).toBe(90);
+  });
+});

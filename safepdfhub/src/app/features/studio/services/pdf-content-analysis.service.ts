@@ -19,10 +19,44 @@ export class PdfContentAnalysisService {
   /** Browser font faces registered from PDF.js source font programs. */
   private readonly sourceFontFaces = new Map<string, Promise<string | null>>();
 
+  private sourceFile: File | null = null;
+  private nativeFonts: Promise<Map<string,Uint8Array>> | null = null;
+  private originalFonts(file: File, pageNumber: number): Promise<Map<string,Uint8Array>> {
+    if(this.nativeFonts)return this.nativeFonts;
+    return this.nativeFonts=(async()=>{
+      const result=new Map<string,Uint8Array>();
+      try {
+        const {PDFDocument,PDFName,PDFDict,PDFArray,PDFRawStream,decodePDFRawStream}=await import('pdf-lib');
+        const pdf=await PDFDocument.load(await file.arrayBuffer(),{updateMetadata:false});
+        const fonts=pdf.getPage(pageNumber-1).node.Resources()?.lookup(PDFName.of('Font'),PDFDict);
+        for(const [,ref] of fonts?.entries()??[]) {
+          const f=pdf.context.lookup(ref,PDFDict);
+          const name=String(f.get(PDFName.of('BaseFont'))??'').replace(/^\//,'').replace(/^[A-Z]{6}\+/,'');
+          const children=f.lookupMaybe(PDFName.of('DescendantFonts'),PDFArray);
+          const base=children?children.lookup(0,PDFDict):f;
+          const descriptor=base.lookupMaybe(PDFName.of('FontDescriptor'),PDFDict);
+          for(const key of ['FontFile2','FontFile3']) {
+            const stream=pdf.context.lookup(descriptor?.get(PDFName.of(key)));
+            if(stream instanceof PDFRawStream) {result.set(name,decodePDFRawStream(stream).decode());break;}
+          }
+        }
+      } catch { /* Font substitution is handled explicitly during export. */ }
+      return result;
+    })();
+  }
+  private readonly fontPrograms = new Map<string, Uint8Array>();
+
+  getFontProgram(file: File, fontName: string): Uint8Array | null {
+    return file === this.sourceFile ? this.fontPrograms.get(fontName) ?? null : null;
+  }
+
   readonly analysis = this.analysisState.asReadonly();
 
   reset(): void {
     this.activeDocumentId = null;
+    this.sourceFile = null;
+    this.fontPrograms.clear();
+    this.nativeFonts = null;
     this.inFlight.clear();
     this.sourceFontFaces.clear();
     this.analysisState.set(null);
@@ -30,6 +64,9 @@ export class PdfContentAnalysisService {
 
   begin(document: StudioPdfDocument): void {
     this.activeDocumentId = document.id;
+    this.sourceFile = document.file;
+    this.fontPrograms.clear();
+    this.nativeFonts = null;
     this.inFlight.clear();
     this.analysisState.set({
       documentId: document.id,
@@ -60,7 +97,7 @@ export class PdfContentAnalysisService {
     if (running) return running;
 
     const task = this.analyzePage(document, pageNumber, getPage)
-      .finally(() => this.inFlight.delete(pageNumber));
+      .finally(() => { if (this.activeDocumentId === document.id && this.inFlight.get(pageNumber) === task) this.inFlight.delete(pageNumber); });
     this.inFlight.set(pageNumber, task);
     return task;
   }
@@ -74,7 +111,7 @@ export class PdfContentAnalysisService {
 
     try {
       const page = await getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: 1 / (page.userUnit || 1), rotation: 0 });
       const textContent = await page.getTextContent();
       const [operatorList, pdfjs] = await Promise.all([
         page.getOperatorList(),
@@ -106,26 +143,14 @@ export class PdfContentAnalysisService {
         // Keep the colour cursor aligned with the complete PDF.js text-item
         // stream, including whitespace-only items that are intentionally not
         // exposed as Studio objects.
+        const text = rawItem.str;
+        if (!text.trim()) continue;
         const sourceTextColor = sourceTextColors[sourceTextItemIndex++] ?? null;
-        const text = rawItem.str.trim();
-        if (!text) continue;
 
-        // PDF.js textItem.transform is expressed in viewport coordinates
-        // (origin at the top-left, Y growing downward). Export uses pdf-lib
-        // PDF coordinates (origin at the bottom-left, Y growing upward).
-        // Keep the source matrix in the coordinate system that the export
-        // service actually consumes. Converting only the translation (e/f)
-        // is not sufficient: the Y components of both matrix basis vectors
-        // must also be inverted.
-        const rawTransform = rawItem.transform;
-        const transform: PdfTextTransform = [
-          rawTransform[0],
-          -rawTransform[1],
-          rawTransform[2],
-          -rawTransform[3],
-          rawTransform[4],
-          viewport.height - rawTransform[5]
-        ];
+        // PDF.js TextItem.transform is already in unrotated PDF user space.
+        // Convert only display bounds through the viewport; retain the source
+        // matrix unchanged for PDF export.
+        const transform: PdfTextTransform = [...rawItem.transform];
         const [a, b, c, d, e, f] = transform;
         const style = styles[rawItem.fontName || ''];
         const fontSizePdf = Math.max(0.01, Math.hypot(c, d) || Math.hypot(a, b));
@@ -144,9 +169,10 @@ export class PdfContentAnalysisService {
           detectedFontSize,
           lineHeightPdf / Math.max(1, viewport.height),
         );
-        const x = Math.min(1, Math.max(0, e / viewport.width));
-        // PDF coordinates grow upward; Studio coordinates grow downward.
-        const y = Math.min(1, Math.max(0, 1 - (f + rawHeight) / viewport.height));
+        const ascent = (typeof style?.ascent === 'number' ? style.ascent : 0.8) * fontSizePdf;
+        const [topX, topY] = viewport.convertToViewportPoint(e + c / fontSizePdf * ascent, f + d / fontSizePdf * ascent);
+        const x = topX / viewport.width;
+        const y = topY / viewport.height;
 
         textBlocks.push({
           id: `pdf-text-${pageNumber}-${index++}`,
@@ -210,10 +236,18 @@ export class PdfContentAnalysisService {
        * face that PDF.js uses for the original PDF canvas, rather than guessing
        * from TextStyle.fontFamily.
        */
+      const originals = await this.originalFonts(document.file,pageNumber);
       const enrichedTextBlocks = await Promise.all(textBlocks.map(async block => {
         const loadedFont =
           this.resolveLoadedFont(page, block.fontName);
 
+        const family=loadedFont?.familyName ?? '';
+        const variant=(loadedFont?.weight??400)>=600 ? '-Bold' : '';
+        const original = originals.get(family+variant) ?? originals.get(family);
+        if (loadedFont && original) loadedFont.data = original;
+        if (loadedFont?.data && this.activeDocumentId === document.id) {
+          this.fontPrograms.set(block.fontName, loadedFont.data);
+        }
         const sourceFontCssFamily = loadedFont?.loadedName
           ? await this.ensureBrowserSourceFontFace(
               document.id,
@@ -260,7 +294,7 @@ export class PdfContentAnalysisService {
        * the edit/cover/replacement target.
        */
       const editableLineBlocks =
-        this.groupTextBlocksIntoEditableLines(enrichedTextBlocks);
+        this.groupLinesIntoParagraphs(this.groupTextBlocksIntoEditableLines(enrichedTextBlocks));
 
       const result: PdfPageContentAnalysis = {
         pageNumber,
@@ -289,7 +323,7 @@ export class PdfContentAnalysisService {
       return result;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unable to analyze this PDF page.';
-      this.patchStatus('error', message);
+      if (this.activeDocumentId === document.id) this.patchStatus('error', message);
       return null;
     }
   }
@@ -427,7 +461,7 @@ export class PdfContentAnalysisService {
         ...first,
         id: first.id,
         text,
-        x: minXPdf / pageWidth,
+        x: Math.min(...group.map(item => item.x)),
         y: (pageHeight - maxYPdf) / pageHeight,
         width: widthPdf / pageWidth,
         height: heightPdf / pageHeight,
@@ -436,6 +470,32 @@ export class PdfContentAnalysisService {
         baselineXPdf: minXPdf,
         sourceRuns
       };
+    });
+  }
+
+  private groupLinesIntoParagraphs(lines: readonly PdfExistingTextBlock[]): PdfExistingTextBlock[] {
+    const groups: PdfExistingTextBlock[][] = [];
+    for (const line of lines) {
+      const group = groups[groups.length - 1];
+      const last = group?.[group.length - 1];
+      const gap = last ? last.baselineYPdf - line.baselineYPdf : 0;
+      const compatible = last && Math.abs(line.rotation) < .1 && Math.abs(last.rotation) < .1
+        && line.fontName === last.fontName && line.fontWeight === last.fontWeight
+        && line.textColor === last.textColor && Math.abs(line.fontSizePdf-last.fontSizePdf)<.1
+        && Math.abs(line.baselineXPdf-last.baselineXPdf)<line.fontSizePdf*.6
+        && gap > line.fontSizePdf*.8 && gap < line.fontSizePdf*1.65;
+      if (compatible) group.push(line); else groups.push([line]);
+    }
+    return groups.map(group => {
+      const first=group[0], last=group[group.length-1];
+      const lineHeight=group.length>1 ? (first.baselineYPdf-last.baselineYPdf)/(group.length-1) : first.lineHeightPdf;
+      const height=first.baselineYPdf-last.baselineYPdf+first.textHeightPdf;
+      return {...first, text:group.map(line=>line.text.trim()).join(' '),
+        height:height/first.pageHeightPdf, textHeightPdf:height,
+        width:Math.max(...group.map(line=>line.width)),
+        textWidthPdf:Math.max(...group.map(line=>line.textWidthPdf)),
+        lineHeightPdf:lineHeight, lineHeight:lineHeight/first.pageHeightPdf,
+        sourceLines:group.map(line=>({transform:line.transform,width:line.textWidthPdf,height:line.textHeightPdf}))};
     });
   }
 
@@ -659,6 +719,7 @@ export class PdfContentAnalysisService {
     const setFillColorN = ops['setFillColorN'];
 
     let current = '#000000';
+    const savedColors: string[] = [];
     const colors: string[] = [];
 
     const clamp01 = (value: number): number =>
@@ -693,6 +754,9 @@ export class PdfContentAnalysisService {
       const fn = operatorList.fnArray[index];
       const args = operatorList.argsArray[index];
       const values = numericArgs(args);
+      if (fn === ops['save'] || fn === ops['paintFormXObjectBegin']) savedColors.push(current);
+      if (fn === ops['restore'] || fn === ops['paintFormXObjectEnd']) current = savedColors.pop() ?? current;
+      if (fn === setFillRgb && Array.isArray(args) && typeof args[0] === 'string' && /^#[0-9a-f]{6}$/i.test(args[0])) current = args[0];
 
       if (fn === setFillRgb && values.length >= 3) {
         current = rgb(values[0], values[1], values[2]);
@@ -732,6 +796,7 @@ export class PdfContentAnalysisService {
       const saveOp = ops['save'];
       const restoreOp = ops['restore'];
       type Matrix = [number, number, number, number, number, number];
+      const viewport = page.getViewport({ scale: 1 / (page.userUnit || 1), rotation: 0 });
       let ctm: Matrix = [1, 0, 0, 1, 0, 0];
       const stack: Matrix[] = [];
       const multiply = (m: Matrix, n: Matrix): Matrix => [m[0]*n[0]+m[2]*n[1], m[1]*n[0]+m[3]*n[1], m[0]*n[2]+m[2]*n[3], m[1]*n[2]+m[3]*n[3], m[0]*n[4]+m[2]*n[5]+m[4], m[1]*n[4]+m[3]*n[5]+m[5]];
@@ -739,6 +804,13 @@ export class PdfContentAnalysisService {
       for (let i = 0; i < operatorList.fnArray.length; i++) {
         const fn = operatorList.fnArray[i];
         const args = operatorList.argsArray[i] as unknown[] | undefined;
+        if (fn === ops['paintFormXObjectBegin']) {
+          stack.push([...ctm] as Matrix);
+          const matrix = args?.[0];
+          if (Array.isArray(matrix) && matrix.length === 6) ctm = multiply(ctm, matrix as Matrix);
+          continue;
+        }
+        if (fn === ops['paintFormXObjectEnd']) { ctm = stack.pop() ?? ctm; continue; }
         if (fn === saveOp) { stack.push([...ctm] as Matrix); continue; }
         if (fn === restoreOp) { ctm = stack.pop() ?? ctm; continue; }
         if (fn === transformOp && args && args.length >= 6) { ctm = multiply(ctm, [Number(args[0]), Number(args[1]), Number(args[2]), Number(args[3]), Number(args[4]), Number(args[5])]); continue; }
@@ -746,9 +818,17 @@ export class PdfContentAnalysisService {
         const sx = Math.hypot(ctm[0], ctm[1]);
         const sy = Math.hypot(ctm[2], ctm[3]);
         if (!(sx > 0 && sy > 0)) continue;
-        const x = Math.min(1, Math.max(0, ctm[4] / pageWidth));
-        const y = Math.min(1, Math.max(0, 1 - (ctm[5] + sy) / pageHeight));
-        blocks.push({ id: `pdf-image-${page.pageNumber}-${blocks.length}`, pageNumber: page.pageNumber, x, y, width: Math.min(1, sx / pageWidth), height: Math.min(1, sy / pageHeight), sourceName: typeof args?.[0] === 'string' ? args[0] : null, rotation: Math.atan2(ctm[1], ctm[0]) * 180 / Math.PI, confidence: 'medium' });
+        const corners = [[0,0],[1,0],[0,1],[1,1]].map(([x,y]) =>
+          viewport.convertToViewportPoint(ctm[0]*x+ctm[2]*y+ctm[4], ctm[1]*x+ctm[3]*y+ctm[5]));
+        const left = Math.max(0, Math.min(...corners.map(p => p[0])));
+        const top = Math.max(0, Math.min(...corners.map(p => p[1])));
+        const right = Math.min(pageWidth, Math.max(...corners.map(p => p[0])));
+        const bottom = Math.min(pageHeight, Math.max(...corners.map(p => p[1])));
+        if (right <= left || bottom <= top) continue;
+        blocks.push({ id: `pdf-image-${page.pageNumber}-${blocks.length}`, pageNumber: page.pageNumber,
+          x: left/pageWidth, y: top/pageHeight, width: (right-left)/pageWidth, height: (bottom-top)/pageHeight,
+          sourceName: typeof args?.[0] === 'string' ? args[0] : null,
+          rotation: Math.atan2(ctm[1], ctm[0])*180/Math.PI, confidence: 'medium' });
       }
       return blocks;
     } catch { return []; }

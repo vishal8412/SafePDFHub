@@ -53,6 +53,9 @@ import { PdfWatermarkService } from '../../../core/watermark/pdf-watermark.servi
   providedIn: 'root'
 })
 export class StudioFacade {
+  /** The canvas owns draft text; flush it before any export/security snapshot. */
+  flushTextDraft: (() => void) | null = null;
+
 
   private readonly pdfEngine =
     inject(PdfEngineService);
@@ -273,17 +276,7 @@ export class StudioFacade {
       // Start the editable-content foundation with page 1 only after the new
       // document session is clean. Remaining pages are analyzed lazily.
       this.contentAnalysis.begin(newDocument);
-      void this.contentAnalysis.ensurePage(
-        newDocument,
-        1,
-        pageNumber => this.pdfEngine.getPage(newDocument, pageNumber)
-      ).then(result => {
-        // Ignore stale analysis from a PDF that has since been replaced.
-        if (result && this.document()?.id === newDocument.id) {
-          this.objectService.syncPdfTextBlocks(result.textBlocks);
-          this.objectService.syncPdfImageBlocks(result.imageBlocks);
-        }
-      });
+      void this.ensurePageContent(newDocument, 1);
 
       /**
        * A new PDF is a new history session.
@@ -568,8 +561,8 @@ async renderCurrentPage(
       logicalPage.sourcePageNumber ??
       pageNumber;
 
-    const rotation =
-      logicalPage.rotation;
+    const sourcePage = await document.pdf.getPage(sourcePageNumber);
+    const rotation = (sourcePage.rotate + logicalPage.rotation) % 360;
 
     const viewMode =
       this.viewMode();
@@ -1705,10 +1698,7 @@ goToLastPage(): void {
           1
         );
 
-        this.objectService.duplicatePage(
-          source,
-          target
-        );
+        this.objectService.duplicatePage(source, target, this.pages()[target - 1]?.id);
 
         this.state.setPageCount(
           this.pageCount()
@@ -1856,7 +1846,7 @@ private async resolveBlankPageDimensions(
       pdfPage.getViewport({
         scale: 1,
         rotation:
-          logicalPage.rotation
+          (pdfPage.rotate + logicalPage.rotation) % 360
       });
 
     return {
@@ -1981,7 +1971,7 @@ private async resolveBlankPageDimensions(
           }
 
           this.objectService.shiftPageNumbers(target, 1);
-          this.objectService.duplicatePage(source, target);
+          this.objectService.duplicatePage(source, target, this.pages()[target - 1]?.id);
 
           if (nextCurrent >= target) {
             nextCurrent++;
@@ -2019,6 +2009,8 @@ private async resolveBlankPageDimensions(
 
         for (const pageNumber of selected) {
           changed = this.pageService.rotate(pageNumber, delta) || changed;
+          const document = this.document();
+          if (document) void this.ensurePageContent(document, pageNumber);
         }
 
         if (changed) {
@@ -2358,27 +2350,30 @@ goToPage(page: number): void {
     document: StudioPdfDocument,
     pageNumber: number
   ): Promise<void> {
-    const result = await this.contentAnalysis.ensurePage(
-      document,
-      pageNumber,
-      currentPageNumber =>
-        this.pdfEngine.getPage(document, currentPageNumber)
-    );
-
-    // A late analysis result must never mutate a replacement document.
-    if (
-      !result ||
-      this.document()?.id !== document.id
-    ) {
-      return;
-    }
-
-    this.objectService.syncPdfTextBlocks(
-      result.textBlocks
-    );
-    this.objectService.syncPdfImageBlocks(
-      result.imageBlocks
-    );
+    const logicalPage = this.pages()[pageNumber - 1];
+    if (!logicalPage || logicalPage.kind !== 'source' || !logicalPage.sourcePageNumber) return;
+    const sourcePageNumber = logicalPage.sourcePageNumber;
+    const pdfPage = await document.pdf.getPage(sourcePageNumber);
+    const result = await this.contentAnalysis.ensurePage(document, sourcePageNumber,
+      n => this.pdfEngine.getPage(document, n));
+    if (!result || this.document()?.id !== document.id || this.pages()[pageNumber - 1]?.id !== logicalPage.id) return;
+    const rotation = ((pdfPage.rotate + logicalPage.rotation) % 360 + 360) % 360;
+    const v = pdfPage.getViewport({ scale: 1 / (pdfPage.userUnit || 1), rotation: 0 });
+    const swapped = rotation === 90 || rotation === 270;
+    const width = swapped ? v.height : v.width, height = swapped ? v.width : v.height;
+    const point = (x: number, y: number) => rotation === 90 ? [1-y,x] : rotation === 180 ? [1-x,1-y] : rotation === 270 ? [y,1-x] : [x,y];
+    this.objectService.syncPdfTextBlocks(result.textBlocks.map(block => {
+      const [x,y] = point(block.x,block.y);
+      return { ...block, id: `${logicalPage.id}:${block.id}`, pageNumber,
+        x,y,width: block.width*v.width/width,height: block.height*v.height/height,
+        displayRotation: rotation-block.rotation, pageWidthPdf:width,pageHeightPdf:height };
+    }));
+    this.objectService.syncPdfImageBlocks(result.imageBlocks.map(block => {
+      const corners = [[block.x,block.y],[block.x+block.width,block.y],[block.x,block.y+block.height],[block.x+block.width,block.y+block.height]].map(([x,y]) => point(x,y));
+      const xs=corners.map(p=>p[0]),ys=corners.map(p=>p[1]);
+      return { ...block,id:`${logicalPage.id}:${block.id}`,pageNumber,displayRotation: rotation - block.rotation,
+        x:Math.min(...xs),y:Math.min(...ys),width:Math.max(...xs)-Math.min(...xs),height:Math.max(...ys)-Math.min(...ys) };
+    }));
   }
 
 
@@ -2433,6 +2428,7 @@ removeWatermark(): boolean {
  * `_edited.pdf` file.
  */
 async exportCurrentDocumentFile(): Promise<File> {
+  this.flushTextDraft?.();
   const document = this.document();
   if (!document) {
     throw new Error('Open a PDF before exporting.');
@@ -3963,11 +3959,11 @@ duplicateSelectedObject(): StudioSelection | null {
 
 updatePdfTextAppearance(
   objectId: string,
-  patch: { backgroundColor?: string; textColor?: string; coverPadding?: number; fitMode?: 'original' | 'auto'; metricScaleX?: number }
+  patch: { backgroundColor?: string; textColor?: string; coverPadding?: number; fitMode?: 'original' | 'auto' | 'flow'; metricScaleX?: number }
 ): StudioSelection | null {
   if (!this.hasDocument()) return null;
   const before = this.captureHistorySnapshot();
-  const object = this.objectService.updatePdfTextAppearance(objectId, patch);
+  const object = this.objectService.updatePdfTextAppearance(objectId, patch, true);
   if (!object) return null;
   const selection: StudioSelection = { objectId: object.id, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
   if (object.pageNumber === this.currentPage()) this.state.setSelection(selection);

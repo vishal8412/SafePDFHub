@@ -190,19 +190,20 @@
               @if (selectedObject()?.pdfText) {
                 <div class="properties__info-card">
                   <span class="properties__info-dot" aria-hidden="true"></span>
-                  <p>Original PDF text · {{ selectedObject()?.pdfText?.sourceFontFamily || selectedObject()?.pdfText?.fontName || 'Unknown font' }}. Replacement uses the embedded source font program, exact PDF point size, weight, baseline and source geometry.</p>
+                  <p>Original PDF text · {{ selectedObject()?.pdfText?.sourceFontFamily || selectedObject()?.pdfText?.fontName || 'Unknown font' }}. Edits visually cover the original content, which may remain searchable. This is not secure redaction. The source font is reused when it contains your characters. Missing Calibri characters use Carlito; other missing characters require a fallback font.</p>
                 </div>
               }
               @if (selectedObject()?.pdfText) {
                 <div class="properties__source-metrics">
-                  <span>Detected {{ (selectedObject()?.pdfText?.detectedFontSize ?? 0) * 100 }}%</span>
+                  <span>Source {{ (selectedObject()?.pdfText?.fontSizePdf ?? 0).toFixed(2) }} pt</span>
                   <span>Rotation {{ selectedObject()?.pdfText?.rotation ?? 0 }}°</span>
                   @if (selectedObject()?.pdfText?.sourceFontFamily) { <span>Source {{ selectedObject()?.pdfText?.sourceFontFamily }}</span> }
                 </div>
                 <label class="properties__field">
                   <span>Replacement fit</span>
                   <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
-                    <option value="auto">Auto-fit replacement</option>
+                    <option value="flow">Reflow paragraph at original size</option>
+                    <option value="auto">Fit within original area</option>
                     <option value="original">Keep original size</option>
                   </select>
                 </label>
@@ -401,90 +402,9 @@
                   </select>
                 </label>
                 @if (selectedObject()?.pdfImage?.replaced) {
-                  <div class="properties__reconstruction-card">
-                    <div class="properties__reconstruction-heading">
-                      <strong>Background reconstruction</strong>
-                      <span>Original bounds protected</span>
-                    </div>
-                    <label class="properties__field">
-                      <span>Reconstruction mode</span>
-                      <select [value]="selectedObject()?.pdfImage?.backgroundMode ?? 'auto'" (change)="updatePdfImageBackgroundMode($any($event.target).value)">
-                        <option value="layered">Source-aware multi-layer + seam blend</option>
-                        <option value="pixel">Pixel-level edge extension</option>
-                        <option value="auto">Edge-aware auto</option>
-                        <option value="solid">Custom solid</option>
-                        <option value="white">White</option>
-                      </select>
-                    </label>
-                    <label class="properties__field properties__color-field">
-                      <span>Background colour</span>
-                      <input type="color" [value]="selectedObject()?.pdfImage?.backgroundColor ?? '#ffffff'" (change)="updatePdfImageBackgroundColor($any($event.target).value)">
-                    </label>
-                    @if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'layered') {
-                      <p class="properties__field-help">Two export layers are used: directional edge reconstruction below the replacement and a transparent seam blend above it · {{ selectedObject()?.pdfImage?.seamBlendConfidence ?? 'low' }} confidence.</p>
-                      <label class="properties__field"><span>Seam blend width</span><input type="range" min="2" max="24" step="1" [value]="selectedObject()?.pdfImage?.seamBlendWidth ?? 8" (input)="updatePdfImageSeamBlendWidth(+$any($event.target).value)"></label>
-                      <button type="button" class="properties__secondary-button properties__full-width-button properties__compact-button" (click)="regeneratePdfImageLayeredReconstruction()">Regenerate multi-layer reconstruction</button>
-                    } @else if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'pixel') {
-                      <p class="properties__field-help">Pixel-level edge extension preserves gradients and border texture along uncovered fit margins · {{ selectedObject()?.pdfImage?.pixelReconstructionConfidence ?? 'low' }} confidence.</p>
-                      <button type="button" class="properties__secondary-button properties__full-width-button properties__compact-button" (click)="regeneratePdfImagePixelReconstruction()">Regenerate pixel reconstruction</button>
-                    } @else if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'auto') {
-                      <p class="properties__field-help">Sampled from the replacement image edge · {{ selectedObject()?.pdfImage?.backgroundConfidence ?? 'low' }} confidence.</p>
-                    }
-                  </div>
+                  <p class="properties__field-help">The original visual region is replaced, including chart layers inside it. Moving the replacement keeps the old region cleared.</p>
                   <button type="button" class="properties__secondary-button properties__full-width-button" (click)="restoreOriginalPdfImage()">Restore original PDF image</button>
                 }
-              }
-              @if (selectedPdfImageAudit(); as audit) {
-  <div class="properties__qa-card">
-    <div class="properties__qa-score-row">
-      <div class="properties__qa-score">
-        <span>Replacement quality</span>
-        <strong>{{ audit.score }}/100</strong>
-      </div>
-
-      <span
-        class="properties__qa-status"
-        [class.is-ready]="audit.score === 100"
-        [class.is-review]="audit.score !== 100 && audit.score > 0"
-        [class.is-blocked]="audit.score === 0"
-      >
-        {{ audit.status }}
-      </span>
-    </div>
-
-    <div class="properties__qa-list">
-      @for (issue of audit.issues; track issue.message) {
-        <div
-          class="properties__qa-item"
-          [class.is-pass]="issue.level === 'pass'"
-          [class.is-warn]="issue.level === 'warn'"
-          [class.is-error]="issue.level === 'error'"
-        >
-          {{ issue.message }}
-        </div>
-      }
-    </div>
-  </div>
-}
-              @if (selectedPdfImageFidelityValidation(); as validation) {
-                <div class="properties__fidelity-card">
-                  <div class="properties__fidelity-heading">
-                    <div><strong>Content-aware fidelity validation</strong><span>Pixel continuity audit</span></div>
-                    <strong class="properties__fidelity-score" [class.is-good]="validation.score >= 85" [class.is-review]="validation.score >= 60 && validation.score < 85" [class.is-risk]="validation.score < 60">{{ validation.score }}/100</strong>
-                  </div>
-                  <div class="properties__fidelity-metrics">
-                    <span>Seam <b>{{ validation.metrics.seamDiscontinuity.toFixed(1) }}</b></span>
-                    <span>Texture <b>{{ validation.metrics.textureMismatch.toFixed(1) }}</b></span>
-                    <span>Gradient <b>{{ validation.metrics.gradientMismatch.toFixed(1) }}</b></span>
-                    @if ((selectedObject()?.pdfImage?.backgroundMode ?? 'auto') === 'layered') { <span>Coverage <b>{{ validation.metrics.seamCoverage.toFixed(0) }}%</b></span> }
-                  </div>
-                  <div class="properties__qa-list">
-                    @for (finding of validation.findings; track finding.message) {
-                      <div class="properties__qa-item" [class.is-pass]="finding.level === 'pass'" [class.is-warn]="finding.level === 'warn'" [class.is-error]="finding.level === 'error'">{{ finding.message }}</div>
-                    }
-                  </div>
-                  <button type="button" class="properties__secondary-button properties__full-width-button properties__compact-button" (click)="refreshPdfImageFidelityValidation()">Run fidelity validation again</button>
-                </div>
               }
               <p class="properties__field-help">PNG or JPEG · up to 25 MB</p>
             </div>
@@ -495,14 +415,15 @@
               <h3>Comment</h3>
               @if (selectedObject()?.pdfText) {
                 <div class="properties__source-metrics">
-                  <span>Detected {{ (selectedObject()?.pdfText?.detectedFontSize ?? 0) * 100 }}%</span>
+                  <span>Source {{ (selectedObject()?.pdfText?.fontSizePdf ?? 0).toFixed(2) }} pt</span>
                   <span>Rotation {{ selectedObject()?.pdfText?.rotation ?? 0 }}°</span>
                   @if (selectedObject()?.pdfText?.sourceFontFamily) { <span>Source {{ selectedObject()?.pdfText?.sourceFontFamily }}</span> }
                 </div>
                 <label class="properties__field">
                   <span>Replacement fit</span>
                   <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
-                    <option value="auto">Auto-fit replacement</option>
+                    <option value="flow">Reflow paragraph at original size</option>
+                    <option value="auto">Fit within original area</option>
                     <option value="original">Keep original size</option>
                   </select>
                 </label>

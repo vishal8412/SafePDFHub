@@ -16,6 +16,7 @@ export interface PdfSourceTextRun {
 }
 
 export interface PdfExistingTextBlock {
+  readonly sourceLines?: readonly { transform: PdfTextTransform; width: number; height: number }[];
   readonly id: string;
   readonly pageNumber: number;
   readonly text: string;
@@ -26,6 +27,7 @@ export interface PdfExistingTextBlock {
   readonly height: number;
   readonly transform: PdfTextTransform;
   readonly detectedFontSize: number;
+  readonly displayRotation?: number;
   readonly rotation: number;
   readonly lineHeight: number;
   /** PDF.js style family when exposed; useful only as a human-readable fallback. */
@@ -65,6 +67,7 @@ export interface PdfExistingTextBlock {
 }
 
 export interface PdfExistingImageBlock {
+  readonly displayRotation?: number;
   readonly id: string;
   readonly pageNumber: number;
   /** Best-effort normalized bounds from the PDF graphics transform. */

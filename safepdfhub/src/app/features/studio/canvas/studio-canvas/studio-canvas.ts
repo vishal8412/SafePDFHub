@@ -1,7 +1,10 @@
+import { visibleStudioSources, studioDisplayBounds } from '../../services/studio-source-visibility';
+import { isPlatformBrowser } from '@angular/common';
 import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
 import type { SigningAsset } from '../../../../core/signing/models/signing.models';
 import {
   AfterViewInit,
+  PLATFORM_ID,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -13,6 +16,7 @@ import {
   signal
 } from '@angular/core';
 
+import { StudioPdfExportService } from '../../services/studio-pdf-export.service';
 import { StudioFacade } from '../../facade/studio.facade';
 import { SelectionEngineService } from '../../services/selection-engine.service';
 import { StudioObjectService } from '../../services/studio-object.service';
@@ -79,6 +83,9 @@ interface ObjectInteraction {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StudioCanvas implements AfterViewInit, OnDestroy {
+  private lastRenderState = '';
+  private currentRender: Promise<void> = Promise.resolve();
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   readonly signingState = inject(SigningStateService);
 
   getSigningAsset(object: StudioObject): SigningAsset | null {
@@ -372,7 +379,89 @@ private activeRenderVersion: number | null = null;
   private readonly MIN_OBJECT_HEIGHT = 24;
   private readonly MIN_COMMENT_SIZE = 18;
 
+  readonly committedPreview = signal<string | null>(null);
+  readonly previewBounds = signal<Record<string,{x:number;y:number;width:number;height:number}>>({});
+  readonly textDraft = signal<{id:string;text:string}|null>(null);
+  readonly previewError = signal('');
+  private readonly previewExporter = inject(StudioPdfExportService);
+  private previewGeneration = 0;
+  private previewContext = '';
+  private previewSource: {key: string; file: Promise<File>} | null = null;
+  private readonly previewSourceBounds = signal<Record<string, StudioObject['bounds']>>({});
+  readonly previewBusy = signal(false);
+  private previewTimer: ReturnType<typeof setTimeout> | undefined;
+  private previewQueue: Promise<void> = Promise.resolve();
+
   constructor() {
+    this.facade.flushTextDraft = () => this.commitTextEdit();
+    effect(() => {
+      this.objectService.changes();
+      const source = this.facade.document();
+      const pageNumber = this.facade.currentPage();
+      const logicalPage = this.facade.pages()[pageNumber - 1];
+      const draft=this.textDraft();
+      const objects = this.objectService.listForPage(pageNumber)
+        .filter(o => o.pdfText || o.pdfImage)
+        .map(o => ({ ...o, pageNumber: 1, ...(draft?.id===o.id && o.pdfText ? {text:draft.text,pdfText:{...o.pdfText,edited:true}}:{}) }));
+      const generation = ++this.previewGeneration;
+      clearTimeout(this.previewTimer);
+      const context=`${source?.id}:${logicalPage?.id}:${logicalPage?.sourcePageNumber}:${logicalPage?.rotation}`;
+      if (this.previewSource?.key !== context) this.previewSource = null;
+      const hasEdits=objects.some(o=>o.pdfText?.edited || o.pdfImage?.replaced);
+      if(context!==this.previewContext || !hasEdits) {
+        this.committedPreview.set(null);
+        this.previewBounds.set({});
+        this.previewSourceBounds.set({});
+      }
+      this.previewContext=context;
+      this.previewError.set('');
+      this.previewBusy.set(false);
+      if (!this.isBrowser || !source || !logicalPage || !hasEdits) return;
+      this.previewBusy.set(true);
+      // Serialize and debounce document parsing; stale requests never paint.
+      this.previewTimer = setTimeout(() => {
+        this.previewQueue = this.previewQueue.catch(() => {}).then(async () => {
+          if (this.destroyed || generation !== this.previewGeneration) return;
+          let pdf: import('pdfjs-dist/types/src/display/api').PDFDocumentProxy | undefined;
+          const canvas = document.createElement('canvas');
+          try {
+            let positions: Record<string,{x:number;y:number;width:number;height:number}> = {};
+            if (!this.previewSource || this.previewSource.key !== context) {
+              this.previewSource = {key: context, file: this.previewExporter.createPreviewFile(source.file, logicalPage)};
+            }
+            const previewFile = await this.previewSource.file;
+            if (this.destroyed || generation !== this.previewGeneration) return;
+            const previewPage = {...logicalPage, kind: 'source' as const, sourcePageNumber: 1, rotation: 0 as const};
+            const blob = await this.previewExporter.exportTextObjects(previewFile, objects, [previewPage], bounds=>positions=bounds);
+            if (this.destroyed || generation !== this.previewGeneration) return;
+            const pdfjs = await import('pdfjs-dist');
+            pdfjs.GlobalWorkerOptions.workerSrc = '/assets/pdfjs/pdf.worker.min.mjs';
+            pdf = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+            const page = await pdf.getPage(1);
+            const natural = page.getViewport({ scale: 1 });
+            const scale = Math.min(2, 1600 / Math.max(natural.width, natural.height));
+            const viewport = page.getViewport({ scale });
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
+            if (!this.destroyed && generation === this.previewGeneration) {
+              this.previewSourceBounds.set(Object.fromEntries(objects.map(object => [object.id, object.bounds])));
+              this.previewBounds.set(positions);
+              this.committedPreview.set(canvas.toDataURL('image/png'));
+            }
+          } catch (error) {
+            if (!this.destroyed && generation === this.previewGeneration) {
+              this.previewSource = null;
+              this.previewError.set(error instanceof Error ? error.message : 'Unable to render the edited preview.');
+            }
+          } finally {
+            if(generation===this.previewGeneration)this.previewBusy.set(false);
+            canvas.width = canvas.height = 0;
+            await pdf?.destroy();
+          }
+        });
+      }, 250);
+    });
     effect(() => {
       const request = this.watermark.isOpen()
         ? this.watermark.draft()
@@ -654,7 +743,11 @@ private activeRenderVersion: number | null = null;
         return;
       }
 
-      this.scheduleRender();
+      const renderState = JSON.stringify([this.facade.document()?.id, page, zoom, viewMode, logicalPage]);
+      if (renderState !== this.lastRenderState) {
+        this.lastRenderState = renderState;
+        this.scheduleRender();
+      }
     });
   }
 
@@ -712,8 +805,17 @@ ngAfterViewInit(): void {
    // any Studio object mutation (create/update/delete/duplicate).
    void this.objectService.changes();
 
-   return this.objectService.listForPage(this.facade.currentPage());
+   return visibleStudioSources(this.objectService.listForPage(this.facade.currentPage())).map(o=>({...o,bounds:this.getDisplayBounds(o)}));
  }
+
+  getDisplayBounds(object: StudioObject): StudioObject['bounds'] {
+    return studioDisplayBounds(object.bounds, this.previewBounds()[object.id], this.previewSourceBounds()[object.id]);
+  }
+
+  getSelectionBounds(id: string, fallback: StudioObject['bounds']): StudioObject['bounds'] {
+    const object = this.objectService.get(id);
+    return object ? this.getDisplayBounds(object) : fallback;
+  }
 
   /**
    * Observe the actual Studio viewport.
@@ -852,9 +954,7 @@ private scheduleRender(): void {
         return;
       }
 
-      void this.render(
-        scheduledVersion
-      );
+      this.currentRender = this.render(scheduledVersion);
     });
 }
 
@@ -2894,8 +2994,7 @@ onEditorObjectPointerDown(
 
   if (activeTool === 'edit-pdf-text') {
     if (object.type === 'text' && object.pdfText) {
-      this.capturePdfTextAppearance(object);
-      this.beginTextEditing(object.id);
+      void this.beginTextEditing(object.id);
       event.preventDefault();
       event.stopPropagation();
     }
@@ -3340,10 +3439,11 @@ async onImageSelected(
     return;
   }
 
-  const image =
-    await this.readImageFile(file);
+  const documentId = this.facade.document()?.id;
+  const pageNumber = this.facade.currentPage();
+  const image = await this.readImageFile(file);
 
-  if (!image) {
+  if (!image || this.destroyed || documentId !== this.facade.document()?.id || pageNumber !== this.facade.currentPage()) {
     return;
   }
 
@@ -3558,10 +3658,14 @@ private requestImageReplacement(
 /**
  * Begin editing a text Studio object.
  */
-private beginTextEditing(
+private async beginTextEditing(
   objectId: string
-): void {
-
+): Promise<void> {
+  const documentId = this.facade.document()?.id;
+  const pageNumber = this.facade.currentPage();
+  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  await this.currentRender;
+  if (this.destroyed || this.facade.document()?.id !== documentId || this.facade.currentPage() !== pageNumber) return;
   const object =
     this.objectService.get(
       objectId
@@ -3574,8 +3678,8 @@ private beginTextEditing(
     return;
   }
 
-  this.editingObjectId =
-    objectId;
+  this.capturePdfTextAppearance(object);
+  this.editingObjectId = objectId;
 
   this.editingText =
     object.text ?? '';
@@ -3631,9 +3735,8 @@ onTextEditorInput(
     return;
   }
 
-  this.editingText =
-    target.value;
-
+  this.editingText = target.value;
+  if(this.editingObjectId)this.textDraft.set({id:this.editingObjectId,text:this.editingText});
   this.syncTextEditorLayout();
 }
 
@@ -3724,6 +3827,7 @@ private syncTextEditorValue(): void {
  * Finish the current text edit. Empty text is discarded silently.
  */
 commitTextEdit(): void {
+  this.textDraft.set(null);
 
   const objectId =
     this.editingObjectId;
@@ -3762,7 +3866,7 @@ commitTextEdit(): void {
     return;
   }
 
-  this.autoGrowExistingTextBox(objectId);
+
 
   this.facade.updateTextObject(
     objectId,
@@ -3789,6 +3893,7 @@ commitTextEdit(): void {
  * Cancel the edit and restore the original value.
  */
 cancelTextEdit(): void {
+  this.textDraft.set(null);
 
   const objectId =
     this.editingObjectId;
@@ -3800,12 +3905,11 @@ cancelTextEdit(): void {
   const originalText =
     this.editingOriginalText;
 
-  this.facade.updateTextObject(
-    objectId,
-    originalText
-  );
+  if (this.objectService.get(objectId)?.text !== originalText) {
+    this.facade.updateTextObject(objectId, originalText);
+  }
 
-  if (this.editingOriginalStyle) {
+  if (this.editingOriginalStyle && JSON.stringify(this.objectService.get(objectId)?.textStyle) !== JSON.stringify(this.editingOriginalStyle)) {
     this.facade.updateTextStyle(
       objectId,
       this.editingOriginalStyle
@@ -3833,9 +3937,8 @@ get editingTextObject(): StudioObject | null {
     return null;
   }
 
-  return this.objectService.get(
-    this.editingObjectId
-  );
+  const object = this.objectService.get(this.editingObjectId);
+  return object ? {...object, bounds: this.getDisplayBounds(object)} : null;
 }
 
 /**
@@ -3916,7 +4019,7 @@ getObjectFontFamilyCss(
         .replace(/\\/g, '\\\\')
         .replace(/"/g, '\\\"');
 
-    return `"${escapedFamily}"`;
+    return /calibri/i.test(object.pdfText?.sourceFontFamily??'') ? `"${escapedFamily}", "StudioCarlito"` : `"${escapedFamily}", "StudioFallback"`;
   }
 
   const sourceFamily =
@@ -5106,7 +5209,9 @@ if (updatedObject) {
     preferredObjectId?: string
   ): StudioObject | null {
     const pageNumber = this.facade.currentPage();
-    const objects = this.objectService.listForPage(pageNumber);
+    const tool = this.facade.activeTool();
+    const objects = this.studioObjects.filter(object =>
+      tool === 'edit-pdf-text' ? !!object.pdfText : tool === 'edit-pdf-image' ? !!object.pdfImage : true);
     const hits = this.selectionEngine.hitTestAll(
       objects,
       pageNumber,
@@ -5361,6 +5466,7 @@ private clientToPagePoint(clientX: number,clientY: number,pageRect: DOMRect): {
   }
 
   private clearCanvas(): void {
+  if (!this.isBrowser) return;
   const canvas = this.canvasRef?.nativeElement;
 
   if (!canvas) {
@@ -5761,7 +5867,13 @@ onWindowKeyDown(
 }
 
   /** 5C.2: Select a detected source image and open the replacement picker. */
-  private handlePdfImageEditPointerDown(event: PointerEvent): void {
+  private async handlePdfImageEditPointerDown(event: PointerEvent): Promise<void> {
+    event.preventDefault();
+    event.stopPropagation();
+    const documentId = this.facade.document()?.id;
+    const pageNumber = this.facade.currentPage();
+    await this.facade.ensureCurrentPageContent();
+    if (documentId !== this.facade.document()?.id || pageNumber !== this.facade.currentPage() || this.facade.activeTool() !== 'edit-pdf-image') return;
     const page = this.pageRef?.nativeElement;
     if (!page) return;
 
@@ -5798,7 +5910,12 @@ onWindowKeyDown(
      * analysis time to finish. Ensure the currently visible page has its
      * source text objects before hit-testing this click.
      */
+    event.preventDefault();
+    event.stopPropagation();
+    const documentId = this.facade.document()?.id;
+    const pageNumber = this.facade.currentPage();
     await this.facade.ensureCurrentPageContent();
+    if (documentId !== this.facade.document()?.id || pageNumber !== this.facade.currentPage() || this.facade.activeTool() !== 'edit-pdf-text') return;
 
     /*
      * The user may have navigated while the analysis promise was pending.
@@ -5820,8 +5937,7 @@ onWindowKeyDown(
     const object = this.selectObjectAtPoint(point.x, point.y);
 
     if (object?.type === 'text' && object.pdfText) {
-      this.capturePdfTextAppearance(object);
-      this.beginTextEditing(object.id);
+      void this.beginTextEditing(object.id);
     }
 
     event.preventDefault();
@@ -5918,9 +6034,9 @@ onWindowKeyDown(
   }
 
   getPdfTextTransform(object: StudioObject): string | null {
-    if (!object.pdfText?.edited) return null;
-    const rotation = object.pdfText.rotation ?? 0;
-    return Math.abs(rotation) > 0.1 ? `rotate(${-rotation}deg)` : null;
+    if (!object.pdfText) return null;
+    const rotation = object.pdfText.displayRotation ?? -(object.pdfText.rotation ?? 0);
+    return Math.abs(rotation) > 0.1 ? `rotate(${rotation}deg)` : null;
   }
 
   /**
@@ -5939,54 +6055,8 @@ onWindowKeyDown(
     const source = object.pdfText;
     if (!source?.edited) return [];
 
-    const original = source.originalText;
-    const edited = object.text ?? '';
-    const change = this.resolveSingleTextChangeForPreview(original, edited);
-    const sourceWidth = Math.max(0.01, source.textWidthPdf ?? 0);
-    const runs = source.sourceRuns;
-
-    if (!change || !runs?.length || !sourceWidth) {
-      return [{
-        id: `${object.id}-full`,
-        text: edited,
-        leftPercent: 0,
-        topPercent: 0,
-        widthPercent: 100,
-        heightPercent: 100,
-      }];
-    }
-
-    const first = runs.findIndex(run => change.originalStart < run.endIndex);
-    const firstIndex = first >= 0 ? first : runs.length - 1;
-    const last = runs.findIndex(run => change.originalEnd <= run.endIndex);
-    const lastIndex = last >= 0 ? last : runs.length - 1;
-    const firstRun = runs[firstIndex];
-    const lastRun = runs[lastIndex];
-
-    const localStart = Math.max(0, change.originalStart - firstRun.startIndex);
-    const prefix = firstRun.text.slice(0, localStart);
-    const prefixWidthPdf = this.measurePdfSourceTextWidth(object, prefix);
-    const startPdf = Math.max(0, firstRun.baselineXPdf - (source.baselineXPdf ?? firstRun.baselineXPdf) + prefixWidthPdf);
-
-    let oldWidthPdf: number;
-    if (firstIndex === lastIndex) {
-      const localEnd = Math.max(localStart, Math.min(firstRun.text.length, change.originalEnd - firstRun.startIndex));
-      oldWidthPdf = this.measurePdfSourceTextWidth(object, firstRun.text.slice(localStart, localEnd));
-    } else {
-      oldWidthPdf = Math.max(0, (lastRun.baselineXPdf + lastRun.widthPdf) - (firstRun.baselineXPdf + prefixWidthPdf));
-    }
-
-    const replacementWidthPdf = this.measurePdfSourceTextWidth(object, change.replacementText);
-    const coverWidthPdf = Math.max(0.01, oldWidthPdf, replacementWidthPdf);
-
-    return [{
-      id: `${object.id}-changed`,
-      text: change.replacementText,
-      leftPercent: Math.max(0, Math.min(100, startPdf / sourceWidth * 100)),
-      topPercent: 0,
-      widthPercent: Math.max(0.1, Math.min(200, coverWidthPdf / sourceWidth * 100)),
-      heightPercent: 118,
-    }];
+    return [{ id: `${object.id}-full`, text: object.text ?? '', leftPercent: 0,
+      topPercent: 0, widthPercent: 100, heightPercent: 100 }];
   }
 
   private resolveSingleTextChangeForPreview(originalText: string, editedText: string): {
@@ -6050,10 +6120,13 @@ onWindowKeyDown(
     if (rect.width <= 0 || rect.height <= 0) return;
     const sx = canvas.width / rect.width;
     const sy = canvas.height / rect.height;
-    const x = Math.max(0, Math.floor(object.bounds.x * rect.width * sx));
-    const y = Math.max(0, Math.floor(object.bounds.y * rect.height * sy));
-    const w = Math.max(1, Math.min(canvas.width - x, Math.ceil(object.bounds.width * rect.width * sx)));
-    const h = Math.max(1, Math.min(canvas.height - y, Math.ceil(object.bounds.height * rect.height * sy)));
+    const element = Array.from(page.querySelectorAll<HTMLElement>('[data-object-id]'))
+      .find(el => el.dataset['objectId'] === object.id);
+    const visual = element?.getBoundingClientRect();
+    const x = Math.max(0, Math.floor((visual ? visual.left - rect.left : object.bounds.x * rect.width) * sx));
+    const y = Math.max(0, Math.floor((visual ? visual.top - rect.top : object.bounds.y * rect.height) * sy));
+    const w = Math.max(1, Math.min(canvas.width - x, Math.ceil((visual?.width ?? object.bounds.width * rect.width) * sx)));
+    const h = Math.max(1, Math.min(canvas.height - y, Math.ceil((visual?.height ?? object.bounds.height * rect.height) * sy)));
     try {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) return;
@@ -6573,6 +6646,10 @@ onWindowKeyDown(
  * ----------------------------------------------------------
  */
 ngOnDestroy(): void {
+  this.facade.flushTextDraft = null;
+  ++this.previewGeneration;
+  clearTimeout(this.previewTimer);
+  this.committedPreview.set(null);
   this.revokeWatermarkImagePreview();
 
   /**
@@ -6641,7 +6718,7 @@ ngOnDestroy(): void {
     const canvas =
       this.canvasRef?.nativeElement;
 
-    if (canvas) {
+    if (canvas && this.isBrowser) {
       this.facade.releaseMainCanvas(
         canvas
       );

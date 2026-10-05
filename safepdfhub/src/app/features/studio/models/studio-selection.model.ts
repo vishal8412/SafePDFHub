@@ -39,6 +39,7 @@ export type StudioTextFontFamily =
  * as the original PDF font size during export.
  */
 export interface StudioPdfTextSource {
+  readonly sourceLines?: readonly { transform: readonly number[]; width: number; height: number }[];
   /** Original text extracted from the uploaded PDF. */
   readonly originalText: string;
   readonly fontName: string;
@@ -49,6 +50,7 @@ export interface StudioPdfTextSource {
   /** Detected text size as a fraction of page display height. */
   readonly detectedFontSize?: number;
   /** Detected source rotation in display degrees. */
+  readonly displayRotation?: number;
   readonly rotation?: number;
   /** Estimated underlying PDF background used to cover the original text. */
   readonly backgroundColor?: string;
@@ -93,7 +95,7 @@ export interface StudioPdfTextSource {
   /** Extra cover around replaced source glyphs, in PDF points. */
   readonly coverPadding?: number;
   /** Auto-fit keeps replacement paragraphs inside the selected source box. */
-  readonly fitMode?: 'original' | 'auto';
+  readonly fitMode?: 'original' | 'auto' | 'flow';
   /**
    * Horizontal glyph-metric calibration captured against the original PDF text.
    * This is a stable source-font correction, not an auto-fit for edited text.
@@ -207,6 +209,8 @@ export interface StudioCommentData {
 
 
 export interface StudioPdfImageSource {
+  readonly sourceBounds?: StudioObjectBounds;
+  readonly displayRotation?: number;
   readonly sourceName: string | null;
   readonly confidence: 'high' | 'medium' | 'low';
   readonly rotation: number;

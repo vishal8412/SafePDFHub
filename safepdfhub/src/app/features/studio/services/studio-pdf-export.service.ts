@@ -1,3 +1,5 @@
+import { visibleStudioSources } from './studio-source-visibility';
+import { composeStudioPage, type SourceRegion, type PageFlow } from './studio-page-composition';
 import {
   Injectable,
   PLATFORM_ID,
@@ -13,6 +15,7 @@ import {
   degrees,
   rgb,
   PDFArray,
+  PDFDict, PDFRawStream, decodePDFRawStream,
   PDFName,
   PDFString,
   pushGraphicsState,
@@ -20,7 +23,9 @@ import {
   rectangle,
   clip,
   endPath,
+  moveTo, lineTo, closePath, fill, setFillingColor, concatTransformationMatrix,
 } from 'pdf-lib';
+import { PdfContentAnalysisService } from './pdf-content-analysis.service';
 import { saveAs } from 'file-saver';
 import fontkit from '@pdf-lib/fontkit';
 import { QpdfWasmPrototypeService } from '../../../core/qpdf/qpdf-wasm-prototype.service';
@@ -53,9 +58,27 @@ import type {
   providedIn: 'root',
 })
 export class StudioPdfExportService {
+  private readonly sourceAnalysis = inject(PdfContentAnalysisService);
   private readonly platformId = inject(PLATFORM_ID);
   private readonly qpdf = inject(QpdfWasmPrototypeService);
   private readonly signingText = inject(SigningPdfTextService);
+
+  /** Prepare a bounded, single-page preview input once per logical page.
+   * Full-document export always continues to use the original uploaded file. */
+  async createPreviewFile(sourceFile: File, logicalPage: StudioPage): Promise<File> {
+    const preview = await PDFDocument.create();
+    if (logicalPage.kind === 'blank') {
+      preview.addPage([logicalPage.blankWidth ?? 595.28, logicalPage.blankHeight ?? 841.89]);
+    } else {
+      const original = await PDFDocument.load(await sourceFile.arrayBuffer(), {updateMetadata: false});
+      const [page] = await preview.copyPages(original, [(logicalPage.sourcePageNumber ?? 1) - 1]);
+      preview.addPage(page);
+    }
+    const page = preview.getPage(0);
+    page.setRotation(degrees((page.getRotation().angle + logicalPage.rotation) % 360));
+    const bytes = await preview.save();
+    return new File([bytes.buffer as ArrayBuffer], 'studio-page-preview.pdf', {type: 'application/pdf'});
+  }
 
   /**
    * Build a new PDF from the original uploaded bytes and paint all committed
@@ -69,6 +92,7 @@ export class StudioPdfExportService {
     sourceFile: File,
     objects: readonly StudioObject[],
     logicalPages?: readonly StudioPage[],
+    onLayout?: (bounds: Record<string, {x:number;y:number;width:number;height:number}>) => void,
   ): Promise<Blob> {
     if (!isPlatformBrowser(this.platformId)) {
       throw new Error(
@@ -90,9 +114,13 @@ export class StudioPdfExportService {
       await sourceFile.arrayBuffer(),
     );
 
-    const sourcePdf = await PDFDocument.load(sourceBytes);
+    const sourcePdf = await PDFDocument.load(sourceBytes, { updateMetadata: false });
     const sourcePages = sourcePdf.getPages();
-    const pdfDocument = await PDFDocument.create();
+    const manifest = logicalPages && logicalPages.length ? logicalPages : sourcePages.map((_, index) => ({ id: `source-${index + 1}`, kind: 'source' as const, sourcePageNumber: index + 1, rotation: 0 as const }));
+    const samePageOrder = manifest.length === sourcePages.length && manifest.every((p, i) => p.kind === 'source' && p.sourcePageNumber === i + 1);
+    // Keep the original catalog, forms, metadata and shared resources for
+    // ordinary text/image editing. Copying each page duplicated resources.
+    const pdfDocument = samePageOrder ? sourcePdf : await PDFDocument.create();
 
     /*
      * Existing PDF text must be allowed to reuse the actual source font.
@@ -100,7 +128,9 @@ export class StudioPdfExportService {
      * changes glyph shape, metrics and therefore the visual result.
      */
     pdfDocument.registerFontkit(fontkit);
-    const manifest = logicalPages && logicalPages.length ? logicalPages : sourcePages.map((_, index) => ({ id: `source-${index + 1}`, kind: 'source' as const, sourcePageNumber: index + 1, rotation: 0 as const }));
+    if (samePageOrder) {
+      sourcePages.forEach((page, i) => page.setRotation(degrees((page.getRotation().angle + manifest[i].rotation) % 360)));
+    } else {
     for (const logicalPage of manifest) {
       if (logicalPage.kind === 'blank') {
         const page = pdfDocument.addPage([logicalPage.blankWidth ?? 595.28, logicalPage.blankHeight ?? 841.89]);
@@ -113,6 +143,7 @@ export class StudioPdfExportService {
         pdfDocument.addPage(copied);
       }
     }
+    }
     const pages = pdfDocument.getPages();
     const fontCache = new Map<string, PDFFont>();
     const signingImageCache = new Map<string, PDFImage>();
@@ -121,7 +152,7 @@ export class StudioPdfExportService {
     // and history but are not flattened into visible PDF content. This avoids
     // silently converting private review notes into document artwork.
     const editableObjects =
-      objects.filter(
+      visibleStudioSources(objects).filter(
         object =>
           (
             object.type === 'text' &&
@@ -180,7 +211,31 @@ export class StudioPdfExportService {
         sourceBytes,
         editableObjects,
         manifest,
+        sourceFile,
       );
+
+    for (const object of editableObjects) {
+      if (!object.pdfText) continue;
+      const key = this.getSourceFontKey(object, manifest);
+      const originalPage = sourcePages[(manifest[object.pageNumber-1]?.sourcePageNumber ?? object.pageNumber)-1];
+      const fonts = originalPage?.node.Resources()?.lookupMaybe(PDFName.of('Font'), PDFDict);
+      if (!key || !fonts) continue;
+      const normalize=(name:string)=>name.replace(/^\/?[A-Z]{6}\+/, '').replace(/[^a-z0-9]/gi,'').toLowerCase();
+      const wanted=normalize(object.pdfText.sourceFontFamily ?? '');
+      for (const [,ref] of fonts.entries()) {
+        const dict=sourcePdf.context.lookup(ref,PDFDict);
+        const name=String(dict.get(PDFName.of('BaseFont')) ?? '').replace(/^\//,'');
+        const plain=normalize(name.replace(/[-_, ]+(bold|regular|italic|oblique|roman)$/i,''));
+        if (!wanted || plain!==wanted || /bold/i.test(name)!==((object.pdfText.sourceFontWeight??400)>=600)) continue;
+        const descendants=dict.lookupMaybe(PDFName.of('DescendantFonts'),PDFArray);
+        const base=descendants ? descendants.lookup(0,PDFDict) : dict;
+        const descriptor=base.lookupMaybe(PDFName.of('FontDescriptor'),PDFDict);
+        for(const field of ['FontFile2','FontFile3']) {
+          const stream=sourcePdf.context.lookup(descriptor?.get(PDFName.of(field)));
+          if(stream instanceof PDFRawStream) { sourceFontBytes.set(key,decodePDFRawStream(stream).decode()); break; }
+        }
+      }
+    }
 
     /**
      * Fast path:
@@ -198,7 +253,78 @@ export class StudioPdfExportService {
       );
     }
 
-    for (const object of editableObjects) {
+    const textFits = new Map<string, {fontSize:number;lineHeight:number;lines:string[]}>();
+    const pageFlows = new Map<number, PageFlow[]>();
+    const pageHoles = new Map<number, SourceRegion[]>();
+    const removed = new Set<string>();
+    const layout: Record<string,{x:number;y:number;width:number;height:number}> = {};
+    for(const object of editableObjects) {
+      const page=pages[object.pageNumber-1];
+      if(!page)continue;
+      const holes=pageHoles.get(object.pageNumber)??[];
+      pageHoles.set(object.pageNumber,holes);
+      if(object.pdfText?.edited) {
+        const src=object.pdfText;
+        const font=await this.getFont(pdfDocument,src.sourceFontWeight??400,src.sourceFontStyle??'normal',this.resolvePdfTextExportFamily(src.sourceFontFamily,'Helvetica'),fontCache,sourceFontBytes.get(this.getSourceFontKey(object,manifest)??'')??null,object.text??'',src.sourceFontFamily??'');
+        const fit=this.resolveTextFit(object,font,src.fontSizePdf??12,src.textWidthPdf??100,src.textHeightPdf??12,page.getHeight());
+        textFits.set(object.id,fit);
+        if(Math.abs(src.rotation??0)<.1) {
+          for(const line of src.sourceLines??[{transform:src.transform,width:src.textWidthPdf??100,height:src.textHeightPdf??12}]) {
+            holes.push({x:line.transform[4]-.2,y:line.transform[5]+(src.descentPdf??-2)-.3,width:line.width+.4,height:(src.ascentPdf??fit.fontSize)-(src.descentPdf??-2)+.6});
+          }
+          removed.add(object.id);
+          if(src.fitMode==='flow') {
+            const oldLines=src.sourceLines?.length??1;
+            const growth=Math.max(0,(fit.lines.length-1)*fit.lineHeight-(oldLines-1)*(src.lineHeightPdf??fit.lineHeight));
+            if(growth>.1) {
+              if(page.getRotation().angle!==0)throw new Error('Expanding paragraphs on rotated pages is not supported yet. Use Fit within original area.');
+              if(page.node.Annots()?.size())throw new Error('This page contains annotations or form fields. Use Fit within original area to preserve their positions.');
+              const below = src.transform[5] - (oldLines - 1) * (src.lineHeightPdf ?? fit.lineHeight) + (src.descentPdf ?? -2) - .4;
+              const crop = page.getCropBox();
+              const cutoff = 1 - (below - crop.y) / crop.height;
+              if (objects.some(other => {
+                if (other.pageNumber !== object.pageNumber || !other.pdfImage) return false;
+                const b = other.pdfImage.sourceBounds ?? other.bounds;
+                return b.y < cutoff && b.y + b.height > cutoff;
+              })) throw new Error('Expanding this paragraph would split an image on this page. Use Fit within original area.');
+              const flow=pageFlows.get(object.pageNumber)??[];
+              flow.push({below,delta:growth});
+              pageFlows.set(object.pageNumber,flow);
+            }
+          }
+        }
+      } else if(object.pdfImage?.replaced) {
+        const b=object.pdfImage.sourceBounds??object.bounds;
+        const crop=page.getCropBox(),rot=this.normalizeRotation(page.getRotation().angle);
+        const w=rot===90||rot===270?crop.height:crop.width,h=rot===90||rot===270?crop.width:crop.height;
+        const points=[[b.x,b.y],[b.x+b.width,b.y+b.height]].map(([x,y])=>this.displayToPdfPoint(x*w,y*h,w,h,rot));
+        holes.push({x:Math.min(...points.map(p=>p.x))+crop.x-1,y:Math.min(...points.map(p=>p.y))+crop.y-1,width:Math.abs(points[1].x-points[0].x)+2,height:Math.abs(points[1].y-points[0].y)+2});
+        removed.add(object.id);
+      }
+    }
+    const shiftAt=(pageNumber:number,pdfY:number)=>(pageFlows.get(pageNumber)??[]).filter(f=>pdfY<f.below).reduce((n,f)=>n+f.delta,0);
+    for(const object of objects) {
+      const page=pages[object.pageNumber-1];if(!page)continue;
+      const height=page.getCropBox().height;
+      const anchor = object.pdfImage?.sourceBounds ?? object.bounds;
+      const shift = object.pdfText || object.pdfImage
+        ? shiftAt(object.pageNumber, object.pdfText?.transform[5] ?? page.getCropBox().y + height * (1 - anchor.y))
+        : 0;
+      const fit=textFits.get(object.id);
+      const newHeight=fit && page.getRotation().angle === 0 ? ((fit.lines.length-1)*fit.lineHeight+fit.fontSize)/height : object.bounds.height;
+      layout[object.id]={...object.bounds,y:object.bounds.y+shift/height,height:Math.max(object.bounds.height,newHeight)};
+      if((shift > 0 || (object.pdfText?.fitMode === 'flow' && newHeight > object.bounds.height + .001)) && layout[object.id].y+layout[object.id].height>1-.015)throw new Error('The added lines exceed the available space on this page. Shorten the paragraph or use Fit within original area.');
+    }
+    for(const [number,holes] of pageHoles)await composeStudioPage(pdfDocument,pages[number-1],holes,pageFlows.get(number)??[]);
+    onLayout?.(layout);
+
+    for (const originalObject of editableObjects) {
+      const offset=originalObject.pdfText ? shiftAt(originalObject.pageNumber,originalObject.pdfText.transform[5]) : 0;
+      const object: StudioObject = {
+        ...originalObject,
+        bounds: layout[originalObject.id] ?? originalObject.bounds,
+        ...(originalObject.pdfText ? {pdfText:{...originalObject.pdfText,transform: originalObject.pdfText.transform.map((n,i)=>i===5?n-offset:n) as unknown as StudioPdfTextSource['transform']}} : {})
+      };
       const pageIndex = object.pageNumber - 1;
 
       if (
@@ -213,8 +339,8 @@ export class StudioPdfExportService {
         page.getRotation().angle,
       );
 
-      const pageWidth = page.getWidth();
-      const pageHeight = page.getHeight();
+      const pageWidth = page.getCropBox().width;
+      const pageHeight = page.getCropBox().height;
 
       const displayWidth =
         rotation === 90 || rotation === 270
@@ -331,7 +457,7 @@ export class StudioPdfExportService {
                 )
               );
 
-        if (object.pdfImage?.replaced) {
+        if (object.pdfImage?.replaced && !removed.has(object.id)) {
           await this.coverExistingPdfImage(
             pdfDocument, page, object, displayWidth, displayHeight, rotation
           );
@@ -408,6 +534,7 @@ export class StudioPdfExportService {
           fontCache,
           sourceFontBytesForObject,
           object.text ?? '',
+          sourceText?.sourceFontFamily ?? '',
         );
 
         const sourceBoxWidth =
@@ -435,32 +562,12 @@ export class StudioPdfExportService {
       );
 
       if (object.type === 'text' && object.pdfText?.edited) {
-        /*
-         * Existing PDF text already lives on the copied page. For a normal
-         * single-line edit, cover only the original glyph range that changed
-         * and draw only the replacement. Untouched source glyphs therefore
-         * remain byte-for-byte on the copied page instead of being painted a
-         * second time with pdf-lib.
-         */
-        if (
-          fit.lines.length === 1 &&
-          this.canUsePartialSourceTextReplacement(object)
-        ) {
-          this.coverEditedPdfTextChange(
-            page,
-            object,
-            font,
-            fit.fontSize,
-          );
-        } else {
-          this.coverExistingPdfText(
-            page,
-            object,
-            displayWidth,
-            displayHeight,
-            rotation
-          );
-        }
+        if (object.pdfText?.sourceLines?.length) {
+          for (const line of object.pdfText.sourceLines) {
+            const transform=line.transform.map((n,i)=>i===5?n-offset:n) as unknown as StudioPdfTextSource['transform'];
+            this.coverExistingPdfText(page,{...object,pdfText:{...object.pdfText,transform,textWidthPdf:line.width}},displayWidth,displayHeight,rotation);
+          }
+        } else this.coverExistingPdfText(page, object, displayWidth, displayHeight, rotation);
       }
 
       this.drawObject(
@@ -797,10 +904,10 @@ export class StudioPdfExportService {
     const padY = 0.25;
 
     const corners = [
-      { x: e - vx * descent, y: f - vy * descent },
-      { x: e + ux * width - vx * descent, y: f + uy * width - vy * descent },
-      { x: e - vx * ascent, y: f - vy * ascent },
-      { x: e + ux * width - vx * ascent, y: f + uy * width - vy * ascent },
+      { x: e + vx * descent, y: f + vy * descent },
+      { x: e + ux * width + vx * descent, y: f + uy * width + vy * descent },
+      { x: e + vx * ascent, y: f + vy * ascent },
+      { x: e + ux * width + vx * ascent, y: f + uy * width + vy * ascent },
     ];
 
     // The source transform is already in unrotated PDF page coordinates.
@@ -812,16 +919,16 @@ export class StudioPdfExportService {
     void displayHeight;
     void rotation;
 
-    const xs = corners.map(point => point.x);
-    const ys = corners.map(point => point.y);
-    page.drawRectangle({
-      x: Math.max(0, Math.min(...xs) - padX),
-      y: Math.max(0, Math.min(...ys) - padY),
-      width: Math.max(1, Math.max(...xs) - Math.min(...xs) + padX * 2),
-      height: Math.max(1, Math.max(...ys) - Math.min(...ys) + padY * 2),
-      color: this.hexToPdfRgb(source.backgroundColor ?? '#ffffff'),
-      borderWidth: 0
-    });
+    // Follow the source quadrilateral instead of erasing its axis-aligned
+    // bounding box, which can cover neighboring text on a slanted baseline.
+    const ordered = [corners[0], corners[1], corners[3], corners[2]];
+    page.pushOperators(pushGraphicsState(),
+      setFillingColor(this.hexToPdfRgb(source.backgroundColor ?? '#ffffff')),
+      moveTo(ordered[0].x - vx * padY, ordered[0].y - vy * padY),
+      lineTo(ordered[1].x - vx * padY, ordered[1].y - vy * padY),
+      lineTo(ordered[2].x + vx * padY, ordered[2].y + vy * padY),
+      lineTo(ordered[3].x + vx * padY, ordered[3].y + vy * padY),
+      closePath(), fill(), popGraphicsState());
   }
 
   /** Persist Studio links as native PDF link annotations, not flattened artwork. */
@@ -1392,7 +1499,7 @@ export class StudioPdfExportService {
     const xs = corners.map(point => point.x);
     const ys = corners.map(point => point.y);
     page.drawRectangle({
-      x: Math.min(...xs), y: Math.min(...ys),
+      x: Math.min(...xs) + page.getCropBox().x, y: Math.min(...ys) + page.getCropBox().y,
       width: Math.max(...xs) - Math.min(...xs),
       height: Math.max(...ys) - Math.min(...ys),
       color: this.pdfImageBackgroundColor(object),
@@ -1528,21 +1635,10 @@ export class StudioPdfExportService {
     }
     const drawX = boxX + (boxWidth - drawWidth) / 2;
     const drawY = boxY + (boxHeight - drawHeight) / 2;
-    const displayBottom = displayHeight - drawY - drawHeight;
-
-    switch (rotation) {
-      case 90:
-        page.drawImage(image, { x: drawX, y: displayBottom + drawHeight, width: drawHeight, height: drawWidth, rotate: degrees(-90) });
-        return;
-      case 180:
-        page.drawImage(image, { x: displayWidth - (drawX + drawWidth), y: drawY + drawHeight, width: drawWidth, height: drawHeight, rotate: degrees(-180) });
-        return;
-      case 270:
-        page.drawImage(image, { x: drawX + drawWidth, y: displayBottom, width: drawHeight, height: drawWidth, rotate: degrees(90) });
-        return;
-      default:
-        page.drawImage(image, { x: drawX, y: displayBottom, width: drawWidth, height: drawHeight });
-    }
+    const origin = this.displayToPdfPoint(drawX, drawY + drawHeight, displayWidth, displayHeight, rotation);
+    const crop = page.getCropBox();
+    page.drawImage(image, { x: origin.x + crop.x, y: origin.y + crop.y,
+      width: drawWidth, height: drawHeight, rotate: degrees(rotation) });
   }
 
   /** Resolve the Phase 5C.4 reconstruction colour used behind replacement artwork. */
@@ -1582,7 +1678,7 @@ export class StudioPdfExportService {
 
     page.pushOperators(
       pushGraphicsState(),
-      rectangle(minX, minY, Math.max(0.01, maxX - minX), Math.max(0.01, maxY - minY)),
+      rectangle(minX + page.getCropBox().x, minY + page.getCropBox().y, Math.max(0.01, maxX - minX), Math.max(0.01, maxY - minY)),
       clip(),
       endPath()
     );
@@ -1614,82 +1710,27 @@ export class StudioPdfExportService {
       displayHeight;
 
     const fitMode = object.pdfImage?.fitMode ?? 'stretch';
+    const orientation = object.pdfImage?.displayRotation ?? 0;
+    const swapped = Math.abs(Math.round(orientation / 90)) % 2 === 1;
+    const localWidth = swapped ? boxHeight : boxWidth;
+    const localHeight = swapped ? boxWidth : boxHeight;
     const sourceRatio = Math.max(0.0001, image.width / image.height);
-    const boxRatio = Math.max(0.0001, boxWidth / boxHeight);
-    let drawWidth = boxWidth;
-    let drawHeight = boxHeight;
+    const boxRatio = Math.max(0.0001, localWidth / localHeight);
+    let drawWidth = localWidth, drawHeight = localHeight;
     if (fitMode !== 'stretch') {
       const useWidth = fitMode === 'fit' ? sourceRatio > boxRatio : sourceRatio < boxRatio;
-      if (useWidth) { drawWidth = boxWidth; drawHeight = boxWidth / sourceRatio; }
-      else { drawHeight = boxHeight; drawWidth = boxHeight * sourceRatio; }
+      if (useWidth) { drawWidth = localWidth; drawHeight = localWidth / sourceRatio; }
+      else { drawHeight = localHeight; drawWidth = localHeight * sourceRatio; }
     }
-    const drawX = boxX + (boxWidth - drawWidth) / 2;
-    const drawY = boxY + (boxHeight - drawHeight) / 2;
-
-    const displayBottom =
-      displayHeight -
-      drawY -
-      drawHeight;
-
-    switch (rotation) {
-
-      case 90:
-        page.drawImage(
-          image,
-          {
-            x: drawX,
-            y: displayBottom + drawHeight,
-            width: drawHeight,
-            height: drawWidth,
-            rotate: degrees(-90)
-          }
-        );
-        return;
-
-      case 180:
-        page.drawImage(
-          image,
-          {
-            x:
-              displayWidth -
-              (drawX + drawWidth),
-            y:
-              drawY + drawHeight,
-            width: drawWidth,
-            height: drawHeight,
-            rotate: degrees(-180)
-          }
-        );
-        return;
-
-      case 270:
-        page.drawImage(
-          image,
-          {
-            x:
-              drawX + drawWidth,
-            y:
-              displayBottom,
-            width: drawHeight,
-            height: drawWidth,
-            rotate: degrees(90)
-          }
-        );
-        return;
-
-      case 0:
-      default:
-        page.drawImage(
-          image,
-          {
-            x: drawX,
-            y: displayBottom,
-            width: drawWidth,
-            height: drawHeight
-          }
-        );
-    }
+    const center = this.displayToPdfPoint(boxX + boxWidth / 2, boxY + boxHeight / 2, displayWidth, displayHeight, rotation);
+    const angle = (rotation - orientation) * Math.PI / 180;
+    const crop = page.getCropBox();
+    page.drawImage(image, {
+      x: center.x + crop.x - Math.cos(angle)*drawWidth/2 + Math.sin(angle)*drawHeight/2,
+      y: center.y + crop.y - Math.sin(angle)*drawWidth/2 - Math.cos(angle)*drawHeight/2,
+      width: drawWidth, height: drawHeight, rotate: degrees(rotation - orientation) });
   }
+
 
   /** Map the detected PDF family to the closest exportable standard family. */
   private resolvePdfTextExportFamily(
@@ -1713,6 +1754,7 @@ export class StudioPdfExportService {
     cache: Map<string, PDFFont>,
     sourceFontBytes: Uint8Array | null = null,
     requiredText = '',
+    sourceFamily = '',
   ): Promise<PDFFont> {
     const sourceKey =
       sourceFontBytes && sourceFontBytes.byteLength > 0
@@ -1721,11 +1763,11 @@ export class StudioPdfExportService {
 
     const key =
       sourceKey ??
-      `${fontFamily}-${fontWeight}-${fontStyle}`;
+      `${sourceFamily || fontFamily}-${fontWeight}-${fontStyle}`;
 
     const cached = cache.get(key);
 
-    if (cached) {
+    if (cached && this.fontSupportsText(cached, requiredText)) {
       return cached;
     }
 
@@ -1760,6 +1802,19 @@ export class StudioPdfExportService {
       }
     }
 
+    if (/calibri/i.test(sourceFamily)) {
+      const variant=fontWeight>=700 ? (fontStyle==='italic'?'BoldItalic':'Bold') : (fontStyle==='italic'?'Italic':'Regular');
+      const fallbackKey=`Carlito-${variant}`;
+      let compatible=cache.get(fallbackKey);
+      if(!compatible) {
+        const response=await fetch(`/assets/fonts/${fallbackKey}.ttf`);
+        if(!response.ok)throw new Error('Unable to load the Calibri-compatible editing font. Retry when the font is available.');
+        compatible=await pdfDocument.embedFont(await response.arrayBuffer(),{subset:true});
+        cache.set(fallbackKey,compatible);
+      }
+      if(this.fontSupportsText(compatible,requiredText)){cache.set(key,compatible);return compatible;}
+    }
+
     let standardFont = StandardFonts.Helvetica;
     if (fontFamily === 'Times Roman') {
       standardFont = fontWeight >= 700 && fontStyle === 'italic' ? StandardFonts.TimesRomanBoldItalic
@@ -1783,8 +1838,21 @@ export class StudioPdfExportService {
         standardFont,
       );
 
+    if (!this.fontSupportsText(embedded, requiredText)) {
+      const fallbackKey = 'unicode-fallback';
+      let fallback = cache.get(fallbackKey);
+      if (!fallback) {
+        const response = await fetch('/assets/fonts/DejaVuSans.ttf');
+        if (!response.ok) throw new Error('Unable to load the replacement text font. Please retry.');
+        fallback = await pdfDocument.embedFont(await response.arrayBuffer(), { subset: true });
+        cache.set(fallbackKey, fallback);
+      }
+      if (!this.fontSupportsText(fallback, requiredText)) {
+        throw new Error('The replacement contains characters unavailable in the source and fallback fonts. Use a PDF with an embedded font supporting this text.');
+      }
+      return fallback;
+    }
     cache.set(key, embedded);
-
     return embedded;
   }
 
@@ -1800,6 +1868,7 @@ export class StudioPdfExportService {
       );
 
       for (const character of Array.from(text)) {
+        if (character === '\n' || character === '\r') continue;
         if (!supported.has(character.codePointAt(0) ?? -1)) {
           return false;
         }
@@ -1834,7 +1903,9 @@ export class StudioPdfExportService {
     sourceBytes: Uint8Array,
     objects: readonly StudioObject[],
     manifest: readonly StudioPage[],
+    sourceFile: File,
   ): Promise<Map<string, Uint8Array>> {
+    const result = new Map<string, Uint8Array>();
     const requests = new Map<
       string,
       { pageNumber: number; fontName: string }
@@ -1855,7 +1926,9 @@ export class StudioPdfExportService {
           manifest,
         );
 
-      if (!key || requests.has(key)) continue;
+      if (!key || requests.has(key) || result.has(key)) continue;
+      const retained = this.sourceAnalysis.getFontProgram(sourceFile, object.pdfText.fontName);
+      if (retained) { result.set(key, retained); continue; }
 
       const separator =
         key.indexOf(':');
@@ -1878,9 +1951,7 @@ export class StudioPdfExportService {
       }
     }
 
-    if (requests.size === 0) {
-      return new Map();
-    }
+    if (requests.size === 0) return result;
 
     const pdfjs =
       await import('pdfjs-dist');
@@ -1908,9 +1979,6 @@ export class StudioPdfExportService {
 
     const sourcePdfJs: PDFDocumentProxy =
       await loadingTask.promise;
-
-    const result =
-      new Map<string, Uint8Array>();
 
     try {
       for (const [
@@ -2030,7 +2098,7 @@ export class StudioPdfExportService {
       typeof transformScaleY === 'number' && Number.isFinite(transformScaleY) && transformScaleY > 0
         ? transformScaleX / transformScaleY
         : 1;
-    const calibration = source?.metricScaleX ?? 1;
+    const calibration = 1;
     return Math.max(0.25, Math.min(4, matrixScaleX * calibration));
   }
 
@@ -2041,11 +2109,20 @@ export class StudioPdfExportService {
       page.drawText(text, { x, y, size: fontSize, font, color, rotate });
       return;
     }
-    let cursor = x;
-    for (const glyph of Array.from(text)) {
-      page.drawText(glyph, { x: cursor, y, size: fontSize, font, color, rotate });
-      cursor += (font.widthOfTextAtSize(glyph, fontSize) + tracking * fontSize) * safeScaleX;
+    const angle = rotate.angle * Math.PI / 180;
+    page.pushOperators(pushGraphicsState(), concatTransformationMatrix(
+      Math.cos(angle) * safeScaleX, Math.sin(angle) * safeScaleX,
+      -Math.sin(angle), Math.cos(angle), x, y));
+    if (tracking === 0) {
+      page.drawText(text, { x: 0, y: 0, size: fontSize, font, color });
+    } else {
+      let cursor = 0;
+      for (const glyph of Array.from(text)) {
+        page.drawText(glyph, { x: cursor, y: 0, size: fontSize, font, color });
+        cursor += font.widthOfTextAtSize(glyph, fontSize) + tracking * fontSize;
+      }
     }
+    page.pushOperators(popGraphicsState());
   }
 
   private drawObject(
@@ -2159,59 +2236,8 @@ export class StudioPdfExportService {
     const uy = b / (Math.hypot(a, b) || 1);
     const vx = c / (Math.hypot(c, d) || 1);
     const vy = d / (Math.hypot(c, d) || 1);
-    const sourceLineHeight = Math.max(0.01, source.lineHeightPdf ?? lineHeight ?? fontSize);
+    const sourceLineHeight = Math.max(0.01, lineHeight || source.lineHeightPdf || fontSize);
 
-    const runs = source.sourceRuns;
-    if (runs && runs.length > 0 && lines.length === 1) {
-      const originalText = source.originalText;
-      const editedText = lines[0];
-      const change = this.resolveSingleTextChange(originalText, editedText);
-
-      if (!change) return;
-
-      /*
-       * The copied page still contains every untouched source glyph. Only the
-       * replacement string is painted here. Its start is derived from the
-       * original run baseline plus the exact width of the unchanged prefix.
-       */
-      const firstIndex = this.firstAffectedRunIndex(runs, change.originalStart);
-      const firstRun = runs[firstIndex];
-      if (!firstRun) return;
-
-      const localStart = Math.max(
-        0,
-        Math.min(firstRun.text.length, change.originalStart - firstRun.startIndex),
-      );
-      const prefix = firstRun.text.slice(0, localStart);
-      const prefixWidth = this.textWidthWithTracking(prefix, font, fontSize, tracking) * scaleX;
-      const runWidth = Math.max(0, firstRun.widthPdf);
-      const calibratedPrefixWidth = runWidth > 0
-        ? Math.min(prefixWidth, runWidth)
-        : prefixWidth;
-
-      const x = firstRun.baselineXPdf + ux * calibratedPrefixWidth;
-      const y = f + uy * (firstRun.baselineXPdf - e + calibratedPrefixWidth);
-
-      this.drawTrackedText(
-        page,
-        change.replacementText,
-        x,
-        y,
-        font,
-        fontSize,
-        tracking,
-        color,
-        degrees(sourceRotation),
-        scaleX,
-      );
-      return;
-    }
-
-    /*
-     * Fallback for multiline/legacy objects without run metadata. The caller
-     * has already covered the source box, so reconstruct the edited content
-     * from the authoritative source transform.
-     */
     const sourceWidth = Math.max(0, source.textWidthPdf ?? 0);
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index];
@@ -2228,142 +2254,12 @@ export class StudioPdfExportService {
         x += ux * offset;
         y += uy * offset;
       }
-      x += vx * sourceLineHeight * index;
-      y += vy * sourceLineHeight * index;
+      x -= vx * sourceLineHeight * index;
+      y -= vy * sourceLineHeight * index;
       this.drawTrackedText(
         page, line, x, y, font, fontSize, tracking, color, degrees(sourceRotation), scaleX,
       );
     }
-  }
-
-  private canUsePartialSourceTextReplacement(object: StudioObject): boolean {
-    const source = object.pdfText;
-    if (!source?.edited || !source.sourceRuns?.length) return false;
-    const change = this.resolveSingleTextChange(source.originalText, object.text ?? '');
-    return Boolean(change);
-  }
-
-  /**
-   * Cover only the old glyph interval affected by a single-line replacement.
-   * This deliberately does not cover the whole source text object.
-   */
-  private coverEditedPdfTextChange(
-    page: PDFPage,
-    object: StudioObject,
-    font: PDFFont,
-    fontSize: number,
-  ): void {
-    const source = object.pdfText;
-    const runs = source?.sourceRuns;
-    if (!source || !runs?.length) return;
-
-    const change = this.resolveSingleTextChange(source.originalText, object.text ?? '');
-    if (!change) return;
-
-    const firstIndex = this.firstAffectedRunIndex(runs, change.originalStart);
-    const lastIndex = this.lastAffectedRunIndex(runs, change.originalEnd);
-    const firstRun = runs[firstIndex];
-    const lastRun = runs[lastIndex];
-    if (!firstRun || !lastRun) return;
-
-    const [a, b, c, d] = source.transform;
-    const axisX = Math.hypot(a, b) || 1;
-    const axisY = Math.hypot(c, d) || 1;
-    const ux = a / axisX;
-    const uy = b / axisX;
-    const vx = c / axisY;
-    const vy = d / axisY;
-    const e = source.transform[4];
-    const f = source.transform[5];
-    const scaleX = this.resolveSourceScaleX(object);
-    const tracking = object.textStyle?.letterSpacing ?? 0;
-
-    const localStart = Math.max(
-      0,
-      Math.min(firstRun.text.length, change.originalStart - firstRun.startIndex),
-    );
-    const prefix = firstRun.text.slice(0, localStart);
-    const prefixWidth = this.textWidthWithTracking(prefix, font, fontSize, tracking) * scaleX;
-    const firstRunWidth = Math.max(0, firstRun.widthPdf);
-    const startOffset = Math.min(prefixWidth, firstRunWidth);
-
-    const localEnd = Math.max(
-      0,
-      Math.min(lastRun.text.length, change.originalEnd - lastRun.startIndex),
-    );
-    const suffix = lastRun.text.slice(localEnd);
-    const suffixWidth = this.textWidthWithTracking(suffix, font, fontSize, tracking) * scaleX;
-    const lastRunEnd = lastRun.baselineXPdf + Math.max(0, lastRun.widthPdf);
-    const endOffsetFromLastRunEnd = Math.min(suffixWidth, Math.max(0, lastRun.widthPdf));
-    const endPdf = Math.max(
-      firstRun.baselineXPdf + startOffset,
-      lastRunEnd - endOffsetFromLastRunEnd,
-    );
-    const startPdf = Math.min(
-      firstRun.baselineXPdf + startOffset,
-      endPdf,
-    );
-
-    const ascent = typeof source.ascentPdf === 'number' && Number.isFinite(source.ascentPdf)
-      ? Math.max(0, source.ascentPdf)
-      : fontSize * 0.9;
-    const descent = typeof source.descentPdf === 'number' && Number.isFinite(source.descentPdf)
-      ? Math.min(0, source.descentPdf)
-      : -fontSize * 0.2;
-
-    const startOffsetFromBaseline = startPdf - e;
-    const endOffsetFromBaseline = endPdf - e;
-    const corners = [
-      { x: e + ux * startOffsetFromBaseline - vx * ascent, y: f + uy * startOffsetFromBaseline - vy * ascent },
-      { x: e + ux * endOffsetFromBaseline - vx * ascent, y: f + uy * endOffsetFromBaseline - vy * ascent },
-      { x: e + ux * startOffsetFromBaseline - vx * descent, y: f + uy * startOffsetFromBaseline - vy * descent },
-      { x: e + ux * endOffsetFromBaseline - vx * descent, y: f + uy * endOffsetFromBaseline - vy * descent },
-    ];
-
-    const xs = corners.map(point => point.x);
-    const ys = corners.map(point => point.y);
-    page.drawRectangle({
-      x: Math.min(...xs),
-      y: Math.min(...ys),
-      width: Math.max(0.5, Math.max(...xs) - Math.min(...xs)),
-      height: Math.max(0.5, Math.max(...ys) - Math.min(...ys)),
-      color: this.hexToPdfRgb(source.backgroundColor ?? '#ffffff'),
-      borderWidth: 0,
-    });
-  }
-
-  private resolveSingleTextChange(
-    originalText: string,
-    editedText: string,
-  ): { originalStart: number; originalEnd: number; replacementText: string } | null {
-    if (originalText === editedText) return null;
-    let prefix = 0;
-    const maxPrefix = Math.min(originalText.length, editedText.length);
-    while (prefix < maxPrefix && originalText[prefix] === editedText[prefix]) prefix++;
-    let suffix = 0;
-    const maxSuffix = Math.min(originalText.length - prefix, editedText.length - prefix);
-    while (suffix < maxSuffix && originalText[originalText.length - 1 - suffix] === editedText[editedText.length - 1 - suffix]) suffix++;
-    return {
-      originalStart: prefix,
-      originalEnd: originalText.length - suffix,
-      replacementText: editedText.slice(prefix, editedText.length - suffix),
-    };
-  }
-
-  private firstAffectedRunIndex(
-    runs: readonly { startIndex: number; endIndex: number }[],
-    originalStart: number,
-  ): number {
-    const index = runs.findIndex(run => originalStart < run.endIndex);
-    return index >= 0 ? index : Math.max(0, runs.length - 1);
-  }
-
-  private lastAffectedRunIndex(
-    runs: readonly { startIndex: number; endIndex: number }[],
-    originalEnd: number,
-  ): number {
-    const index = runs.findIndex(run => originalEnd <= run.endIndex);
-    return index >= 0 ? index : Math.max(0, runs.length - 1);
   }
 
   /**
@@ -2472,16 +2368,21 @@ export class StudioPdfExportService {
       : object.pdfText?.lineHeight
         ? Math.max(0.9, (object.pdfText.lineHeight * displayHeight) / Math.max(requestedSize, 0.1))
         : (style?.lineHeight ?? 1.2);
-    const mode = object.pdfText?.fitMode ?? 'original';
+    const mode = object.pdfText?.fitMode ?? 'auto';
     const fits = (size: number) => {
-      const lines = this.wrapText(object.text ?? '', font, size, boxWidth, tracking);
+      const lines = this.wrapText(object.text ?? '', font, size, boxWidth / this.resolveSourceScaleX(object), tracking);
       const lineHeight = size * sourceLineHeight;
       return { lines, lineHeight, fits: lines.length * lineHeight <= boxHeight + size * 0.15 };
     };
-    if (mode !== 'auto') {
-      const current = fits(requestedSize);
-      return { fontSize: requestedSize, lineHeight: current.lineHeight, lines: current.lines };
+    if (mode === 'flow') {
+      const full=fits(requestedSize);
+      return {fontSize:requestedSize,lineHeight:full.lineHeight,lines:full.lines};
     }
+    if (mode !== 'auto') {
+      return { fontSize: requestedSize, lineHeight: requestedSize * sourceLineHeight, lines: (object.text ?? '').split(/\r?\n/) };
+    }
+    const fullSize = fits(requestedSize);
+    if (fullSize.fits) return { fontSize: requestedSize, lineHeight: fullSize.lineHeight, lines: fullSize.lines };
     let low = Math.max(3, requestedSize * 0.35);
     let high = requestedSize;
     let best = low;
@@ -2490,6 +2391,7 @@ export class StudioPdfExportService {
       if (fits(mid).fits) { best = mid; low = mid; } else high = mid;
     }
     const current = fits(best);
+    if (!current.fits) throw new Error('This replacement is too long for the original text area. Shorten it or choose Keep original size and review the layout.');
     return { fontSize: best, lineHeight: current.lineHeight, lines: current.lines };
   }
 

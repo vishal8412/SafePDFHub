@@ -686,7 +686,7 @@ export class StudioRightSidebar {
     }
   }
 
-  updatePdfTextFidelity(patch: { coverPadding?: number; fitMode?: 'original' | 'auto' }): void {
+  updatePdfTextFidelity(patch: { coverPadding?: number; fitMode?: 'original' | 'auto' | 'flow' }): void {
     const object = this.selectedObject();
     if (object?.type === 'text' && object.pdfText) {
       this.facade.updatePdfTextAppearance(object.id, patch);

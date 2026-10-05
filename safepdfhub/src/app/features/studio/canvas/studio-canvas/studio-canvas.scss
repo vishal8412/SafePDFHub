@@ -1776,3 +1776,19 @@
   pointer-events: none;
   user-select: none;
 }
+
+/* Committed source edits use the exact PDF export renderer. Keep hit targets
+   and the active textarea above it, but suppress approximate HTML paint. */
+.studio-committed-preview { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.studio-editor-object--rendered-source > .studio-pdf-edited-source-layer,
+.studio-editor-object--rendered-source > .studio-pdf-image-replacement-cover,
+.studio-editor-object--rendered-source > .studio-editor-object__image { visibility: hidden; }
+.studio-preview-error { position: absolute; top: 0; left: 0; right: 0; z-index: 10; padding: 8px; color: #842020; background: #fff0ef; }
+
+@font-face {font-family:StudioCarlito;src:url('/assets/fonts/Carlito-Regular.ttf') format('truetype');font-weight:400;font-style:normal;font-display:swap;}
+@font-face {font-family:StudioCarlito;src:url('/assets/fonts/Carlito-Bold.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap;}
+@font-face {font-family:StudioCarlito;src:url('/assets/fonts/Carlito-Italic.ttf') format('truetype');font-weight:400;font-style:italic;font-display:swap;}
+@font-face {font-family:StudioCarlito;src:url('/assets/fonts/Carlito-BoldItalic.ttf') format('truetype');font-weight:700;font-style:italic;font-display:swap;}
+@font-face {font-family:StudioFallback;src:url('/assets/fonts/DejaVuSans.ttf') format('truetype');font-display:swap;}
+
+.studio-preview-status {position:absolute;right:8px;top:8px;z-index:12;padding:4px 8px;border-radius:4px;background:#e8f9f7;color:#145a54;font-size:12px;pointer-events:none;}
