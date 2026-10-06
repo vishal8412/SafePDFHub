@@ -390,6 +390,7 @@
                   <span>Aspect ratio {{ (selectedObject()?.image?.aspectRatio ?? 0).toFixed(2) }}</span>
                 }
               </div>
+              @if (imageImportError()) { <p role="alert">{{ imageImportError() }}</p> }
               <input #imageReplacementInput class="properties__visually-hidden" type="file" accept="image/png,image/jpeg" (change)="onImageReplacementSelected($event)">
               <button type="button" class="properties__secondary-button properties__full-width-button" (click)="imageReplacementInput.click()">Replace image</button>
               @if (selectedObject()?.pdfImage) {
@@ -406,7 +407,7 @@
                   <button type="button" class="properties__secondary-button properties__full-width-button" (click)="restoreOriginalPdfImage()">Restore original PDF image</button>
                 }
               }
-              <p class="properties__field-help">PNG or JPEG · up to 25 MB</p>
+              <p class="properties__field-help">PNG or JPEG · up to 20 MB · 40 megapixels</p>
             </div>
           }
 

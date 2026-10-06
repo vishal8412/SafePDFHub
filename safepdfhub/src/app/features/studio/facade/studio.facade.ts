@@ -3862,10 +3862,8 @@ updatePdfImageBackground(
 restoreOriginalPdfImage(objectId: string): StudioSelection | null {
   if (!this.hasDocument()) return null;
   const before = this.captureHistorySnapshot();
-  const object = this.objectService.updatePdfImage(objectId, { replaced: false });
+  const object = this.objectService.clearImageData(objectId);
   if (!object) return null;
-  // Remove replacement artwork while keeping the selectable source mapping.
-  this.objectService.clearImageData(objectId);
   const selection: StudioSelection = { objectId, pageNumber: object.pageNumber, bounds: object.bounds, type: object.type };
   this.state.setSelection(selection);
   this.commitHistoryMutation('Restore original PDF image', before);
@@ -3874,7 +3872,8 @@ restoreOriginalPdfImage(objectId: string): StudioSelection | null {
 
 replaceImageData(
   objectId: string,
-  image: StudioImageData
+  image: StudioImageData,
+  backgroundPatch?: Parameters<StudioObjectService['updatePdfImage']>[1]
 ): StudioSelection | null {
 
   if (!this.hasDocument()) {
@@ -3893,6 +3892,8 @@ replaceImageData(
   if (!object) {
     return null;
   }
+
+  if (backgroundPatch && object.pdfImage) this.objectService.updatePdfImage(objectId, backgroundPatch);
 
   const selection: StudioSelection = {
     objectId: object.id,

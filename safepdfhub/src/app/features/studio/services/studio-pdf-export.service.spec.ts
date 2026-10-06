@@ -1,3 +1,6 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs';
+import fontkit from '@pdf-lib/fontkit';
 import { TestBed } from '@angular/core/testing';
 import { PLATFORM_ID } from '@angular/core';
 import { vi } from 'vitest';
@@ -96,5 +99,40 @@ describe('Studio PDF export regressions', () => {
     expect(result.getPageCount()).toBe(1);
     expect(result.getPage(0).getWidth()).toBe(400);
     expect(result.getPage(0).getRotation().angle).toBe(90);
+  });
+});
+
+describe('PDF replacement layout edge cases', () => {
+  let service:any;
+  beforeEach(()=>{
+    TestBed.configureTestingModule({providers:[{provide:PLATFORM_ID,useValue:'browser'},{provide:QpdfWasmPrototypeService,useValue:{}},{provide:SigningPdfTextService,useValue:{}}]});
+    service=TestBed.inject(StudioPdfExportService);
+  });
+  const font={widthOfTextAtSize:(text:string,size:number)=>Array.from(text).length*size/2};
+  it('wraps a long token after an existing word instead of letting it overflow',()=>{
+    const lines=service.wrapText('Hi abcdefghijklmnopqrstuvwxyz',font,10,40);
+    expect(lines.join('')).toBe('Hiabcdefghijklmnopqrstuvwxyz');
+    expect(lines.every((line:string)=>font.widthOfTextAtSize(line,10)<=40)).toBe(true);
+  });
+  it('does not shrink a single line because another line has a distant baseline',()=>{
+    const fit=service.resolveTextFit({text:'Hello',pdfText:{fitMode:'auto',lineHeightPdf:20}},font,10,100,10,800);
+    expect(fit.fontSize).toBe(10);
+  });
+  it('falls back before a stripped embedded font can poison deferred PDF saving', async()=>{
+    const bytes=new Uint8Array(readFileSync('src/assets/fonts/Carlito-Regular.ttf'));
+    const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+    // Simulate a valid PDF subset missing the optional TrueType post table.
+    for(let n=0;n<view.getUint16(4);n++) {
+      const offset=12+n*16;
+      if(String.fromCharCode(...bytes.slice(offset,offset+4))==='post') bytes.set([120,120,120,120],offset);
+    }
+    const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit);
+    const selected=await service.getFont(pdf,400,'normal','Helvetica',new Map(),bytes,'Visible replacement','Satoshi');
+    pdf.addPage().drawText('Visible replacement',{font:selected});
+    await expect(pdf.save()).resolves.toBeInstanceOf(Uint8Array);
+    expect(selected.name).toBe('Helvetica');
+  });
+  it('fails closed when a font cannot report coverage',()=>{
+    expect(service.fontSupportsText({getCharacterSet:()=>{throw new Error('invalid cmap')}},'Hello')).toBe(false);
   });
 });

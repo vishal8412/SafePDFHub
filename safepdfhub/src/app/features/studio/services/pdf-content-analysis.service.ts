@@ -1,4 +1,5 @@
 import { Injectable, signal } from '@angular/core';
+import { collectPageFontPrograms, normalizePdfFontName, type PdfFontMetrics } from './pdf-source-fonts';
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
 
 import type { StudioPdfDocument } from '../models/pdf-document.model';
@@ -19,30 +20,24 @@ export class PdfContentAnalysisService {
   /** Browser font faces registered from PDF.js source font programs. */
   private readonly sourceFontFaces = new Map<string, Promise<string | null>>();
 
+  private readonly registeredFontFaces = new Set<FontFace>();
   private sourceFile: File | null = null;
-  private nativeFonts: Promise<Map<string,Uint8Array>> | null = null;
-  private originalFonts(file: File, pageNumber: number): Promise<Map<string,Uint8Array>> {
-    if(this.nativeFonts)return this.nativeFonts;
-    return this.nativeFonts=(async()=>{
-      const result=new Map<string,Uint8Array>();
-      try {
-        const {PDFDocument,PDFName,PDFDict,PDFArray,PDFRawStream,decodePDFRawStream}=await import('pdf-lib');
-        const pdf=await PDFDocument.load(await file.arrayBuffer(),{updateMetadata:false});
-        const fonts=pdf.getPage(pageNumber-1).node.Resources()?.lookup(PDFName.of('Font'),PDFDict);
-        for(const [,ref] of fonts?.entries()??[]) {
-          const f=pdf.context.lookup(ref,PDFDict);
-          const name=String(f.get(PDFName.of('BaseFont'))??'').replace(/^\//,'').replace(/^[A-Z]{6}\+/,'');
-          const children=f.lookupMaybe(PDFName.of('DescendantFonts'),PDFArray);
-          const base=children?children.lookup(0,PDFDict):f;
-          const descriptor=base.lookupMaybe(PDFName.of('FontDescriptor'),PDFDict);
-          for(const key of ['FontFile2','FontFile3']) {
-            const stream=pdf.context.lookup(descriptor?.get(PDFName.of(key)));
-            if(stream instanceof PDFRawStream) {result.set(name,decodePDFRawStream(stream).decode());break;}
-          }
-        }
-      } catch { /* Font substitution is handled explicitly during export. */ }
-      return result;
-    })();
+  private nativePdf: Promise<import('pdf-lib').PDFDocument> | null = null;
+  private readonly nativeFontMetrics = new Map<number, Map<string, PdfFontMetrics>>();
+  private readonly nativeFonts = new Map<number, Promise<Map<string, Uint8Array>>>();
+  private originalFonts(file: File, pageNumber: number): Promise<Map<string, Uint8Array>> {
+    const cached = this.nativeFonts.get(pageNumber);
+    if (cached) return cached;
+    const pdf = this.nativePdf ??= import('pdf-lib').then(async ({ PDFDocument }) =>
+      PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false }));
+    const task = pdf.then(document => {
+      const metrics = new Map<string, PdfFontMetrics>();
+      const programs = collectPageFontPrograms(document, pageNumber - 1, metrics);
+      if (this.sourceFile === file) this.nativeFontMetrics.set(pageNumber, metrics);
+      return programs;
+    }).catch(() => new Map<string, Uint8Array>());
+    this.nativeFonts.set(pageNumber, task);
+    return task;
   }
   private readonly fontPrograms = new Map<string, Uint8Array>();
 
@@ -53,21 +48,25 @@ export class PdfContentAnalysisService {
   readonly analysis = this.analysisState.asReadonly();
 
   reset(): void {
+    if (typeof document !== 'undefined') {
+      for (const face of this.registeredFontFaces) document.fonts.delete(face);
+    }
+    this.registeredFontFaces.clear();
     this.activeDocumentId = null;
     this.sourceFile = null;
     this.fontPrograms.clear();
-    this.nativeFonts = null;
+    this.nativeFonts.clear();
+    this.nativeFontMetrics.clear();
+    this.nativePdf = null;
     this.inFlight.clear();
     this.sourceFontFaces.clear();
     this.analysisState.set(null);
   }
 
   begin(document: StudioPdfDocument): void {
+    this.reset();
     this.activeDocumentId = document.id;
     this.sourceFile = document.file;
-    this.fontPrograms.clear();
-    this.nativeFonts = null;
-    this.inFlight.clear();
     this.analysisState.set({
       documentId: document.id,
       pageCount: document.pageCount,
@@ -117,7 +116,8 @@ export class PdfContentAnalysisService {
         page.getOperatorList(),
         import('pdfjs-dist')
       ]);
-      const sourceTextColors = this.extractTextFillColors(operatorList, pdfjs);
+      const sourceTextColors = this.extractTextFillColors(operatorList, pdfjs,
+        textContent.items.filter((item): item is typeof item & { str: string } => 'str' in item).map(item => item.str).filter(text => text.trim()));
 
       /*
        * Materialize the page operator list before resolving commonObjs fonts.
@@ -236,14 +236,16 @@ export class PdfContentAnalysisService {
        * face that PDF.js uses for the original PDF canvas, rather than guessing
        * from TextStyle.fontFamily.
        */
+      if (this.activeDocumentId !== document.id) return null;
       const originals = await this.originalFonts(document.file,pageNumber);
       const enrichedTextBlocks = await Promise.all(textBlocks.map(async block => {
         const loadedFont =
           this.resolveLoadedFont(page, block.fontName);
 
-        const family=loadedFont?.familyName ?? '';
-        const variant=(loadedFont?.weight??400)>=600 ? '-Bold' : '';
-        const original = originals.get(family+variant) ?? originals.get(family);
+        const original = loadedFont?.originalName
+          ? originals.get(normalizePdfFontName(loadedFont.originalName)) : undefined;
+        // PDF.js's converted cmap can use private glyph codes. Only original
+        // Unicode-mapped programs are suitable for typing ordinary text.
         if (loadedFont && original) loadedFont.data = original;
         if (loadedFont?.data && this.activeDocumentId === document.id) {
           this.fontPrograms.set(block.fontName, loadedFont.data);
@@ -261,8 +263,21 @@ export class PdfContentAnalysisService {
             )
           : null;
 
+        const metrics = loadedFont?.originalName
+          ? this.nativeFontMetrics.get(pageNumber)?.get(normalizePdfFontName(loadedFont.originalName)) : undefined;
+        const ascent = metrics?.ascent ?? block.ascent ?? .8;
+        const descent = metrics?.descent ?? block.descent ?? -.2;
+        const ascentPdf = ascent * block.fontSizePdf;
+        const descentPdf = descent * block.fontSizePdf;
+        const [, , c, d, e, f] = block.transform;
+        const [topX, topY] = viewport.convertToViewportPoint(e + c / block.fontSizePdf * ascentPdf, f + d / block.fontSizePdf * ascentPdf);
+        const textHeightPdf = Math.max(block.textHeightPdf, ascentPdf - descentPdf);
         return {
           ...block,
+          ascent, descent, ascentPdf, descentPdf,
+          x: topX / viewport.width, y: topY / viewport.height,
+          textHeightPdf, height: textHeightPdf / viewport.height,
+          sourceFontName: loadedFont?.originalName ?? null,
           sourceFontFamily:
             loadedFont?.familyName ?? block.sourceFontFamily ?? block.fontFamily ?? null,
           sourceFontCssFamily:
@@ -354,36 +369,23 @@ export class PdfContentAnalysisService {
       return [...blocks];
     }
 
-    const sorted = [...blocks].sort((left, right) => {
-      if (left.pageNumber !== right.pageNumber) {
-        return left.pageNumber - right.pageNumber;
-      }
-
-      const baselineDelta =
-        right.baselineYPdf - left.baselineYPdf;
-
-      if (Math.abs(baselineDelta) > 0.01) {
-        return baselineDelta;
-      }
-
-      return left.baselineXPdf - right.baselineXPdf;
-    });
-
+    // First form baseline rows, then sort within each row. Sorting by exact Y
+    // first reverses fragments with tiny producer rounding differences.
+    const rows: PdfExistingTextBlock[][] = [];
+    for (const block of [...blocks].sort((a, b) => b.baselineYPdf - a.baselineYPdf)) {
+      const row = rows.find(row => row[0].pageNumber === block.pageNumber
+        && Math.abs(row[0].rotation - block.rotation) < .5
+        && Math.abs(row[0].baselineYPdf - block.baselineYPdf) <= Math.max(.5, Math.min(row[0].fontSizePdf, block.fontSizePdf) * .15));
+      if (row) row.push(block); else rows.push([block]);
+    }
     const groups: PdfExistingTextBlock[][] = [];
-
-    for (const block of sorted) {
-      const previous =
-        groups.length > 0
-          ? groups[groups.length - 1][groups[groups.length - 1].length - 1]
-          : null;
-
-      if (
-        previous &&
-        this.canJoinTextBlocksIntoLine(previous, block)
-      ) {
-        groups[groups.length - 1].push(block);
-      } else {
-        groups.push([block]);
+    for (const row of rows) {
+      row.sort((a, b) => a.baselineXPdf - b.baselineXPdf);
+      let group: PdfExistingTextBlock[] = [];
+      for (const block of row) {
+        if (group.length && !this.canJoinTextBlocksIntoLine(group[group.length - 1], block)) group = [];
+        if (!group.length) groups.push(group);
+        group.push(block);
       }
     }
 
@@ -433,7 +435,8 @@ export class PdfContentAnalysisService {
         const gapPdf = prior
           ? item.baselineXPdf - (prior.baselineXPdf + prior.textWidthPdf)
           : 0;
-        const separator = prior && gapPdf > 0.5 ? ' ' : '';
+        const separator = prior && gapPdf > Math.max(.5, item.fontSizePdf * .08)
+          && !/\s$/.test(text) && !/^\s/.test(item.text) ? ' ' : '';
         text += separator;
         const startIndex = text.length;
         text += item.text;
@@ -475,28 +478,54 @@ export class PdfContentAnalysisService {
 
   private groupLinesIntoParagraphs(lines: readonly PdfExistingTextBlock[]): PdfExistingTextBlock[] {
     const groups: PdfExistingTextBlock[][] = [];
+    const isListStart = (text: string) => /^\s*(?:[•●▪◦]|[-–]\s|\d+[.)]\s)/u.test(text);
     for (const line of lines) {
-      const group = groups[groups.length - 1];
-      const last = group?.[group.length - 1];
-      const gap = last ? last.baselineYPdf - line.baselineYPdf : 0;
-      const compatible = last && Math.abs(line.rotation) < .1 && Math.abs(last.rotation) < .1
-        && line.fontName === last.fontName && line.fontWeight === last.fontWeight
-        && line.textColor === last.textColor && Math.abs(line.fontSizePdf-last.fontSizePdf)<.1
-        && Math.abs(line.baselineXPdf-last.baselineXPdf)<line.fontSizePdf*.6
-        && gap > line.fontSizePdf*.8 && gap < line.fontSizePdf*1.65;
-      if (compatible) group.push(line); else groups.push([line]);
+      // A row in the other column must not interrupt this paragraph.
+      const candidates = groups.filter(group => {
+        const first = group[0], last = group[group.length - 1];
+        const size = line.fontSizePdf;
+        const gap = last.baselineYPdf - line.baselineYPdf;
+        if (line.pageNumber !== last.pageNumber || Math.abs(line.rotation) >= .1 || Math.abs(last.rotation) >= .1
+          || !this.sameSourceFace(line, last) || line.fontWeight !== last.fontWeight || line.fontStyle !== last.fontStyle
+          || line.textColor !== last.textColor || Math.abs(size - last.fontSizePdf) > Math.max(.1, size * .02)
+          || gap < size * .8 || gap > size * 1.7 || isListStart(line.text)) return false;
+        const indent = Math.abs(line.baselineXPdf - first.baselineXPdf);
+        if (indent > size * (group.length === 1 ? 2 : .65)) return false;
+        const overlap = Math.min(last.x + last.width, line.x + line.width) - Math.max(last.x, line.x);
+        if (overlap <= 0) return false;
+        // Do not cross a heading or a different-style run in this column.
+        return !lines.some(other => other !== last && other !== line
+          && other.baselineYPdf < last.baselineYPdf - .5 && other.baselineYPdf > line.baselineYPdf + .5
+          && Math.min(other.x + other.width, line.x + line.width) > Math.max(other.x, line.x));
+      }).sort((a, b) => (a[a.length - 1].baselineYPdf - line.baselineYPdf) - (b[b.length - 1].baselineYPdf - line.baselineYPdf));
+      if (candidates.length) candidates[0].push(line); else groups.push([line]);
     }
     return groups.map(group => {
-      const first=group[0], last=group[group.length-1];
-      const lineHeight=group.length>1 ? (first.baselineYPdf-last.baselineYPdf)/(group.length-1) : first.lineHeightPdf;
-      const height=first.baselineYPdf-last.baselineYPdf+first.textHeightPdf;
-      return {...first, text:group.map(line=>line.text.trim()).join(' '),
-        height:height/first.pageHeightPdf, textHeightPdf:height,
-        width:Math.max(...group.map(line=>line.width)),
-        textWidthPdf:Math.max(...group.map(line=>line.textWidthPdf)),
-        lineHeightPdf:lineHeight, lineHeight:lineHeight/first.pageHeightPdf,
-        sourceLines:group.map(line=>({transform:line.transform,width:line.textWidthPdf,height:line.textHeightPdf}))};
+      const first = group[0], last = group[group.length - 1];
+      const lineHeight = group.length > 1 ? (first.baselineYPdf - last.baselineYPdf) / (group.length - 1) : first.lineHeightPdf;
+      const x = Math.min(...group.map(line => line.x));
+      const right = Math.max(...group.map(line => line.x + line.width));
+      const y = Math.min(...group.map(line => line.y));
+      const bottom = Math.max(...group.map(line => line.y + line.height));
+      const leftPdf = Math.min(...group.map(line => line.baselineXPdf));
+      return { ...first,
+        text: group.length === 1 ? first.text : group.map(line => line.text.trim()).join(' '),
+        x, y, width: right - x, height: bottom - y,
+        textWidthPdf: (right - x) * first.pageWidthPdf,
+        textHeightPdf: (bottom - y) * first.pageHeightPdf,
+        baselineXPdf: leftPdf,
+        transform: [first.transform[0], first.transform[1], first.transform[2], first.transform[3], leftPdf, first.transform[5]] as PdfTextTransform,
+        lineHeightPdf: lineHeight, lineHeight: lineHeight / first.pageHeightPdf,
+        sourceRuns: group.length === 1 ? first.sourceRuns : undefined,
+        sourceLines: group.map(line => ({ transform: line.transform, width: line.textWidthPdf, height: line.textHeightPdf }))
+      };
     });
+  }
+
+  private sameSourceFace(left: PdfExistingTextBlock, right: PdfExistingTextBlock): boolean {
+    return left.sourceFontName && right.sourceFontName
+      ? normalizePdfFontName(left.sourceFontName) === normalizePdfFontName(right.sourceFontName)
+      : left.fontName === right.fontName;
   }
 
   private canJoinTextBlocksIntoLine(
@@ -506,6 +535,8 @@ export class PdfContentAnalysisService {
     if (left.pageNumber !== right.pageNumber) {
       return false;
     }
+
+    if (Math.abs(left.fontSizePdf - right.fontSizePdf) > Math.max(.1, Math.min(left.fontSizePdf, right.fontSizePdf) * .02)) return false;
 
     const leftRotation =
       Math.abs(left.rotation ?? 0);
@@ -538,10 +569,7 @@ export class PdfContentAnalysisService {
     }
 
     if (
-      left.sourceFontCssFamily !==
-      right.sourceFontCssFamily ||
-      left.sourceFontFamily !==
-      right.sourceFontFamily ||
+      !this.sameSourceFace(left, right) ||
       left.fontWeight !==
       right.fontWeight ||
       left.fontStyle !==
@@ -568,11 +596,11 @@ export class PdfContentAnalysisService {
      */
     const maxGapPdf =
       Math.max(
-        18,
+        4,
         Math.max(
           left.fontSizePdf,
           right.fontSizePdf
-        ) * 3
+        ) * 1.2
       );
 
     if (gapPdf < -1 || gapPdf > maxGapPdf) {
@@ -694,13 +722,14 @@ export class PdfContentAnalysisService {
    * PDF colour such as 0 g (black) into an unrelated median such as #101820.
    * The PDF operator list is the authoritative source for text colour.
    *
-   * The returned array follows the text-show operator order, which matches the
-   * order of PDF.js text items for normal PDF text streams. If a producer uses
-   * an unsupported colour operator, the previous colour is retained.
+   * Match the Unicode glyph stream to extracted text, since PDF.js may split
+   * one show operator into multiple text items or combine multiple operators.
+   * Unknown color operators retain the active graphics-state color.
    */
   private extractTextFillColors(
     operatorList: { fnArray: readonly number[]; argsArray: readonly unknown[] },
-    pdfjs: typeof import('pdfjs-dist')
+    pdfjs: typeof import('pdfjs-dist'),
+    textItems: readonly string[] = [],
   ): string[] {
     const ops = pdfjs.OPS as unknown as Record<string, number>;
     const showOps = new Set(
@@ -721,6 +750,9 @@ export class PdfContentAnalysisService {
     let current = '#000000';
     const savedColors: string[] = [];
     const colors: string[] = [];
+    const glyphColors: string[] = [];
+    let glyphText = '';
+    const normalize = (value: string) => value.normalize('NFKC').replace(/\s/g, '');
 
     const clamp01 = (value: number): number =>
       Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
@@ -776,10 +808,29 @@ export class PdfContentAnalysisService {
 
       if (showOps.has(fn)) {
         colors.push(current);
+        const glyphs = Array.isArray(args) && Array.isArray(args[0]) ? args[0] : [];
+        for (const glyph of glyphs) {
+          if (!glyph || typeof glyph !== 'object' || typeof glyph.unicode !== 'string') continue;
+          const text = normalize(glyph.unicode);
+          glyphText += text;
+          for (let n = 0; n < text.length; n++) glyphColors.push(current);
+        }
       }
     }
 
-    return colors;
+    if (!glyphText || !textItems.length) return colors;
+    let cursor = 0;
+    return textItems.map(text => {
+      const normalized = normalize(text);
+      const index = glyphText.indexOf(normalized, cursor);
+      // Extraction and painting have different chunk boundaries. Never reuse
+      // a different operator's colour just because its array index matches.
+      if (index < 0) return '#000000';
+      cursor = index + normalized.length;
+      const counts = new Map<string, number>();
+      for (const color of glyphColors.slice(index, cursor)) counts.set(color, (counts.get(color) ?? 0) + 1);
+      return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '#000000';
+    });
   }
 
   /**
@@ -801,6 +852,22 @@ export class PdfContentAnalysisService {
       const stack: Matrix[] = [];
       const multiply = (m: Matrix, n: Matrix): Matrix => [m[0]*n[0]+m[2]*n[1], m[1]*n[0]+m[3]*n[1], m[0]*n[2]+m[2]*n[3], m[1]*n[2]+m[3]*n[3], m[0]*n[4]+m[2]*n[5]+m[4], m[1]*n[4]+m[3]*n[5]+m[5]];
       const blocks: PdfExistingImageBlock[] = [];
+      const emit = (ctm: Matrix, sourceName: string | null): void => {
+        const sx = Math.hypot(ctm[0], ctm[1]);
+        const sy = Math.hypot(ctm[2], ctm[3]);
+        if (!(sx > 0 && sy > 0)) return;
+        const corners = [[0,0],[1,0],[0,1],[1,1]].map(([x,y]) =>
+          viewport.convertToViewportPoint(ctm[0]*x+ctm[2]*y+ctm[4], ctm[1]*x+ctm[3]*y+ctm[5]));
+        const left = Math.max(0, Math.min(...corners.map(p => p[0])));
+        const top = Math.max(0, Math.min(...corners.map(p => p[1])));
+        const right = Math.min(pageWidth, Math.max(...corners.map(p => p[0])));
+        const bottom = Math.min(pageHeight, Math.max(...corners.map(p => p[1])));
+        if (right <= left || bottom <= top) return;
+        blocks.push({ id: `pdf-image-${page.pageNumber}-${blocks.length}`, pageNumber: page.pageNumber,
+          x: left/pageWidth, y: top/pageHeight, width: (right-left)/pageWidth, height: (bottom-top)/pageHeight,
+          sourceName,
+          rotation: Math.atan2(ctm[1], ctm[0])*180/Math.PI, confidence: 'medium' });
+      };
       for (let i = 0; i < operatorList.fnArray.length; i++) {
         const fn = operatorList.fnArray[i];
         const args = operatorList.argsArray[i] as unknown[] | undefined;
@@ -814,21 +881,21 @@ export class PdfContentAnalysisService {
         if (fn === saveOp) { stack.push([...ctm] as Matrix); continue; }
         if (fn === restoreOp) { ctm = stack.pop() ?? ctm; continue; }
         if (fn === transformOp && args && args.length >= 6) { ctm = multiply(ctm, [Number(args[0]), Number(args[1]), Number(args[2]), Number(args[3]), Number(args[4]), Number(args[5])]); continue; }
+        if (fn === ops['paintImageXObjectRepeat'] && args) {
+          const positions = args[3] as ArrayLike<number>;
+          for (let n = 0; n + 1 < (positions?.length ?? 0); n += 2) {
+            emit(multiply(ctm, [Number(args[1]), 0, 0, Number(args[2]), positions[n], positions[n + 1]]), typeof args[0] === 'string' ? args[0] : null);
+          }
+          continue;
+        }
+        if (fn === ops['paintInlineImageXObjectGroup'] && Array.isArray(args?.[1])) {
+          for (const entry of args[1]) {
+            if (entry?.transform?.length === 6) emit(multiply(ctm, Array.from(entry.transform) as Matrix), null);
+          }
+          continue;
+        }
         if (!paintOps.has(fn)) continue;
-        const sx = Math.hypot(ctm[0], ctm[1]);
-        const sy = Math.hypot(ctm[2], ctm[3]);
-        if (!(sx > 0 && sy > 0)) continue;
-        const corners = [[0,0],[1,0],[0,1],[1,1]].map(([x,y]) =>
-          viewport.convertToViewportPoint(ctm[0]*x+ctm[2]*y+ctm[4], ctm[1]*x+ctm[3]*y+ctm[5]));
-        const left = Math.max(0, Math.min(...corners.map(p => p[0])));
-        const top = Math.max(0, Math.min(...corners.map(p => p[1])));
-        const right = Math.min(pageWidth, Math.max(...corners.map(p => p[0])));
-        const bottom = Math.min(pageHeight, Math.max(...corners.map(p => p[1])));
-        if (right <= left || bottom <= top) continue;
-        blocks.push({ id: `pdf-image-${page.pageNumber}-${blocks.length}`, pageNumber: page.pageNumber,
-          x: left/pageWidth, y: top/pageHeight, width: (right-left)/pageWidth, height: (bottom-top)/pageHeight,
-          sourceName: typeof args?.[0] === 'string' ? args[0] : null,
-          rotation: Math.atan2(ctm[1], ctm[0])*180/Math.PI, confidence: 'medium' });
+        emit(ctm, typeof args?.[0] === 'string' ? args[0] : null);
       }
       return blocks;
     } catch { return []; }
@@ -847,6 +914,7 @@ export class PdfContentAnalysisService {
     fontName: string
   ): {
     loadedName: string | null;
+    originalName: string | null;
     familyName: string | null;
     weight: 400 | 700 | 900;
     italic: boolean;
@@ -896,6 +964,7 @@ export class PdfContentAnalysisService {
 
       return {
         loadedName: loadedName || null,
+        originalName: typeof font.name === 'string' ? font.name : null,
         familyName,
         weight,
         italic:
@@ -982,7 +1051,9 @@ export class PdfContentAnalysisService {
           // keystroke from changing the measured/replaced glyphs.
           await face.load();
           const fontSet = document.fonts as FontFaceSet & { add: (font: FontFace) => FontFaceSet };
+          if (this.activeDocumentId !== documentId) return null;
           fontSet.add(face);
+          this.registeredFontFaces.add(face);
           await document.fonts.ready;
 
           if (document.fonts.check(`${italic ? 'italic ' : ''}${weight} 12px \"${family}\"`)) {

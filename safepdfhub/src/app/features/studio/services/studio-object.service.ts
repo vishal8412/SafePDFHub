@@ -177,7 +177,8 @@ export class StudioObjectService {
             rotation: block.rotation,
             displayRotation: block.displayRotation,
             lineHeight: block.lineHeight,
-            sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
+            sourceFontName: block.sourceFontName,
+        sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
             sourceFontCssFamily: block.sourceFontCssFamily,
             sourceFontWeight: block.fontWeight as StudioTextFontWeight,
             sourceFontStyle: block.fontStyle,
@@ -237,6 +238,7 @@ export class StudioObjectService {
         rotation: block.rotation,
             displayRotation: block.displayRotation,
         lineHeight: block.lineHeight,
+        sourceFontName: block.sourceFontName,
         sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
         sourceFontCssFamily: block.sourceFontCssFamily,
         sourceFontWeight: block.fontWeight as StudioTextFontWeight,
@@ -260,8 +262,8 @@ export class StudioObjectService {
         // Source-PDF covers never use horizontal padding. The legacy field is
         // retained for backwards compatibility but is normalized to zero.
         coverPadding: 0,
-        // Source PDF typography must never silently shrink when text is edited.
-        fitMode: 'flow',
+        // Default to bounded replacement; paragraph expansion is an explicit choice.
+        fitMode: 'auto',
         metricScaleX: 1,
         typographyLocked: true,
         backgroundColor: '#ffffff'

@@ -1,3 +1,4 @@
+import { collectPageFontPrograms, normalizePdfFontName } from './pdf-source-fonts';
 import { visibleStudioSources } from './studio-source-visibility';
 import { composeStudioPage, type SourceRegion, type PageFlow } from './studio-page-composition';
 import {
@@ -214,27 +215,22 @@ export class StudioPdfExportService {
         sourceFile,
       );
 
+    const nativeFonts = new Map<number, Map<string, Uint8Array>>();
     for (const object of editableObjects) {
       if (!object.pdfText) continue;
       const key = this.getSourceFontKey(object, manifest);
-      const originalPage = sourcePages[(manifest[object.pageNumber-1]?.sourcePageNumber ?? object.pageNumber)-1];
-      const fonts = originalPage?.node.Resources()?.lookupMaybe(PDFName.of('Font'), PDFDict);
-      if (!key || !fonts) continue;
-      const normalize=(name:string)=>name.replace(/^\/?[A-Z]{6}\+/, '').replace(/[^a-z0-9]/gi,'').toLowerCase();
-      const wanted=normalize(object.pdfText.sourceFontFamily ?? '');
-      for (const [,ref] of fonts.entries()) {
-        const dict=sourcePdf.context.lookup(ref,PDFDict);
-        const name=String(dict.get(PDFName.of('BaseFont')) ?? '').replace(/^\//,'');
-        const plain=normalize(name.replace(/[-_, ]+(bold|regular|italic|oblique|roman)$/i,''));
-        if (!wanted || plain!==wanted || /bold/i.test(name)!==((object.pdfText.sourceFontWeight??400)>=600)) continue;
-        const descendants=dict.lookupMaybe(PDFName.of('DescendantFonts'),PDFArray);
-        const base=descendants ? descendants.lookup(0,PDFDict) : dict;
-        const descriptor=base.lookupMaybe(PDFName.of('FontDescriptor'),PDFDict);
-        for(const field of ['FontFile2','FontFile3']) {
-          const stream=sourcePdf.context.lookup(descriptor?.get(PDFName.of(field)));
-          if(stream instanceof PDFRawStream) { sourceFontBytes.set(key,decodePDFRawStream(stream).decode()); break; }
-        }
+      const pageIndex = (manifest[object.pageNumber - 1]?.sourcePageNumber ?? object.pageNumber) - 1;
+      if (!key || !sourcePages[pageIndex]) continue;
+      let programs = nativeFonts.get(pageIndex);
+      if (!programs) {
+        programs = collectPageFontPrograms(sourcePdf, pageIndex);
+        nativeFonts.set(pageIndex, programs);
       }
+      const exact = object.pdfText.sourceFontName;
+      const variant = (object.pdfText.sourceFontWeight ?? 400) >= 600 ? 'Bold' : '';
+      const italic = object.pdfText.sourceFontStyle === 'italic' ? 'Italic' : '';
+      const program = programs.get(normalizePdfFontName(exact ?? `${object.pdfText.sourceFontFamily ?? ''}${variant}${italic}`));
+      if (program) sourceFontBytes.set(key, program);
     }
 
     /**
@@ -298,7 +294,7 @@ export class StudioPdfExportService {
         const crop=page.getCropBox(),rot=this.normalizeRotation(page.getRotation().angle);
         const w=rot===90||rot===270?crop.height:crop.width,h=rot===90||rot===270?crop.width:crop.height;
         const points=[[b.x,b.y],[b.x+b.width,b.y+b.height]].map(([x,y])=>this.displayToPdfPoint(x*w,y*h,w,h,rot));
-        holes.push({x:Math.min(...points.map(p=>p.x))+crop.x-1,y:Math.min(...points.map(p=>p.y))+crop.y-1,width:Math.abs(points[1].x-points[0].x)+2,height:Math.abs(points[1].y-points[0].y)+2});
+        holes.push({x:Math.min(...points.map(p=>p.x))+crop.x,y:Math.min(...points.map(p=>p.y))+crop.y,width:Math.abs(points[1].x-points[0].x),height:Math.abs(points[1].y-points[0].y)});
         removed.add(object.id);
       }
     }
@@ -457,7 +453,7 @@ export class StudioPdfExportService {
                 )
               );
 
-        if (object.pdfImage?.replaced && !removed.has(object.id)) {
+        if (object.pdfImage?.replaced) {
           await this.coverExistingPdfImage(
             pdfDocument, page, object, displayWidth, displayHeight, rotation
           );
@@ -897,11 +893,11 @@ export class StudioPdfExportService {
     const descent = typeof source.descentPdf === 'number' && Number.isFinite(source.descentPdf)
       ? source.descentPdf
       : -Math.max(0, fontSizePdf * 0.2);
-    // Existing PDF text must be covered exactly at its source run boundary.
-    // Horizontal padding creates the visible left/right drift reported in the
-    // editor. Keep a tiny vertical safety only for rasterization/descenders.
-    const padX = 0;
-    const padY = 0.25;
+    // Cover the removal clip's antialiased edge too. A smaller cover leaves a
+    // white hairline around text on colored backgrounds. This never moves the
+    // replacement baseline or changes its layout width.
+    const padX = 0.3;
+    const padY = 0.4;
 
     const corners = [
       { x: e + vx * descent, y: f + vy * descent },
@@ -924,10 +920,10 @@ export class StudioPdfExportService {
     const ordered = [corners[0], corners[1], corners[3], corners[2]];
     page.pushOperators(pushGraphicsState(),
       setFillingColor(this.hexToPdfRgb(source.backgroundColor ?? '#ffffff')),
-      moveTo(ordered[0].x - vx * padY, ordered[0].y - vy * padY),
-      lineTo(ordered[1].x - vx * padY, ordered[1].y - vy * padY),
-      lineTo(ordered[2].x + vx * padY, ordered[2].y + vy * padY),
-      lineTo(ordered[3].x + vx * padY, ordered[3].y + vy * padY),
+      moveTo(ordered[0].x - vx * padY - ux * padX, ordered[0].y - vy * padY - uy * padX),
+      lineTo(ordered[1].x - vx * padY + ux * padX, ordered[1].y - vy * padY + uy * padX),
+      lineTo(ordered[2].x + vx * padY + ux * padX, ordered[2].y + vy * padY + uy * padX),
+      lineTo(ordered[3].x + vx * padY - ux * padX, ordered[3].y + vy * padY - uy * padX),
       closePath(), fill(), popGraphicsState());
   }
 
@@ -1746,6 +1742,28 @@ export class StudioPdfExportService {
     return fallback;
   }
 
+  private readonly validatedSourceFonts = new Map<string, Promise<PDFFont | null>>();
+
+  /** Font parsing/coverage can succeed while serialization fails (e.g. an
+   * uploaded subset without a post table). Probe in an isolated document so
+   * a rejected font never enters the real document's deferred save queue. */
+  private validateSourceFont(bytes: Uint8Array, key: string): Promise<PDFFont | null> {
+    const cached = this.validatedSourceFonts.get(key);
+    if (cached) return cached;
+    if (this.validatedSourceFonts.size >= 64) this.validatedSourceFonts.clear();
+    const task = (async () => {
+      try {
+        const probe = await PDFDocument.create();
+        probe.registerFontkit(fontkit);
+        const font = await probe.embedFont(bytes, { subset: false });
+        await font.embed();
+        return font;
+      } catch { return null; }
+    })();
+    this.validatedSourceFonts.set(key, task);
+    return task;
+  }
+
   private async getFont(
     pdfDocument: PDFDocument,
     fontWeight: StudioTextFontWeight,
@@ -1771,34 +1789,12 @@ export class StudioPdfExportService {
       return cached;
     }
 
-    if (sourceFontBytes && sourceFontBytes.byteLength > 0) {
-      try {
-        const embeddedSourceFont =
-          await pdfDocument.embedFont(
-            sourceFontBytes,
-            { subset: true },
-          );
-
-        /*
-         * PDF.js may expose a subset containing only the glyphs present in the
-         * original document. If the replacement introduces a character that
-         * the source subset does not contain, do not let export fail halfway
-         * through the document; fall back to the mapped standard font below.
-         */
-        if (
-          this.fontSupportsText(
-            embeddedSourceFont,
-            requiredText,
-          )
-        ) {
-          cache.set(key, embeddedSourceFont);
-          return embeddedSourceFont;
-        }
-      } catch {
-        /*
-         * Some PDF.js-converted font programs are not accepted by fontkit.
-         * The standard-font path below remains the controlled fallback.
-         */
+    if (sourceFontBytes && sourceKey) {
+      const validated = await this.validateSourceFont(sourceFontBytes, sourceKey);
+      if (validated && this.fontSupportsText(validated, requiredText)) {
+        const sourceFont = await pdfDocument.embedFont(sourceFontBytes, { subset: false });
+        cache.set(key, sourceFont);
+        return sourceFont;
       }
     }
 
@@ -1876,7 +1872,7 @@ export class StudioPdfExportService {
 
       return true;
     } catch {
-      return true;
+      return false;
     }
   }
 
@@ -1968,7 +1964,7 @@ export class StudioPdfExportService {
 
     const loadingTask =
       pdfjs.getDocument({
-        data: sourceBytes,
+        data: sourceBytes.slice(),
         /*
          * PDF.js normally releases FontFaceObject.data after attaching the
          * browser font. Export explicitly asks it to retain the parsed font
@@ -2071,7 +2067,7 @@ export class StudioPdfExportService {
     for (
       let index = 0;
       index < bytes.length;
-      index += Math.max(1, Math.floor(bytes.length / 4096))
+      index++
     ) {
       hash ^= bytes[index];
       hash = Math.imul(hash, 16777619);
@@ -2372,7 +2368,7 @@ export class StudioPdfExportService {
     const fits = (size: number) => {
       const lines = this.wrapText(object.text ?? '', font, size, boxWidth / this.resolveSourceScaleX(object), tracking);
       const lineHeight = size * sourceLineHeight;
-      return { lines, lineHeight, fits: lines.length * lineHeight <= boxHeight + size * 0.15 };
+      return { lines, lineHeight, fits: (lines.length - 1) * lineHeight + size <= boxHeight + size * 0.15 && lines.every(line => this.textWidthWithTracking(line, font, size, tracking) * this.resolveSourceScaleX(object) <= boxWidth + 0.01) };
     };
     if (mode === 'flow') {
       const full=fits(requestedSize);
@@ -2383,7 +2379,7 @@ export class StudioPdfExportService {
     }
     const fullSize = fits(requestedSize);
     if (fullSize.fits) return { fontSize: requestedSize, lineHeight: fullSize.lineHeight, lines: fullSize.lines };
-    let low = Math.max(3, requestedSize * 0.35);
+    let low = Math.min(requestedSize, Math.max(3, requestedSize * 0.35));
     let high = requestedSize;
     let best = low;
     for (let i = 0; i < 12; i++) {
@@ -2419,7 +2415,7 @@ export class StudioPdfExportService {
       let current = '';
 
       for (const word of words) {
-        const candidate = current
+        let candidate = current
           ? `${current} ${word}`
           : word;
 
@@ -2428,8 +2424,8 @@ export class StudioPdfExportService {
           this.textWidthWithTracking(candidate, font, fontSize, tracking) > maxWidth
         ) {
           result.push(current);
-          current = word;
-          continue;
+          current = '';
+          candidate = word;
         }
 
         if (

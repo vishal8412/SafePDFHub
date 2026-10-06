@@ -1,3 +1,4 @@
+import { readStudioImage } from '../../services/studio-image-import';
 import { visibleStudioSources, studioDisplayBounds } from '../../services/studio-source-visibility';
 import { isPlatformBrowser } from '@angular/common';
 import { SigningStateService } from '../../../../core/signing/services/signing-state.service';
@@ -452,6 +453,9 @@ private activeRenderVersion: number | null = null;
           } catch (error) {
             if (!this.destroyed && generation === this.previewGeneration) {
               this.previewSource = null;
+              this.committedPreview.set(null);
+              this.previewBounds.set({});
+              this.previewSourceBounds.set({});
               this.previewError.set(error instanceof Error ? error.message : 'Unable to render the edited preview.');
             }
           } finally {
@@ -3441,7 +3445,9 @@ async onImageSelected(
 
   const documentId = this.facade.document()?.id;
   const pageNumber = this.facade.currentPage();
+  this.previewError.set('');
   const image = await this.readImageFile(file);
+  if (!image && !this.previewError()) this.previewError.set('Unable to read this image. Choose a valid PNG or JPEG file.');
 
   if (!image || this.destroyed || documentId !== this.facade.document()?.id || pageNumber !== this.facade.currentPage()) {
     return;
@@ -3484,141 +3490,10 @@ async onImageSelected(
   );
 }
 
-private async readImageFile(
-  file: File
-): Promise<StudioImageData | null> {
-
-  if (
-    file.type !== 'image/png' &&
-    file.type !== 'image/jpeg'
-  ) {
-    console.error(
-      '[SafePDFHub Studio] Unsupported image type. Use PNG or JPEG.'
-    );
-    return null;
-  }
-
-  const maxBytes =
-    20 * 1024 * 1024;
-
-  if (file.size > maxBytes) {
-    console.error(
-      '[SafePDFHub Studio] Image exceeds the 20 MB limit.'
-    );
-    return null;
-  }
-
-  const dataUrl =
-    await new Promise<string | null>(
-      resolve => {
-
-        const reader =
-          new FileReader();
-
-        reader.onload = () => {
-          resolve(
-            typeof reader.result === 'string'
-              ? reader.result
-              : null
-          );
-        };
-
-        reader.onerror = () =>
-          resolve(null);
-
-        reader.readAsDataURL(file);
-      }
-    );
-
-  if (!dataUrl) {
-    return null;
-  }
-
-  try {
-
-    let width = 0;
-    let height = 0;
-
-    if (
-      typeof createImageBitmap ===
-      'function'
-    ) {
-
-      const bitmap =
-        await createImageBitmap(file);
-
-      width =
-        bitmap.width;
-
-      height =
-        bitmap.height;
-
-      bitmap.close();
-
-    } else {
-
-      const dimensions =
-        await new Promise<{
-          width: number;
-          height: number;
-        } | null>(
-          resolve => {
-
-            const image =
-              new Image();
-
-            image.onload = () =>
-              resolve({
-                width:
-                  image.naturalWidth,
-                height:
-                  image.naturalHeight
-              });
-
-            image.onerror = () =>
-              resolve(null);
-
-            image.src = dataUrl;
-          }
-        );
-
-      if (!dimensions) {
-        return null;
-      }
-
-      width =
-        dimensions.width;
-
-      height =
-        dimensions.height;
-    }
-
-    if (
-      width <= 0 ||
-      height <= 0
-    ) {
-      return null;
-    }
-
-    return {
-      dataUrl,
-      mimeType:
-        file.type === 'image/png'
-          ? 'image/png'
-          : 'image/jpeg',
-      naturalWidth: width,
-      naturalHeight: height,
-      aspectRatio:
-        width / height
-    };
-
-  } catch (error: unknown) {
-
-    console.error(
-      '[SafePDFHub Studio] Failed to decode image:',
-      error
-    );
-
+private async readImageFile(file: File): Promise<StudioImageData | null> {
+  try { return await readStudioImage(file); }
+  catch (error) {
+    this.previewError.set(error instanceof Error ? error.message : 'Unable to decode this image.');
     return null;
   }
 }

@@ -11,10 +11,12 @@ export function visibleStudioSources(objects: readonly StudioObject[]): StudioOb
       if (image.id === object.id || image.pageNumber !== object.pageNumber) return false;
       const region = image.pdfImage!.sourceBounds ?? image.bounds;
       const bounds = object.pdfImage?.sourceBounds ?? object.bounds;
-      const x = bounds.x + bounds.width / 2;
-      const y = bounds.y + bounds.height / 2;
-      return x > region.x && x < region.x + region.width
-        && y > region.y && y < region.y + region.height
+      const epsilon = 1e-6;
+      // A paragraph crossing an image is still an editable paragraph. A centre
+      // hit alone used to hide its text outside the replaced image as well.
+      return bounds.x >= region.x - epsilon && bounds.y >= region.y - epsilon
+        && bounds.x + bounds.width <= region.x + region.width + epsilon
+        && bounds.y + bounds.height <= region.y + region.height + epsilon
         && bounds.width * bounds.height < region.width * region.height;
     });
   });

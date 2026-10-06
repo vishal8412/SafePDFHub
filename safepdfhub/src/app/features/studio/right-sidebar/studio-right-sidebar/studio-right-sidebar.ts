@@ -1,3 +1,4 @@
+import { readStudioImage } from '../../services/studio-image-import';
 import { FormsModule } from '@angular/forms';
 
 import {
@@ -63,6 +64,7 @@ export class StudioRightSidebar {
 
   /** Guards against stale asynchronous image reads replacing a newly selected object. */
   private imageReplacementVersion = 0;
+  readonly imageImportError = signal('');
   private fidelityValidationVersion = 0;
 
   /** Phase 5C.7 — pixel/content-aware validation of reconstruction continuity. */
@@ -990,59 +992,47 @@ export class StudioRightSidebar {
       return;
     }
 
-    if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
-      return;
-    }
-
-    // Keep replacement images bounded so an accidental very large data URL does
-    // not make the in-browser document model unnecessarily heavy.
-    if (file.size > 25 * 1024 * 1024) {
-      return;
-    }
-
+    this.imageImportError.set('');
     const object = this.selectedObject();
-    if (object?.type !== 'image') {
-      return;
-    }
-
+    if (object?.type !== 'image') return;
     const objectId = object.id;
+    const documentId = this.facade.document()?.id;
     const version = ++this.imageReplacementVersion;
-
-    const dataUrl = await this.readFileAsDataUrl(file);
-    if (!dataUrl || version !== this.imageReplacementVersion) {
+    let imported: Awaited<ReturnType<typeof readStudioImage>>;
+    try { imported = await readStudioImage(file); }
+    catch (error) {
+      if (version === this.imageReplacementVersion) this.imageImportError.set(error instanceof Error ? error.message : 'Unable to decode this image.');
       return;
     }
-
-    const dimensions = await this.readImageDimensions(dataUrl);
-    if (!dimensions || version !== this.imageReplacementVersion) {
-      return;
-    }
-
+    if (version !== this.imageReplacementVersion || documentId !== this.facade.document()?.id) return;
+    const { dataUrl } = imported;
     const current = this.objectService.get(objectId);
     if (current?.type !== 'image') {
       return;
     }
 
+    const document = this.facade.document();
+    const logicalPage = this.facade.pages()[current.pageNumber - 1];
+    let pageWidth = logicalPage?.blankWidth ?? 595.28;
+    let pageHeight = logicalPage?.blankHeight ?? 841.89;
+    if (document && logicalPage?.kind === 'source') {
+      const page = await document.pdf.getPage(logicalPage.sourcePageNumber ?? current.pageNumber);
+      const viewport = page.getViewport({scale: 1, rotation: (page.rotate + logicalPage.rotation) % 360});
+      pageWidth = viewport.width; pageHeight = viewport.height;
+    }
+    const targetRatio = Math.max(.0001, current.bounds.width * pageWidth / (current.bounds.height * pageHeight));
     const edgeBackground = await this.sampleImageEdgeBackground(dataUrl);
     if (version !== this.imageReplacementVersion) return;
     const pixelReconstruction = current.pdfImage
-      ? await this.buildPixelReconstruction(dataUrl, Math.max(0.0001, current.bounds.width / current.bounds.height))
+      ? await this.buildPixelReconstruction(dataUrl, targetRatio)
       : null;
     const layeredReconstruction = current.pdfImage
-      ? await this.buildLayeredReconstruction(dataUrl, Math.max(0.0001, current.bounds.width / current.bounds.height), current.pdfImage.seamBlendWidth ?? 8)
+      ? await this.buildLayeredReconstruction(dataUrl, targetRatio, current.pdfImage.seamBlendWidth ?? 8)
       : null;
     if (version !== this.imageReplacementVersion) return;
 
-    this.facade.replaceImageData(objectId, {
-      dataUrl,
-      mimeType: file.type,
-      naturalWidth: dimensions.width,
-      naturalHeight: dimensions.height,
-      aspectRatio: dimensions.width / dimensions.height
-    });
-
-    if (edgeBackground || pixelReconstruction) {
-      this.facade.updatePdfImageBackground(objectId, {
+    if (documentId !== this.facade.document()?.id) return;
+    this.facade.replaceImageData(objectId, imported, edgeBackground || pixelReconstruction ? {
         ...(edgeBackground ? { backgroundColor: edgeBackground.color, backgroundConfidence: edgeBackground.confidence } : {}),
         ...(layeredReconstruction ? {
           backgroundMode: 'layered' as const,
@@ -1059,8 +1049,7 @@ export class StudioRightSidebar {
           pixelReconstructionDataUrl: pixelReconstruction.dataUrl,
           pixelReconstructionConfidence: pixelReconstruction.confidence
         } : { backgroundMode: 'auto' as const })
-      });
-    }
+      } : undefined);
   }
 
   /** Phase 5C.5 — build a source-aware raster by extending the nearest edge pixel

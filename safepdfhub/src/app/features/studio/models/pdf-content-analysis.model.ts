@@ -33,6 +33,7 @@ export interface PdfExistingTextBlock {
   /** PDF.js style family when exposed; useful only as a human-readable fallback. */
   readonly fontFamily: string | null;
   /** Human-readable family recovered from the actual embedded PDF font program. */
+  readonly sourceFontName?: string | null;
   readonly sourceFontFamily: string | null;
   /**
    * Exact PDF.js loaded font family used by the browser renderer.

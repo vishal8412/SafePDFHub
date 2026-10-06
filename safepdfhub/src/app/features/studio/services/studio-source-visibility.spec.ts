@@ -21,3 +21,13 @@ describe('replaced source region selection',()=>{
     expect(studioDisplayBounds(current)).toEqual(current);
   });
 });
+
+describe('partially overlapping source paragraphs',()=>{
+  it('retains text extending outside a replaced image even when its centre is inside',()=>{
+    const objects=[
+      {id:'image',pageNumber:1,bounds:{x:.3,y:.3,width:.4,height:.4},pdfImage:{replaced:true}},
+      {id:'paragraph',pageNumber:1,bounds:{x:.1,y:.4,width:.6,height:.05},pdfText:{}},
+    ] as StudioObject[];
+    expect(visibleStudioSources(objects).map(o=>o.id)).toEqual(['image','paragraph']);
+  });
+});

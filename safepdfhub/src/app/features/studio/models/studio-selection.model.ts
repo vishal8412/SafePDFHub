@@ -59,6 +59,7 @@ export interface StudioPdfTextSource {
   /** Source line-height ratio when known. */
   readonly lineHeight?: number;
   /** Human-readable family recovered from the actual embedded PDF font program. */
+  readonly sourceFontName?: string | null;
   readonly sourceFontFamily?: string | null;
   /**
    * Exact PDF.js-loaded font face used to render the source glyphs in the
