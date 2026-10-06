@@ -1,3 +1,4 @@
+import { fitPreviewFontSize } from '../../services/studio-text-preview';
 import { readStudioImage } from '../../services/studio-image-import';
 import { visibleStudioSources, studioDisplayBounds } from '../../services/studio-source-visibility';
 import { isPlatformBrowser } from '@angular/common';
@@ -382,14 +383,21 @@ private activeRenderVersion: number | null = null;
 
   readonly committedPreview = signal<string | null>(null);
   readonly previewBounds = signal<Record<string,{x:number;y:number;width:number;height:number}>>({});
-  readonly textDraft = signal<{id:string;text:string}|null>(null);
+  readonly textDraft = this.facade.inlineTextDraft;
   readonly previewError = signal('');
   private readonly previewExporter = inject(StudioPdfExportService);
   private previewGeneration = 0;
   private previewContext = '';
-  private previewSource: {key: string; file: Promise<File>} | null = null;
+  private previewSignature = '';
+  private previewDocumentId: string | undefined;
+  private readonly previewPages = new Map<string, { signature: string; image: string;
+    bounds: Record<string, StudioObject['bounds']>; sourceBounds: Record<string, StudioObject['bounds']> }>();
+  private readonly previewSources = new Map<string, Promise<File>>();
   private readonly previewSourceBounds = signal<Record<string, StudioObject['bounds']>>({});
   readonly previewBusy = signal(false);
+  readonly textTransformActive = signal(false);
+  readonly editingSession = signal<string | null>(null);
+  private editRequest = 0;
   private previewTimer: ReturnType<typeof setTimeout> | undefined;
   private previewQueue: Promise<void> = Promise.resolve();
 
@@ -397,27 +405,38 @@ private activeRenderVersion: number | null = null;
     this.facade.flushTextDraft = () => this.commitTextEdit();
     effect(() => {
       this.objectService.changes();
+      const transforming = this.textTransformActive() || !!this.editingSession();
       const source = this.facade.document();
       const pageNumber = this.facade.currentPage();
       const logicalPage = this.facade.pages()[pageNumber - 1];
-      const draft=this.textDraft();
       const objects = this.objectService.listForPage(pageNumber)
         .filter(o => o.pdfText || o.pdfImage)
-        .map(o => ({ ...o, pageNumber: 1, ...(draft?.id===o.id && o.pdfText ? {text:draft.text,pdfText:{...o.pdfText,edited:true}}:{}) }));
+        .map(o => ({ ...o, pageNumber: 1 }));
+      const context = `${source?.id}:${logicalPage?.id}:${logicalPage?.sourcePageNumber}:${logicalPage?.rotation}`;
+      // Drafts stay in the native editor. Only committed changes need a PDF round trip.
+      const signature = JSON.stringify(objects.map(object => object.pdfText?.edited || object.pdfImage?.replaced
+        ? object : { id: object.id, bounds: object.bounds }));
+      if (!transforming && context === this.previewContext && signature === this.previewSignature) return;
       const generation = ++this.previewGeneration;
       clearTimeout(this.previewTimer);
-      const context=`${source?.id}:${logicalPage?.id}:${logicalPage?.sourcePageNumber}:${logicalPage?.rotation}`;
-      if (this.previewSource?.key !== context) this.previewSource = null;
-      const hasEdits=objects.some(o=>o.pdfText?.edited || o.pdfImage?.replaced);
-      if(context!==this.previewContext || !hasEdits) {
-        this.committedPreview.set(null);
-        this.previewBounds.set({});
-        this.previewSourceBounds.set({});
+      if (this.previewDocumentId !== source?.id) {
+        this.previewPages.clear();
+        this.previewSources.clear();
+        this.previewDocumentId = source?.id;
       }
-      this.previewContext=context;
+      this.previewSignature = transforming ? '' : signature;
+      this.previewContext = context;
+      const cached = this.previewPages.get(context);
+      const exact = cached?.signature === signature ? cached : undefined;
+      // Never show an older edit after undo, or a different page's raster.
+      // Wrapped HTML replacements remain visible until the exact raster is ready.
+      this.committedPreview.set(exact?.image ?? null);
+      this.previewBounds.set(exact?.bounds ?? {});
+      this.previewSourceBounds.set(exact?.sourceBounds ?? {});
       this.previewError.set('');
       this.previewBusy.set(false);
-      if (!this.isBrowser || !source || !logicalPage || !hasEdits) return;
+      const hasEdits = objects.some(o => o.pdfText?.edited || o.pdfImage?.replaced);
+      if (!this.isBrowser || !source || !logicalPage || !hasEdits || exact || transforming) return;
       this.previewBusy.set(true);
       // Serialize and debounce document parsing; stale requests never paint.
       this.previewTimer = setTimeout(() => {
@@ -427,10 +446,13 @@ private activeRenderVersion: number | null = null;
           const canvas = document.createElement('canvas');
           try {
             let positions: Record<string,{x:number;y:number;width:number;height:number}> = {};
-            if (!this.previewSource || this.previewSource.key !== context) {
-              this.previewSource = {key: context, file: this.previewExporter.createPreviewFile(source.file, logicalPage)};
+            let sourceFile = this.previewSources.get(context);
+            if (!sourceFile) {
+              sourceFile = this.previewExporter.createPreviewFile(source.file, logicalPage);
+              this.previewSources.set(context, sourceFile);
+              if (this.previewSources.size > 4) this.previewSources.delete(this.previewSources.keys().next().value!);
             }
-            const previewFile = await this.previewSource.file;
+            const previewFile = await sourceFile;
             if (this.destroyed || generation !== this.previewGeneration) return;
             const previewPage = {...logicalPage, kind: 'source' as const, sourcePageNumber: 1, rotation: 0 as const};
             const blob = await this.previewExporter.exportTextObjects(previewFile, objects, [previewPage], bounds=>positions=bounds);
@@ -448,11 +470,16 @@ private activeRenderVersion: number | null = null;
             if (!this.destroyed && generation === this.previewGeneration) {
               this.previewSourceBounds.set(Object.fromEntries(objects.map(object => [object.id, object.bounds])));
               this.previewBounds.set(positions);
-              this.committedPreview.set(canvas.toDataURL('image/png'));
+              const image = canvas.toDataURL('image/png');
+              this.committedPreview.set(image);
+              this.previewPages.delete(context);
+              this.previewPages.set(context, { signature, image, bounds: positions,
+                sourceBounds: Object.fromEntries(objects.map(object => [object.id, object.bounds])) });
+              if (this.previewPages.size > 8) this.previewPages.delete(this.previewPages.keys().next().value!);
             }
           } catch (error) {
             if (!this.destroyed && generation === this.previewGeneration) {
-              this.previewSource = null;
+              this.previewSources.delete(context);
               this.committedPreview.set(null);
               this.previewBounds.set({});
               this.previewSourceBounds.set({});
@@ -464,7 +491,7 @@ private activeRenderVersion: number | null = null;
             await pdf?.destroy();
           }
         });
-      }, 250);
+      }, 80);
     });
     effect(() => {
       const request = this.watermark.isOpen()
@@ -714,6 +741,7 @@ private activeRenderVersion: number | null = null;
   this.zoomAnchor = null;
 
   this.editingObjectId = null;
+  this.editingSession.set(null);
   this.editingText = '';
   this.editingOriginalText = '';
   this.editingOriginalStyle = null;
@@ -770,6 +798,27 @@ ngAfterViewInit(): void {
 
   this.scheduleRender();
 }
+
+  get pdfEditPreparationMessage(): string {
+    if (this.facade.activeTool() !== 'edit-pdf-text') return '';
+    const sourcePage = this.facade.pages()[this.facade.currentPage() - 1];
+    if (!sourcePage || sourcePage.kind !== 'source') return '';
+    const analysis = this.facade.contentAnalysisState();
+    if (analysis?.pages[sourcePage.sourcePageNumber ?? 1]) return '';
+    return analysis?.status === 'error'
+      ? 'Unable to prepare this page for editing. Select Edit PDF to retry.'
+      : 'Preparing text and images for editing… You can click a text area to edit when ready.';
+  }
+
+  resizeEditingTextArea(axis: 'width' | 'height', value: string): void {
+    const object = this.editingTextObject;
+    const points = Number(value);
+    const dimension = axis === 'width' ? object?.pdfText?.pageWidthPdf : object?.pdfText?.pageHeightPdf;
+    if (!object?.pdfText || !dimension || !Number.isFinite(points) || points <= 0) return;
+    this.syncTextEditorValue();
+    this.facade.updateObjectBounds(object.id, { ...object.bounds, [axis]: points / dimension });
+    requestAnimationFrame(() => this.syncTextEditorLayout());
+  }
 
   get activeToolCursorClass(): string {
     switch (this.facade.activeTool()) {
@@ -3001,6 +3050,11 @@ onEditorObjectPointerDown(
       void this.beginTextEditing(object.id);
       event.preventDefault();
       event.stopPropagation();
+    } else if (object.type === 'image' && object.pdfImage) {
+      this.facade.selectObject(this.selectionEngine.toSelection(object));
+      this.requestImageReplacement(object.id);
+      event.preventDefault();
+      event.stopPropagation();
     }
     return;
   }
@@ -3536,10 +3590,9 @@ private requestImageReplacement(
 private async beginTextEditing(
   objectId: string
 ): Promise<void> {
+  const request = ++this.editRequest;
   const documentId = this.facade.document()?.id;
   const pageNumber = this.facade.currentPage();
-  await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-  await this.currentRender;
   if (this.destroyed || this.facade.document()?.id !== documentId || this.facade.currentPage() !== pageNumber) return;
   const object =
     this.objectService.get(
@@ -3553,8 +3606,10 @@ private async beginTextEditing(
     return;
   }
 
-  this.capturePdfTextAppearance(object);
+  if (this.activeRenderVersion === null) this.capturePdfTextAppearance(object);
   this.editingObjectId = objectId;
+  this.editingSession.set(objectId);
+  this.textDraft.set({ id: objectId, text: object.text ?? '' });
 
   this.editingText =
     object.text ?? '';
@@ -3584,7 +3639,7 @@ private async beginTextEditing(
       const editor =
         this.textEditorRef?.nativeElement;
 
-      if (!editor) {
+      if (!editor || request !== this.editRequest || this.editingObjectId !== objectId) {
         return;
       }
 
@@ -3606,7 +3661,7 @@ onTextEditorInput(
     event.target as
       HTMLTextAreaElement | null;
 
-  if (!target) {
+  if (!target || target.dataset['editingObjectId'] !== this.editingObjectId) {
     return;
   }
 
@@ -3643,6 +3698,24 @@ onTextEditorKeyDown(
     event.stopPropagation();
     this.cancelTextEdit();
     return;
+  }
+
+  if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const cell = this.editingTextObject?.pdfText?.tableId;
+    if (cell) {
+      const cells = this.objectService.listForPage(this.facade.currentPage())
+        .filter(object => object.pdfText?.tableId === cell)
+        .sort((a, b) => (a.pdfText!.tableOrder ?? 0) - (b.pdfText!.tableOrder ?? 0));
+      const index = cells.findIndex(object => object.id === this.editingObjectId);
+      const next = cells[index + (event.shiftKey ? -1 : 1)];
+      this.commitTextEdit();
+      if (next) {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.beginTextEditing(next.id);
+      }
+      return;
+    }
   }
 
   const modifier =
@@ -3692,7 +3765,7 @@ private syncTextEditorValue(): void {
 
   if (
     editor &&
-    this.editingObjectId
+    this.editingObjectId && editor.dataset['editingObjectId'] === this.editingObjectId
   ) {
     this.editingText = editor.value;
   }
@@ -3702,6 +3775,8 @@ private syncTextEditorValue(): void {
  * Finish the current text edit. Empty text is discarded silently.
  */
 commitTextEdit(): void {
+  ++this.editRequest;
+  this.editingSession.set(null);
   this.textDraft.set(null);
 
   const objectId =
@@ -3759,6 +3834,7 @@ commitTextEdit(): void {
   this.facade.clearSelection();
 
   this.editingObjectId = null;
+  this.editingSession.set(null);
   this.editingText = '';
   this.editingOriginalText = '';
   this.editingOriginalStyle = null;
@@ -3768,6 +3844,8 @@ commitTextEdit(): void {
  * Cancel the edit and restore the original value.
  */
 cancelTextEdit(): void {
+  ++this.editRequest;
+  this.editingSession.set(null);
   this.textDraft.set(null);
 
   const objectId =
@@ -3792,6 +3870,7 @@ cancelTextEdit(): void {
   }
 
   this.editingObjectId = null;
+  this.editingSession.set(null);
   this.editingText = '';
   this.editingOriginalText = '';
   this.editingOriginalStyle = null;
@@ -4251,7 +4330,7 @@ setTextAlign(
   private canTransformCurrentSelection(): boolean {
     const activeTool = this.facade.activeTool();
 
-    if (activeTool === 'select') {
+    if (activeTool === 'select' || activeTool === 'edit-pdf-text') {
       return true;
     }
 
@@ -4301,6 +4380,7 @@ setTextAlign(
       return;
     }
 
+    if (object.pdfText) this.textTransformActive.set(true);
     this.objectInteraction = {
       mode,
       objectId: object.id,
@@ -4847,6 +4927,8 @@ if (updatedObject) {
       return;
     }
 
+    const start = this.textEditorRef?.nativeElement.selectionStart;
+    const end = this.textEditorRef?.nativeElement.selectionEnd;
     window.requestAnimationFrame(() => {
 
       if (!this.editingObjectId) {
@@ -4860,7 +4942,7 @@ if (updatedObject) {
 
       if (editor) {
         const length = editor.value.length;
-        editor.setSelectionRange(length, length);
+        editor.setSelectionRange(Math.min(start ?? length, length), Math.min(end ?? length, length));
       }
     });
   }
@@ -4877,6 +4959,7 @@ if (updatedObject) {
     }
 
     this.objectInteraction = null;
+    this.textTransformActive.set(false);
 
     this.stageRef?.nativeElement.classList.remove(
       'studio-canvas__stage--object-interacting'
@@ -4917,6 +5000,7 @@ if (updatedObject) {
 
     this.objectInteraction =
       null;
+    this.textTransformActive.set(false);
 
     this.stageRef?.nativeElement.classList.remove(
       'studio-canvas__stage--object-interacting'
@@ -4952,6 +5036,7 @@ if (updatedObject) {
       interaction.mode === 'resize' &&
       this.editingObjectId === interaction.objectId
     ) {
+      this.syncTextEditorLayout();
       this.refocusTextEditor();
     }
   }
@@ -5086,7 +5171,7 @@ if (updatedObject) {
     const pageNumber = this.facade.currentPage();
     const tool = this.facade.activeTool();
     const objects = this.studioObjects.filter(object =>
-      tool === 'edit-pdf-text' ? !!object.pdfText : tool === 'edit-pdf-image' ? !!object.pdfImage : true);
+      tool === 'edit-pdf-text' ? !!(object.pdfText || object.pdfImage) : tool === 'edit-pdf-image' ? !!object.pdfImage : true);
     const hits = this.selectionEngine.hitTestAll(
       objects,
       pageNumber,
@@ -5813,6 +5898,8 @@ onWindowKeyDown(
 
     if (object?.type === 'text' && object.pdfText) {
       void this.beginTextEditing(object.id);
+    } else if (object?.type === 'image' && object.pdfImage) {
+      this.requestImageReplacement(object.id);
     }
 
     event.preventDefault();
@@ -5912,6 +5999,35 @@ onWindowKeyDown(
     if (!object.pdfText) return null;
     const rotation = object.pdfText.displayRotation ?? -(object.pdfText.rotation ?? 0);
     return Math.abs(rotation) > 0.1 ? `rotate(${rotation}deg)` : null;
+  }
+
+  private readonly overlaySizes = new Map<string, number>();
+  private overlayMeasureCanvas?: HTMLCanvasElement;
+
+  getPdfOverlayFontSizePx(object: StudioObject): number {
+    const maximum = this.getObjectFontSizePx(object);
+    if (!this.isBrowser || this.committedPreview() || object.pdfText?.fitMode !== 'auto') return maximum;
+    const rect = this.pageRef?.nativeElement.getBoundingClientRect();
+    if (!rect) return maximum;
+    const width = rect.width * object.bounds.width;
+    const height = rect.height * object.bounds.height;
+    const family = this.getObjectFontFamilyCss(object);
+    const weight = this.getObjectFontWeightCss(object);
+    const style = object.pdfText?.sourceFontStyle ?? 'normal';
+    const lineHeight = this.getPdfTextLineHeight(object);
+    const key = JSON.stringify([object.text, width, height, maximum, family, weight, style, lineHeight]);
+    const cached = this.overlaySizes.get(key);
+    if (cached !== undefined) return cached;
+    this.overlayMeasureCanvas ??= document.createElement('canvas');
+    const context = this.overlayMeasureCanvas.getContext('2d');
+    if (!context) return maximum;
+    const size = fitPreviewFontSize(object.text ?? '', width, height, maximum, lineHeight, (text, size) => {
+      context.font = `${style} ${weight} ${size}px ${family}`;
+      return context.measureText(text).width;
+    });
+    this.overlaySizes.set(key, size);
+    if (this.overlaySizes.size > 128) this.overlaySizes.delete(this.overlaySizes.keys().next().value!);
+    return size;
   }
 
   /**
@@ -6525,6 +6641,10 @@ ngOnDestroy(): void {
   ++this.previewGeneration;
   clearTimeout(this.previewTimer);
   this.committedPreview.set(null);
+  this.previewPages.clear();
+  this.previewSources.clear();
+  this.overlaySizes.clear();
+  this.overlayMeasureCanvas = undefined;
   this.revokeWatermarkImagePreview();
 
   /**
@@ -6572,6 +6692,7 @@ ngOnDestroy(): void {
   this.pendingImageReplacementId = null;
 
   this.editingObjectId = null;
+  this.editingSession.set(null);
   this.editingText = '';
   this.editingOriginalText = '';
   this.editingOriginalStyle = null;

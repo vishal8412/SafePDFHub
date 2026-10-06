@@ -55,6 +55,7 @@ import { PdfWatermarkService } from '../../../core/watermark/pdf-watermark.servi
 export class StudioFacade {
   /** The canvas owns draft text; flush it before any export/security snapshot. */
   flushTextDraft: (() => void) | null = null;
+  readonly inlineTextDraft = signal<{ id: string; text: string } | null>(null);
 
 
   private readonly pdfEngine =
@@ -2311,6 +2312,8 @@ goToPage(page: number): void {
     }
     return;
   }
+
+  this.flushTextDraft?.();
 
   this.state.clearSelection();
 

@@ -74,6 +74,31 @@ describe('Studio source analysis and editing regressions', () => {
     expect(result!.textBlocks[0].lineHeightPdf).toBe(24);
     expect(result!.textBlocks[0].sourceLines![1].transform[5]).toBe(656);
   });
+  it('retains source text erase geometry when resizing and reanalyzing', async () => {
+    const result=await new PdfContentAnalysisService().ensurePage(documentFixture(),1,async()=>pageFixture() as any);
+    const store=new StudioObjectService();store.syncPdfTextBlocks(result!.textBlocks);
+    const id=result!.textBlocks[0].id,original=store.get(id)!;
+    store.updateBounds(id,{...original.bounds,width:.6,height:.15});
+    store.syncPdfTextBlocks(result!.textBlocks);
+    const changed=store.get(id)!;
+    expect(changed.bounds.width).toBe(.6);
+    expect(changed.pdfText!.sourceBounds).toEqual(original.bounds);
+    expect(changed.pdfText!.transform).toEqual(original.pdfText!.transform);
+    expect(changed.pdfText!.edited).toBe(true);
+    store.restorePdfText(id);
+    expect(store.get(id)!.bounds).toEqual(original.bounds);
+    expect(store.get(id)!.pdfText!.sourceBounds).toBeUndefined();
+  });
+  it('does not wait for unrelated page fonts when a source font has no bytes', async () => {
+    const service:any=new PdfContentAnalysisService();
+    const descriptor=Object.getOwnPropertyDescriptor(document,'fonts');
+    Object.defineProperty(document,'fonts',{configurable:true,value:{ready:new Promise(()=>{})}});
+    try {
+      expect(await service.ensureBrowserSourceFontFace('doc',1,'font','loaded',null,null,400,false)).toBe('loaded');
+    } finally {
+      if(descriptor)Object.defineProperty(document,'fonts',descriptor);else delete (document as any).fonts;
+    }
+  });
   it('retains the source image region through moves, resync and restore', async () => {
     const page = pageFixture({fnArray:[3,6],argsArray:[[100,0,0,50,200,300],['img']]});
     const result = await new PdfContentAnalysisService().ensurePage(documentFixture(),1,async()=>page as any);
@@ -107,6 +132,18 @@ describe('PDF producer layout variations', () => {
   it('groups each paragraph independently when two columns interleave', async () => {
     const blocks = await analyze([item('Left one',40,680),item('Right one',340,680),item('Left two',40,664),item('Right two',340,664)]);
     expect(blocks.map(b=>b.text)).toEqual(['Left one Left two','Right one Right two']);
+  });
+  it('keeps aligned table cells separate and orders navigation across rows', async () => {
+    const blocks = await analyze([item('1',40,680,8),item('2',140,680,8),item('3',240,680,8),
+      item('4',40,664,8),item('5',140,664,8),item('6',240,664,8)]);
+    expect(blocks.map(b=>b.text)).toEqual(['1','2','3','4','5','6']);
+    expect(new Set(blocks.map(b=>b.tableId)).size).toBe(1);
+    expect(blocks[0].tableId).toBeTruthy();
+    expect(blocks.map(b=>b.tableOrder)).toEqual([0,1,2,3,4,5]);
+  });
+  it('does not mark an isolated row as a table', async () => {
+    const blocks = await analyze([item('1',40,680,8),item('2',140,680,8),item('3',240,680,8)]);
+    expect(blocks.every(b=>!b.tableId)).toBe(true);
   });
   it('does not combine different font sizes or separate list items', async () => {
     const blocks = await analyze([item('Large',40,680,40,18),item('small',84,680,40,12),item('• First',40,640),item('• Second',40,624)]);

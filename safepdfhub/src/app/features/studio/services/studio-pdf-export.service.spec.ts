@@ -19,6 +19,24 @@ describe('Studio PDF export regressions', () => {
     ] });
     service = TestBed.inject(StudioPdfExportService);
   });
+  it('parses the immutable source once across distinct page previews', async () => {
+    const pdf = await PDFDocument.create();
+    pdf.addPage([600,800]); pdf.addPage([300,400]);
+    const bytes = await pdf.save();
+    const arrayBuffer = vi.fn(async () => bytes.slice().buffer);
+    const file = { arrayBuffer } as unknown as File;
+    const read = (blob: Blob) => new Promise<ArrayBuffer>((resolve,reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = reject; reader.readAsArrayBuffer(blob);
+    });
+    const first = await service.createPreviewFile(file, {id:'one',kind:'source',sourcePageNumber:1,rotation:90});
+    const second = await service.createPreviewFile(file, {id:'two',kind:'source',sourcePageNumber:2,rotation:0});
+    const again = await service.createPreviewFile(file, {id:'one',kind:'source',sourcePageNumber:1,rotation:0});
+    expect(arrayBuffer).toHaveBeenCalledTimes(1);
+    expect((await PDFDocument.load(await read(first))).getPage(0).getRotation().angle).toBe(90);
+    expect((await PDFDocument.load(await read(second))).getPage(0).getWidth()).toBe(300);
+    expect((await PDFDocument.load(await read(again))).getPage(0).getRotation().angle).toBe(0);
+  });
   it('preserves metadata and editable form fields for ordinary edits', async () => {
     const pdf = await PDFDocument.create(); const page = pdf.addPage([600,800]);
     pdf.setTitle('Keep my metadata');

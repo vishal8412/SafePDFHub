@@ -190,7 +190,7 @@
               @if (selectedObject()?.pdfText) {
                 <div class="properties__info-card">
                   <span class="properties__info-dot" aria-hidden="true"></span>
-                  <p>Original PDF text · {{ selectedObject()?.pdfText?.sourceFontFamily || selectedObject()?.pdfText?.fontName || 'Unknown font' }}. Edits visually cover the original content, which may remain searchable. This is not secure redaction. The source font is reused when it contains your characters. Missing Calibri characters use Carlito; other missing characters require a fallback font.</p>
+                  <p>Drag the corners or use Width and Height to give your text more room. Text fits inside the chosen area. A compatible font is used if the original font cannot be edited.</p>
                 </div>
               }
               @if (selectedObject()?.pdfText) {
@@ -203,7 +203,7 @@
                   <span>Replacement fit</span>
                   <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
                     <option value="flow">Reflow paragraph at original size</option>
-                    <option value="auto">Fit within original area</option>
+                    <option value="auto">Fit within text box</option>
                     <option value="original">Keep original size</option>
                   </select>
                 </label>
@@ -217,9 +217,13 @@
                 </div>
               }
               <textarea class="properties__textarea"
-                [value]="selectedObject()?.text ?? ''"
+                [value]="facade.inlineTextDraft()?.id === selectedObject()?.id ? facade.inlineTextDraft()?.text : (selectedObject()?.text ?? '')"
+                [readOnly]="facade.inlineTextDraft()?.id === selectedObject()?.id"
                 aria-label="Text content"
                 (change)="updateTextContent($any($event.target).value)"></textarea>
+              @if (facade.inlineTextDraft()?.id === selectedObject()?.id) {
+                <p class="properties__hint">Editing on the page. Choose Done before editing text here.</p>
+              }
               @if (selectedObject()?.pdfText?.edited) {
                 <button type="button" class="properties__secondary-button properties__full-width-button" (click)="restoreOriginalPdfText()">Restore original PDF text</button>
               }
@@ -424,7 +428,7 @@
                   <span>Replacement fit</span>
                   <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
                     <option value="flow">Reflow paragraph at original size</option>
-                    <option value="auto">Fit within original area</option>
+                    <option value="auto">Fit within text box</option>
                     <option value="original">Keep original size</option>
                   </select>
                 </label>

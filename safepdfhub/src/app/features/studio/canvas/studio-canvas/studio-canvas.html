@@ -38,6 +38,7 @@
 
       <div
         #pdfPage
+        [attr.aria-busy]="!!pdfEditPreparationMessage"
         class="studio-canvas__page"
         [class.studio-canvas__page--hidden]="
           !facade.hasDocument()
@@ -54,7 +55,10 @@
         @if (committedPreview(); as preview) {
           <img class="studio-committed-preview" [src]="preview" alt="Committed PDF edits preview" draggable="false" />
         }
-        @if (previewBusy()) { <span class="studio-preview-status" role="status">Updating layout…</span> }
+        @if (pdfEditPreparationMessage; as message) {
+          <span class="studio-preview-status" role="status" aria-live="polite">{{ message }}</span>
+        }
+        @if (previewBusy()) { <span class="studio-preview-status" role="status">Refining preview…</span> }
         @if (previewError()) {
           <p class="studio-preview-error" role="alert">Preview: {{ previewError() }}</p>
         }
@@ -103,6 +107,16 @@
         ====================================================== -->
 
         @if (facade.hasDocument()) {
+
+          @for (object of studioObjects; track object.id) {
+            @if (!committedPreview() && object.pdfText?.edited && object.pdfText?.sourceBounds; as sourceBounds) {
+              <div class="studio-pdf-text-source-cover" aria-hidden="true"
+                [style.left.%]="sourceBounds.x * 100" [style.top.%]="sourceBounds.y * 100"
+                [style.width.%]="sourceBounds.width * 100" [style.height.%]="sourceBounds.height * 100"
+                [style.background-color]="object.pdfText?.backgroundColor ?? '#ffffff'"
+                [style.transform]="getPdfTextTransform(object)"></div>
+            }
+          }
 
           @for (
             object of studioObjects;
@@ -206,6 +220,7 @@
                 -->
                 <textarea
                   #textEditor
+                  [attr.data-editing-object-id]="object.id"
                   class="studio-text-editor"
                   [value]="editingText"
                   [style.background-color]="object.pdfText?.backgroundColor ?? '#ffffff'"
@@ -233,6 +248,7 @@
                       [style.top.%]="segment.topPercent"
                       [style.width.%]="segment.widthPercent"
                       [style.height.%]="segment.heightPercent"
+                      [style.font-size.px]="getPdfOverlayFontSizePx(object)"
                       [style.color]="object.pdfText?.textColor ?? '#000000'"
                       [style.background-color]="object.pdfText?.backgroundColor ?? '#ffffff'"
                     >{{ segment.text }}</span>
@@ -1129,6 +1145,25 @@
       (pointerdown)="$event.stopPropagation()"
       (click)="$event.stopPropagation()"
     >
+
+      @if (editingTextObject.pdfText) {
+        <label class="studio-text-toolbar__size" title="Drag the corner handles or set the text area width">
+          <span>Width (pt)</span>
+          <input type="number" min="1" step="1" aria-label="Text area width"
+            [value]="(editingTextObject.bounds.width * (editingTextObject.pdfText.pageWidthPdf ?? 1)).toFixed(1)"
+            (change)="resizeEditingTextArea('width', $any($event.target).value)">
+        </label>
+        <label class="studio-text-toolbar__size" title="Make the text area taller to fit more lines">
+          <span>Height (pt)</span>
+          <input type="number" min="1" step="1" aria-label="Text area height"
+            [value]="(editingTextObject.bounds.height * (editingTextObject.pdfText.pageHeightPdf ?? 1)).toFixed(1)"
+            (change)="resizeEditingTextArea('height', $any($event.target).value)">
+        </label>
+      }
+
+      @if (editingTextObject.pdfText?.tableId) {
+        <span class="studio-text-toolbar__cell-hint">Table cell · Tab: next · Shift+Tab: previous</span>
+      }
 
       <label
         class="studio-text-toolbar__size"

@@ -20,8 +20,37 @@ const canvas=()=>ng.getComponent(document.querySelector('app-studio-canvas'));
   page.setDefaultTimeout(90000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
   const state=async()=>page.evaluate(async()=>{const c=ng.getComponent(document.querySelector('app-studio-canvas'));await c.facade.ensureCurrentPageContent();return c.objectService.listForPage(c.facade.currentPage())});
   const preview=async()=>{await page.waitForTimeout(350);await page.waitForFunction(()=>{const c=ng.getComponent(document.querySelector('app-studio-canvas'));return !c.previewBusy()&&(c.committedPreview()||c.previewError())},null,{timeout:120000});assert.equal(await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).previewError()),'');};
-  const edit=async(object,text)=>{await page.getByRole('button',{name:'Edit PDF Text',exact:true}).click();await page.locator(`[data-object-id="${object.id}"]`).click();await page.getByRole('textbox',{name:'Edit PDF text',exact:true}).fill(text);await page.getByRole('button',{name:'Finish text edit',exact:true}).click();await preview();};
+  const edit=async(object,text)=>{await page.getByRole('button',{name:'Edit PDF',exact:true}).click();await page.locator(`[data-object-id="${object.id}"]`).click();await page.waitForTimeout(100);const before=await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).previewGeneration);
+    await page.getByRole('textbox',{name:'Edit PDF text',exact:true}).fill(text);
+    await page.waitForTimeout(400);
+    assert.equal(await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).previewGeneration),before,'typing must not regenerate the PDF');
+    await page.getByRole('button',{name:'Finish text edit',exact:true}).click();
+    const temporary=page.locator(`[data-object-id="${object.id}"] .studio-pdf-edited-source-segment`);
+    if(await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).previewBusy())) {
+      assert.equal(await temporary.evaluate(el=>getComputedStyle(el).whiteSpace),'pre-wrap');
+      assert(await temporary.isVisible(),'replacement text must remain visible during rendering');
+    }
+    await preview();};
   const exportPdf=async(name)=>{const download=page.waitForEvent('download',{timeout:180000});await page.getByRole('button',{name:'Export PDF',exact:true}).click();await(await download).saveAs(path.join(out,name+'.pdf'));};
+  const testTable=async()=>{
+    await page.goto('http://127.0.0.1:4930/studio');
+    await page.locator('input[type=file][accept*="pdf"]').first().setInputFiles(path.join(root,'regression-fixtures/studio/text-table.pdf'));
+    await page.waitForFunction(()=>window.ng?.getComponent(document.querySelector('app-studio-canvas'))?.facade.hasDocument());
+    const second=await state();const cells=second.filter(o=>o.pdfText?.tableId).sort((a,b)=>a.pdfText.tableOrder-b.pdfText.tableOrder);
+    assert.equal(cells.length,16,'native table must have 16 independent cells');
+    await page.getByRole('button',{name:'Edit PDF',exact:true}).click();
+    await page.locator(`[data-object-id="${cells[0].id}"]`).click();
+    await page.getByRole('textbox',{name:'Edit PDF text',exact:true}).fill('42');
+    await page.getByRole('textbox',{name:'Edit PDF text',exact:true}).press('Tab');
+    await page.waitForFunction(id=>document.querySelector('textarea.studio-text-editor')?.dataset.editingObjectId===id,cells[1].id);
+    await page.getByRole('textbox',{name:'Edit PDF text',exact:true}).press('Shift+Tab');
+    await page.waitForFunction(id=>document.querySelector('textarea.studio-text-editor')?.dataset.editingObjectId===id,cells[0].id);
+    assert.equal(await page.getByRole('textbox',{name:'Edit PDF text',exact:true}).inputValue(),'42');
+    await page.getByRole('button',{name:'Finish text edit',exact:true}).click();await preview();
+    await exportPdf('text-table');
+    await page.screenshot({path:path.join(out,'text-table.png'),fullPage:true});
+    console.log('TABLE PASSED');
+  };
   for(const [name,file] of samples){
    await page.goto('http://127.0.0.1:4930/studio');
    await page.locator('input[type=file][accept*="pdf"]').first().setInputFiles(path.resolve(file));
@@ -44,7 +73,7 @@ const canvas=()=>ng.getComponent(document.querySelector('app-studio-canvas'));
     await exportPdf('large-text');
    }
    const image=objects.filter(o=>o.pdfImage).sort((a,b)=>b.bounds.width*b.bounds.height-a.bounds.width*a.bounds.height)[0];assert(image,'source image missing');
-   await page.getByRole('button',{name:'Edit PDF Image',exact:true}).click();
+   await page.getByRole('button',{name:'Edit PDF',exact:true}).click();
    const chooser=page.waitForEvent('filechooser');await page.locator(`[data-object-id="${image.id}"]`).click({position:{x:5,y:5}});await(await chooser).setFiles(path.join(root,'regression-fixtures/studio/oriented.jpg'));await preview();
    const replaced=(await state()).find(o=>o.id===image.id);assert.equal(replaced.image.naturalWidth,160);assert.equal(replaced.image.naturalHeight,320);
    for(const mode of ['fill','stretch','fit']){await page.evaluate(({id,mode})=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.updatePdfImageFitMode(id,mode),{id:image.id,mode});await preview();}
@@ -76,8 +105,24 @@ const canvas=()=>ng.getComponent(document.querySelector('app-studio-canvas'));
     await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.goToPage(2));
     const second=await state();const text=second.find(o=>o.pdfText&&o.text.length>12);assert(text);await edit(text,'Second page editing works.');await exportPdf('resume-two-pages');
    }
+   // Completed page previews must survive navigation without another export.
+   const cachedPage=await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.currentPage());
+   const cachedImage=await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).committedPreview());
+   await page.evaluate(()=>{const c=ng.getComponent(document.querySelector('app-studio-canvas'));const original=c.previewExporter.exportTextObjects.bind(c.previewExporter);c.__previewCalls=0;c.previewExporter.exportTextObjects=(...args)=>{c.__previewCalls++;return original(...args)};c.facade.goToPage(c.facade.currentPage()===1?2:1)});
+   await state();await page.waitForTimeout(500);
+   const calls=await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).__previewCalls);
+   await page.evaluate(number=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.goToPage(number),cachedPage);
+   await state();await page.waitForTimeout(500);
+   assert.equal(await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).__previewCalls),calls,'returning to a cached page must not export again');
+   assert.equal(await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).committedPreview()),cachedImage);
+   if(name==='large'){
+    await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.goToPage(2));
+    const sampleSecond=await state();
+    assert.equal(sampleSecond.filter(o=>o.pdfText?.tableId).length,0,'sample table numbers are raster images');
+   }
    console.log(name.toUpperCase(),'PASSED');
   }
+  if(samples.some(([name])=>name==='large')||process.env.STUDIO_SAMPLE==='table')await testTable();
   assert.deepEqual(errors,[]);fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({passed:true,samples:samples.map(s=>s[0]),browserErrors:errors},null,2));
  }finally{await browser?.close();server.kill('SIGKILL');}
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -698,6 +698,7 @@ export class StudioRightSidebar {
   restoreOriginalPdfText(): void {
     const object = this.selectedObject();
     if (object?.type === 'text' && object.pdfText) {
+      this.facade.flushTextDraft?.();
       this.facade.restoreOriginalPdfText(object.id);
     }
   }

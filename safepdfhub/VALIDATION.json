@@ -1,8 +1,8 @@
 {
   "checked_on": "2026-10-06",
   "unit_tests": {
-    "suites_passed": 8,
-    "tests_passed": 44
+    "suites_passed": 10,
+    "tests_passed": 55
   },
   "application_typecheck": "passed",
   "production_build": "passed",
@@ -22,5 +22,19 @@
   "resume_vacated_line_dark_pixels": 0,
   "limitations_document": "STUDIO_FIXES.md",
   "inspector_single_undo": "passed",
-  "pointer_drag_source_geometry": "passed"
+  "pointer_drag_source_geometry": "passed",
+  "typing_without_pdf_regeneration": "passed on both supplied PDFs",
+  "cached_page_return_without_export": "passed on both supplied PDFs",
+  "pending_replacement_layer_visible_and_wrapped": "passed",
+  "unified_edit_pdf_text_and_image": "passed",
+  "native_table_cells_tab_shift_tab_export": "passed on synthetic 4 by 4 native-text fixture",
+  "source_parse_reuse_and_rotation_isolation": "passed",
+  "sample_table_content": "page 2 values are raster images; OCR not implemented",
+  "indexed_text_open_without_render_wait": "passed; unresolved render promise does not block editor opening",
+  "text_box_numeric_and_pointer_resize": "passed in Edit PDF mode",
+  "text_resize_persistence_and_undo_redo": "passed",
+  "live_sidebar_draft": "passed; read-only during inline editing",
+  "restore_original_text_geometry": "passed",
+  "resized_heading_export_font_size_pt": 10.202573776245117,
+  "cold_start_limit": "Initial PDF analysis remains asynchronous; status is visible until ready"
 }

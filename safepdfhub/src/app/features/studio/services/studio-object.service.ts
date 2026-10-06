@@ -178,6 +178,8 @@ export class StudioObjectService {
             displayRotation: block.displayRotation,
             lineHeight: block.lineHeight,
             sourceFontName: block.sourceFontName,
+            tableId: block.tableId,
+            tableOrder: block.tableOrder,
         sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
             sourceFontCssFamily: block.sourceFontCssFamily,
             sourceFontWeight: block.fontWeight as StudioTextFontWeight,
@@ -200,11 +202,21 @@ export class StudioObjectService {
             sourceLines: block.sourceLines, sourceRuns: block.sourceRuns
           };
           const sourceBounds = this.resolvePdfSourceTextBounds(block);
+          let destinationBounds = currentSource.sourceBounds ? existing.bounds : sourceBounds;
+          if (currentSource.sourceBounds) {
+            const rotation = (((block.displayRotation ?? 0) - (currentSource.displayRotation ?? 0)) % 360 + 360) % 360;
+            const { x, y } = existing.bounds;
+            const [nextX, nextY] = rotation === 90 ? [1-y,x] : rotation === 180 ? [1-x,1-y]
+              : rotation === 270 ? [y,1-x] : [x,y];
+            destinationBounds = { x: nextX, y: nextY,
+              width: existing.bounds.width * (currentSource.pageWidthPdf ?? block.pageWidthPdf) / block.pageWidthPdf,
+              height: existing.bounds.height * (currentSource.pageHeightPdf ?? block.pageHeightPdf) / block.pageHeightPdf };
+          }
           const refreshed: StudioObject = {
             ...existing,
             pageNumber: block.pageNumber,
-            bounds: sourceBounds,
-            pdfText: refreshedSource,
+            bounds: destinationBounds,
+            pdfText: currentSource.sourceBounds ? { ...refreshedSource, sourceBounds } : refreshedSource,
             textStyle: existing.textStyle
               ? {
                   ...existing.textStyle,
@@ -239,6 +251,8 @@ export class StudioObjectService {
             displayRotation: block.displayRotation,
         lineHeight: block.lineHeight,
         sourceFontName: block.sourceFontName,
+            tableId: block.tableId,
+            tableOrder: block.tableOrder,
         sourceFontFamily: block.sourceFontFamily ?? block.fontFamily,
         sourceFontCssFamily: block.sourceFontCssFamily,
         sourceFontWeight: block.fontWeight as StudioTextFontWeight,
@@ -357,7 +371,8 @@ export class StudioObjectService {
     const updated: StudioObject = {
       ...object,
       text: object.pdfText.originalText,
-      pdfText: { ...object.pdfText, edited: false }
+      bounds: object.pdfText.sourceBounds ?? object.bounds,
+      pdfText: { ...object.pdfText, sourceBounds: undefined, edited: false }
     };
     this.objects.set(objectId, updated);
     this.touch();
@@ -1115,13 +1130,18 @@ export class StudioObjectService {
                 bounds: normalizedBounds
               };
 
+    const destination = object.pdfText && JSON.stringify(object.bounds) !== JSON.stringify(normalizedBounds)
+      ? { ...updated, pdfText: { ...object.pdfText, edited: true,
+          sourceBounds: object.pdfText.sourceBounds ?? { ...object.bounds }, fitMode: 'auto' as const } }
+      : updated;
+
     this.objects.set(
       objectId,
-      updated
+      destination
     );
     this.touch();
 
-    return this.cloneObject(updated);
+    return this.cloneObject(destination);
   }
 
   updateText(

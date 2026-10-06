@@ -91,15 +91,8 @@ export class StudioToolbar {
 
     {
       id: 'edit-pdf-text',
-      label: 'Edit PDF Text',
+      label: 'Edit PDF',
       shortcut: 'E',
-      kind: 'interaction'
-    },
-
-    {
-      id: 'edit-pdf-image',
-      label: 'Edit PDF Image',
-      shortcut: 'I',
       kind: 'interaction'
     },
 

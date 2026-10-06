@@ -59,7 +59,12 @@ export interface StudioPdfTextSource {
   /** Source line-height ratio when known. */
   readonly lineHeight?: number;
   /** Human-readable family recovered from the actual embedded PDF font program. */
+  /** Original selection region, retained when the replacement is resized or moved. */
+  readonly sourceBounds?: StudioObjectBounds;
   readonly sourceFontName?: string | null;
+  /** Conservatively detected aligned table cells; navigation order is row-major. */
+  readonly tableId?: string;
+  readonly tableOrder?: number;
   readonly sourceFontFamily?: string | null;
   /**
    * Exact PDF.js-loaded font face used to render the source glyphs in the

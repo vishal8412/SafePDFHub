@@ -34,6 +34,9 @@ export interface PdfExistingTextBlock {
   readonly fontFamily: string | null;
   /** Human-readable family recovered from the actual embedded PDF font program. */
   readonly sourceFontName?: string | null;
+  /** Conservatively detected aligned table cells; navigation order is row-major. */
+  readonly tableId?: string;
+  readonly tableOrder?: number;
   readonly sourceFontFamily: string | null;
   /**
    * Exact PDF.js loaded font family used by the browser renderer.

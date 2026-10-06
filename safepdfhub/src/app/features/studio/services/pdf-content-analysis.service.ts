@@ -109,11 +109,11 @@ export class PdfContentAnalysisService {
     this.patchStatus('analyzing', null);
 
     try {
+      const originalsReady = this.originalFonts(document.file, pageNumber);
       const page = await getPage(pageNumber);
       const viewport = page.getViewport({ scale: 1 / (page.userUnit || 1), rotation: 0 });
-      const textContent = await page.getTextContent();
-      const [operatorList, pdfjs] = await Promise.all([
-        page.getOperatorList(),
+      const [textContent, operatorList, pdfjs] = await Promise.all([
+        page.getTextContent(), page.getOperatorList(),
         import('pdfjs-dist')
       ]);
       const sourceTextColors = this.extractTextFillColors(operatorList, pdfjs,
@@ -237,7 +237,7 @@ export class PdfContentAnalysisService {
        * from TextStyle.fontFamily.
        */
       if (this.activeDocumentId !== document.id) return null;
-      const originals = await this.originalFonts(document.file,pageNumber);
+      const originals = await originalsReady;
       const enrichedTextBlocks = await Promise.all(textBlocks.map(async block => {
         const loadedFont =
           this.resolveLoadedFont(page, block.fontName);
@@ -477,12 +477,52 @@ export class PdfContentAnalysisService {
   }
 
   private groupLinesIntoParagraphs(lines: readonly PdfExistingTextBlock[]): PdfExistingTextBlock[] {
+    // Three or more short, aligned columns repeated on adjacent rows are
+    // a conservative table signal. Keep ordinary two-column prose unchanged.
+    const rows: PdfExistingTextBlock[][] = [];
+    for (const line of lines) {
+      let row = rows.find(row => Math.abs(row[0].baselineYPdf - line.baselineYPdf) < line.fontSizePdf * .25);
+      if (!row) rows.push(row = []);
+      row.push(line);
+    }
+    rows.sort((a, b) => b[0].baselineYPdf - a[0].baselineYPdf);
+    rows.forEach(row => row.sort((a, b) => a.baselineXPdf - b.baselineXPdf));
+    const cells = new Map<string, { tableId: string; tableOrder: number; widthPdf: number }>();
+    const addRow = (row: PdfExistingTextBlock[], tableId: string, start: number) => {
+      row.forEach((line, column) => {
+        const spacing = column < row.length - 1
+          ? row[column + 1].baselineXPdf - line.baselineXPdf
+          : line.baselineXPdf - row[column - 1].baselineXPdf;
+        const widthPdf = Math.max(line.textWidthPdf, Math.min(spacing - line.fontSizePdf,
+          line.pageWidthPdf - line.baselineXPdf));
+        cells.set(line.id, { tableId, tableOrder: start + column, widthPdf });
+      });
+      return start + row.length;
+    };
+    let tableId = '', order = 0;
+    for (let index = 1; index < rows.length; index++) {
+      const previous = rows[index - 1], row = rows[index];
+      const size = row[0].fontSizePdf;
+      const gap = previous[0].baselineYPdf - row[0].baselineYPdf;
+      const aligned = row.length >= 3 && row.length === previous.length && gap > size * .8 && gap < size * 4
+        && row.every((line, column) => Math.abs(line.baselineXPdf - previous[column].baselineXPdf) < size * .5
+          && Math.abs(line.rotation) < .1 && line.textWidthPdf < size * 12 && previous[column].textWidthPdf < size * 12);
+      if (!aligned) { tableId = ''; continue; }
+      if (!tableId) {
+        tableId = `table-${previous[0].id}`;
+        order = 0;
+        order = addRow(previous, tableId, order);
+      }
+      order = addRow(row, tableId, order);
+    }
+    lines = lines.map(line => ({ ...line, tableId: cells.get(line.id)?.tableId, tableOrder: cells.get(line.id)?.tableOrder }));
     const groups: PdfExistingTextBlock[][] = [];
     const isListStart = (text: string) => /^\s*(?:[•●▪◦]|[-–]\s|\d+[.)]\s)/u.test(text);
     for (const line of lines) {
       // A row in the other column must not interrupt this paragraph.
       const candidates = groups.filter(group => {
         const first = group[0], last = group[group.length - 1];
+        if (line.tableId || last.tableId) return false;
         const size = line.fontSizePdf;
         const gap = last.baselineYPdf - line.baselineYPdf;
         if (line.pageNumber !== last.pageNumber || Math.abs(line.rotation) >= .1 || Math.abs(last.rotation) >= .1
@@ -510,8 +550,8 @@ export class PdfContentAnalysisService {
       const leftPdf = Math.min(...group.map(line => line.baselineXPdf));
       return { ...first,
         text: group.length === 1 ? first.text : group.map(line => line.text.trim()).join(' '),
-        x, y, width: right - x, height: bottom - y,
-        textWidthPdf: (right - x) * first.pageWidthPdf,
+        x, y, width: cells.has(first.id) ? cells.get(first.id)!.widthPdf / first.pageWidthPdf : right - x, height: bottom - y,
+        textWidthPdf: cells.get(first.id)?.widthPdf ?? (right - x) * first.pageWidthPdf,
         textHeightPdf: (bottom - y) * first.pageHeightPdf,
         baselineXPdf: leftPdf,
         transform: [first.transform[0], first.transform[1], first.transform[2], first.transform[3], leftPdf, first.transform[5]] as PdfTextTransform,
@@ -1054,7 +1094,7 @@ export class PdfContentAnalysisService {
           if (this.activeDocumentId !== documentId) return null;
           fontSet.add(face);
           this.registeredFontFaces.add(face);
-          await document.fonts.ready;
+
 
           if (document.fonts.check(`${italic ? 'italic ' : ''}${weight} 12px \"${family}\"`)) {
             return family;
@@ -1068,7 +1108,7 @@ export class PdfContentAnalysisService {
 
         // No font bytes were exposed by PDF.js. In this rare fallback case use
         // its own loaded family rather than inventing a generic font.
-        await document.fonts.ready;
+
         return originalFamily;
       } catch {
         // If direct FontFace registration fails for an unusual PDF font format,

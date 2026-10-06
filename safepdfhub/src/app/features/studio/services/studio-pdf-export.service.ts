@@ -1,3 +1,4 @@
+import { pdfTextDestination } from './studio-pdf-text-geometry';
 import { collectPageFontPrograms, normalizePdfFontName } from './pdf-source-fonts';
 import { visibleStudioSources } from './studio-source-visibility';
 import { composeStudioPage, type SourceRegion, type PageFlow } from './studio-page-composition';
@@ -64,6 +65,8 @@ export class StudioPdfExportService {
   private readonly qpdf = inject(QpdfWasmPrototypeService);
   private readonly signingText = inject(SigningPdfTextService);
 
+  private readonly previewDocuments = new WeakMap<File, Promise<PDFDocument>>();
+
   /** Prepare a bounded, single-page preview input once per logical page.
    * Full-document export always continues to use the original uploaded file. */
   async createPreviewFile(sourceFile: File, logicalPage: StudioPage): Promise<File> {
@@ -71,7 +74,16 @@ export class StudioPdfExportService {
     if (logicalPage.kind === 'blank') {
       preview.addPage([logicalPage.blankWidth ?? 595.28, logicalPage.blankHeight ?? 841.89]);
     } else {
-      const original = await PDFDocument.load(await sourceFile.arrayBuffer(), {updateMetadata: false});
+      // Files are immutable. Reuse the read-only source parse across page
+      // previews; copies are edited independently, never this source document.
+      let pending = this.previewDocuments.get(sourceFile);
+      if (!pending) {
+        pending = sourceFile.arrayBuffer().then(bytes => PDFDocument.load(bytes, { updateMetadata: false }));
+        this.previewDocuments.set(sourceFile, pending);
+      }
+      let original: PDFDocument;
+      try { original = await pending; }
+      catch (error) { this.previewDocuments.delete(sourceFile); throw error; }
       const [page] = await preview.copyPages(original, [(logicalPage.sourcePageNumber ?? 1) - 1]);
       preview.addPage(page);
     }
@@ -262,7 +274,8 @@ export class StudioPdfExportService {
       if(object.pdfText?.edited) {
         const src=object.pdfText;
         const font=await this.getFont(pdfDocument,src.sourceFontWeight??400,src.sourceFontStyle??'normal',this.resolvePdfTextExportFamily(src.sourceFontFamily,'Helvetica'),fontCache,sourceFontBytes.get(this.getSourceFontKey(object,manifest)??'')??null,object.text??'',src.sourceFontFamily??'');
-        const fit=this.resolveTextFit(object,font,src.fontSizePdf??12,src.textWidthPdf??100,src.textHeightPdf??12,page.getHeight());
+        const destination = pdfTextDestination(object, page.getRotation().angle)!;
+        const fit=this.resolveTextFit(object,font,src.fontSizePdf??12,destination.textWidthPdf??100,destination.textHeightPdf??12,page.getHeight());
         textFits.set(object.id,fit);
         if(Math.abs(src.rotation??0)<.1) {
           for(const line of src.sourceLines??[{transform:src.transform,width:src.textWidthPdf??100,height:src.textHeightPdf??12}]) {
@@ -533,12 +546,13 @@ export class StudioPdfExportService {
           sourceText?.sourceFontFamily ?? '',
         );
 
+        const destination = pdfTextDestination(object, rotation);
         const sourceBoxWidth =
         object.type === 'text' && object.pdfText?.edited &&
         typeof object.pdfText.textWidthPdf === 'number' &&
         Number.isFinite(object.pdfText.textWidthPdf) &&
         object.pdfText.textWidthPdf > 0
-          ? object.pdfText.textWidthPdf
+          ? destination?.textWidthPdf ?? object.pdfText.textWidthPdf
           : null;
       const boxWidth = Math.max(
         1,
@@ -550,7 +564,7 @@ export class StudioPdfExportService {
         typeof object.pdfText.textHeightPdf === 'number' &&
         Number.isFinite(object.pdfText.textHeightPdf) &&
         object.pdfText.textHeightPdf > 0
-          ? object.pdfText.textHeightPdf
+          ? destination?.textHeightPdf ?? object.pdfText.textHeightPdf
           : null;
       const boxHeight = Math.max(1, sourceBoxHeight ?? object.bounds.height * displayHeight);
       const fit = this.resolveTextFit(
@@ -2133,7 +2147,7 @@ export class StudioPdfExportService {
     rotation: number,
   ): void {
     if (object.type === 'text' && object.pdfText?.edited) {
-      this.drawEditedPdfTextFromSourceGeometry(page, object, lines, font, fontSize, lineHeight);
+      this.drawEditedPdfTextFromSourceGeometry(page, { ...object, pdfText: pdfTextDestination(object, rotation) }, lines, font, fontSize, lineHeight);
       return;
     }
     const boxX =
@@ -2387,7 +2401,7 @@ export class StudioPdfExportService {
       if (fits(mid).fits) { best = mid; low = mid; } else high = mid;
     }
     const current = fits(best);
-    if (!current.fits) throw new Error('This replacement is too long for the original text area. Shorten it or choose Keep original size and review the layout.');
+    if (!current.fits) throw new Error('This replacement is too long for the original text area. Drag the text box corners to make more room, or shorten the replacement.');
     return { fontSize: best, lineHeight: current.lineHeight, lines: current.lines };
   }
 

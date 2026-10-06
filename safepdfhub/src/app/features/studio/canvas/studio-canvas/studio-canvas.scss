@@ -1665,8 +1665,9 @@
   margin: 0;
   padding: 0;
   border: 0;
-  white-space: pre;
-  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
   line-height: inherit;
   font-family: inherit;
   font-size: inherit;
@@ -1792,3 +1793,13 @@
 @font-face {font-family:StudioFallback;src:url('/assets/fonts/DejaVuSans.ttf') format('truetype');font-display:swap;}
 
 .studio-preview-status {position:absolute;right:8px;top:8px;z-index:12;padding:4px 8px;border-radius:4px;background:#e8f9f7;color:#145a54;font-size:12px;pointer-events:none;}
+
+.studio-pdf-text-source-cover { position: absolute; pointer-events: none; transform-origin: top left; }
+
+/* Keep corner controls above the active textarea without intercepting typing. */
+.studio-selection-box--editing {
+  z-index: 31;
+  pointer-events: none;
+  background: transparent;
+}
+.studio-text-toolbar { width: max-content; flex-wrap: wrap; }
