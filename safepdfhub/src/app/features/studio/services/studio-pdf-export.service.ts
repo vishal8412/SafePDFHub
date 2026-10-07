@@ -1,3 +1,4 @@
+import { pdfFontSize, textFontWeight, textFontStyle, pdfFontFaceChanged } from './studio-text-typography';
 import { pdfTextDestination } from './studio-pdf-text-geometry';
 import { collectPageFontPrograms, normalizePdfFontName } from './pdf-source-fonts';
 import { visibleStudioSources } from './studio-source-visibility';
@@ -273,9 +274,9 @@ export class StudioPdfExportService {
       pageHoles.set(object.pageNumber,holes);
       if(object.pdfText?.edited) {
         const src=object.pdfText;
-        const font=await this.getFont(pdfDocument,src.sourceFontWeight??400,src.sourceFontStyle??'normal',this.resolvePdfTextExportFamily(src.sourceFontFamily,'Helvetica'),fontCache,sourceFontBytes.get(this.getSourceFontKey(object,manifest)??'')??null,object.text??'',src.sourceFontFamily??'');
+        const font=await this.getFont(pdfDocument,textFontWeight(object),textFontStyle(object),this.resolvePdfTextExportFamily(src.sourceFontFamily,'Helvetica'),fontCache,pdfFontFaceChanged(object)?null:(sourceFontBytes.get(this.getSourceFontKey(object,manifest)??'')??null),object.text??'',src.sourceFontFamily??'');
         const destination = pdfTextDestination(object, page.getRotation().angle)!;
-        const fit=this.resolveTextFit(object,font,src.fontSizePdf??12,destination.textWidthPdf??100,destination.textHeightPdf??12,page.getHeight());
+        const fit=this.resolveTextFit(object,font,pdfFontSize(src)??12,destination.textWidthPdf??100,destination.textHeightPdf??12,page.getHeight());
         textFits.set(object.id,fit);
         if(Math.abs(src.rotation??0)<.1) {
           for(const line of src.sourceLines??[{transform:src.transform,width:src.textWidthPdf??100,height:src.textHeightPdf??12}]) {
@@ -537,11 +538,11 @@ export class StudioPdfExportService {
       const font =
         await this.getFont(
           pdfDocument,
-          sourceText?.sourceFontWeight ?? style?.fontWeight ?? 400,
-          sourceText?.sourceFontStyle ?? style?.fontStyle ?? 'normal',
+          textFontWeight(object),
+          textFontStyle(object),
           this.resolvePdfTextExportFamily(sourceText?.sourceFontFamily ?? sourceText?.fontName, style?.fontFamily ?? 'Helvetica'),
           fontCache,
-          sourceFontBytesForObject,
+          pdfFontFaceChanged(object) ? null : sourceFontBytesForObject,
           object.text ?? '',
           sourceText?.sourceFontFamily ?? '',
         );
@@ -1812,7 +1813,7 @@ export class StudioPdfExportService {
       }
     }
 
-    if (/calibri/i.test(sourceFamily)) {
+    if (/calibri|carlito/i.test(sourceFamily)) {
       const variant=fontWeight>=700 ? (fontStyle==='italic'?'BoldItalic':'Bold') : (fontStyle==='italic'?'Italic':'Regular');
       const fallbackKey=`Carlito-${variant}`;
       let compatible=cache.get(fallbackKey);
@@ -1849,10 +1850,11 @@ export class StudioPdfExportService {
       );
 
     if (!this.fontSupportsText(embedded, requiredText)) {
-      const fallbackKey = 'unicode-fallback';
+      const variant = fontWeight >= 700 ? (fontStyle === 'italic' ? '-BoldOblique' : '-Bold') : (fontStyle === 'italic' ? '-Oblique' : '');
+      const fallbackKey = `DejaVuSans${variant}`;
       let fallback = cache.get(fallbackKey);
       if (!fallback) {
-        const response = await fetch('/assets/fonts/DejaVuSans.ttf');
+        const response = await fetch(`/assets/fonts/${fallbackKey}.ttf`);
         if (!response.ok) throw new Error('Unable to load the replacement text font. Please retry.');
         fallback = await pdfDocument.embedFont(await response.arrayBuffer(), { subset: true });
         cache.set(fallbackKey, fallback);
@@ -2252,8 +2254,13 @@ export class StudioPdfExportService {
     for (let index = 0; index < lines.length; index++) {
       const line = lines[index];
       const lineWidth = this.textWidthWithTracking(line, font, fontSize, tracking) * scaleX;
-      let x = e;
-      let y = f;
+      // A chosen point size grows from the box's top edge, as the live editor does.
+      // Original baselines and erase metrics remain unchanged in the source object.
+      const originalSize = source.fontSizePdf ?? fontSize;
+      const ascentShift = source.replacementFontSizePdf !== undefined && originalSize > 0
+        ? (source.ascentPdf ?? originalSize * 0.8) * (fontSize / originalSize - 1) : 0;
+      let x = e - vx * ascentShift;
+      let y = f - vy * ascentShift;
       const alignment = object.textStyle?.textAlign ?? 'left';
       if (alignment === 'center') {
         const offset = (sourceWidth - lineWidth) / 2;
@@ -2374,7 +2381,7 @@ export class StudioPdfExportService {
     const style = object.textStyle;
     const tracking = style?.letterSpacing ?? 0;
     const sourceLineHeight = object.pdfText?.lineHeightPdf
-      ? Math.max(0.9, object.pdfText.lineHeightPdf / Math.max(requestedSize, 0.1))
+      ? Math.max(0.9, object.pdfText.lineHeightPdf / Math.max(object.pdfText.fontSizePdf ?? requestedSize, 0.1))
       : object.pdfText?.lineHeight
         ? Math.max(0.9, (object.pdfText.lineHeight * displayHeight) / Math.max(requestedSize, 0.1))
         : (style?.lineHeight ?? 1.2);
@@ -2384,12 +2391,9 @@ export class StudioPdfExportService {
       const lineHeight = size * sourceLineHeight;
       return { lines, lineHeight, fits: (lines.length - 1) * lineHeight + size <= boxHeight + size * 0.15 && lines.every(line => this.textWidthWithTracking(line, font, size, tracking) * this.resolveSourceScaleX(object) <= boxWidth + 0.01) };
     };
-    if (mode === 'flow') {
+    if (mode === 'flow' || mode === 'original') {
       const full=fits(requestedSize);
       return {fontSize:requestedSize,lineHeight:full.lineHeight,lines:full.lines};
-    }
-    if (mode !== 'auto') {
-      return { fontSize: requestedSize, lineHeight: requestedSize * sourceLineHeight, lines: (object.text ?? '').split(/\r?\n/) };
     }
     const fullSize = fits(requestedSize);
     if (fullSize.fits) return { fontSize: requestedSize, lineHeight: fullSize.lineHeight, lines: fullSize.lines };
@@ -2516,9 +2520,9 @@ export class StudioPdfExportService {
     fallbackNormalizedRatio: number,
     displayPageHeight: number,
   ): number {
-    const sourceSize = sourceText?.fontSizePdf;
+    const sourceSize = pdfFontSize(sourceText);
     if (typeof sourceSize === 'number' && Number.isFinite(sourceSize) && sourceSize > 0) {
-      return Math.max(0.01, Math.min(500, sourceSize));
+      return Math.max(0.01, Math.min(512, sourceSize));
     }
     return this.resolveFontSize(fallbackNormalizedRatio, displayPageHeight);
   }

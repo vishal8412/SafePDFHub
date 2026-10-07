@@ -1,3 +1,4 @@
+import { pdfFontSize, textFontWeight, textFontStyle } from './studio-text-typography';
 import {
   Injectable,
   signal
@@ -220,12 +221,12 @@ export class StudioObjectService {
             textStyle: existing.textStyle
               ? {
                   ...existing.textStyle,
-                  fontWeight: currentSource.typographyLocked
+                  fontWeight: currentSource.replacementFontWeight ?? (currentSource.typographyLocked
                     ? (block.fontWeight >= 600 ? 700 : 400)
-                    : existing.textStyle.fontWeight,
-                  fontStyle: currentSource.typographyLocked
+                    : existing.textStyle.fontWeight),
+                  fontStyle: currentSource.replacementFontStyle ?? (currentSource.typographyLocked
                     ? block.fontStyle
-                    : existing.textStyle.fontStyle
+                    : existing.textStyle.fontStyle)
                 }
               : existing.textStyle
           };
@@ -372,7 +373,12 @@ export class StudioObjectService {
       ...object,
       text: object.pdfText.originalText,
       bounds: object.pdfText.sourceBounds ?? object.bounds,
-      pdfText: { ...object.pdfText, sourceBounds: undefined, edited: false }
+      textStyle: object.textStyle ? { ...object.textStyle,
+        fontSize: (object.pdfText.fontSizePdf ?? 12) / (object.pdfText.pageHeightPdf ?? 800),
+        fontWeight: object.pdfText.sourceFontWeight ?? 400,
+        fontStyle: object.pdfText.sourceFontStyle ?? 'normal', textAlign: 'left' } : object.textStyle,
+      pdfText: { ...object.pdfText, sourceBounds: undefined, edited: false,
+        replacementFontSizePdf: undefined, replacementFontWeight: undefined, replacementFontStyle: undefined }
     };
     this.objects.set(objectId, updated);
     this.touch();
@@ -1211,21 +1217,21 @@ export class StudioObjectService {
       object.pdfText.typographyLocked !== false;
 
     const nextStyle: StudioTextStyle = {
-      fontSize: sourceLocked
+      fontSize: sourceLocked && style.fontSize === undefined
         ? currentStyle.fontSize
         : this.clamp(
             style.fontSize ??
               currentStyle.fontSize,
-            0.006,
-            0.12
+            object.pdfText ? 1 / (object.pdfText.pageHeightPdf ?? 800) : 0.006,
+            object.pdfText ? 512 / (object.pdfText.pageHeightPdf ?? 800) : 0.12
           ),
-      fontWeight: sourceLocked
+      fontWeight: sourceLocked && style.fontWeight === undefined
         ? currentStyle.fontWeight
         : this.normalizeFontWeight(
             style.fontWeight ??
               currentStyle.fontWeight
           ),
-      fontStyle: sourceLocked
+      fontStyle: sourceLocked && style.fontStyle === undefined
         ? currentStyle.fontStyle
         : this.normalizeFontStyle(
             style.fontStyle ??
@@ -1277,7 +1283,15 @@ export class StudioObjectService {
       ...object,
       bounds: adjustedBounds,
       textStyle: nextStyle,
-      ...(object.pdfText ? { pdfText: { ...object.pdfText, edited: object.pdfText.edited || nextStyle.textAlign !== currentStyle.textAlign } } : {})
+      ...(object.pdfText ? { pdfText: { ...object.pdfText,
+        ...(style.fontSize !== undefined ? { replacementFontSizePdf: nextStyle.fontSize * (object.pdfText.pageHeightPdf ?? 800) } : {}),
+        ...(style.fontWeight !== undefined ? { replacementFontWeight: nextStyle.fontWeight } : {}),
+        ...(style.fontStyle !== undefined ? { replacementFontStyle: nextStyle.fontStyle } : {}),
+        edited: object.pdfText.edited || JSON.stringify(nextStyle) !== JSON.stringify(currentStyle)
+          || (style.fontWeight !== undefined && nextStyle.fontWeight !== textFontWeight(object))
+          || (style.fontStyle !== undefined && nextStyle.fontStyle !== textFontStyle(object))
+          || (style.fontSize !== undefined && Math.abs(nextStyle.fontSize * (object.pdfText.pageHeightPdf ?? 800) - (pdfFontSize(object.pdfText) ?? 0)) > 0.0001)
+      } } : {})
     };
 
     this.objects.set(

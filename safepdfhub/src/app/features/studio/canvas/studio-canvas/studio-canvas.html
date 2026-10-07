@@ -178,7 +178,7 @@
                 getObjectFontWeightCss(object)
               "
               [style.font-style]="
-                object.pdfText?.sourceFontStyle ?? object.textStyle?.fontStyle ?? 'normal'
+                getObjectFontStyleCss(object)
               "
               [style.font-synthesis]="
                 object.pdfText ? 'none' : null
@@ -249,6 +249,7 @@
                       [style.width.%]="segment.widthPercent"
                       [style.height.%]="segment.heightPercent"
                       [style.font-size.px]="getPdfOverlayFontSizePx(object)"
+                      [style.overflow]="object.pdfText?.fitMode === 'auto' ? 'hidden' : 'visible'"
                       [style.color]="object.pdfText?.textColor ?? '#000000'"
                       [style.background-color]="object.pdfText?.backgroundColor ?? '#ffffff'"
                     >{{ segment.text }}</span>
@@ -1146,25 +1147,6 @@
       (click)="$event.stopPropagation()"
     >
 
-      @if (editingTextObject.pdfText) {
-        <label class="studio-text-toolbar__size" title="Drag the corner handles or set the text area width">
-          <span>Width (pt)</span>
-          <input type="number" min="1" step="1" aria-label="Text area width"
-            [value]="(editingTextObject.bounds.width * (editingTextObject.pdfText.pageWidthPdf ?? 1)).toFixed(1)"
-            (change)="resizeEditingTextArea('width', $any($event.target).value)">
-        </label>
-        <label class="studio-text-toolbar__size" title="Make the text area taller to fit more lines">
-          <span>Height (pt)</span>
-          <input type="number" min="1" step="1" aria-label="Text area height"
-            [value]="(editingTextObject.bounds.height * (editingTextObject.pdfText.pageHeightPdf ?? 1)).toFixed(1)"
-            (change)="resizeEditingTextArea('height', $any($event.target).value)">
-        </label>
-      }
-
-      @if (editingTextObject.pdfText?.tableId) {
-        <span class="studio-text-toolbar__cell-hint">Table cell · Tab: next · Shift+Tab: previous</span>
-      }
-
       <label
         class="studio-text-toolbar__size"
       >
@@ -1175,10 +1157,9 @@
           min="1"
           max="512"
           step="0.1"
-          [value]="editingTextObject.pdfText?.fontSizePdf ?? editingFontSizeInput"
+          [value]="editingFontSizeInput"
           aria-label="Text size"
-          [disabled]="!!editingTextObject.pdfText"
-          [title]="editingTextObject.pdfText ? 'Source font size is preserved; use Replacement fit to fit longer text.' : 'Text size'"
+          [title]="editingTextObject.pdfText ? 'Font size in PDF points. Fit within text box may reduce the exported size.' : 'Text size'"
           inputmode="numeric"
           autocomplete="off"
           (input)="
@@ -1199,12 +1180,11 @@
         type="button"
         class="studio-text-toolbar__button"
         [class.is-active]="
-          editingTextObject.textStyle?.fontWeight === 700
+          getObjectFontWeightCss(editingTextObject) >= 700
         "
         aria-label="Bold"
-        [disabled]="!!editingTextObject.pdfText"
         [attr.aria-pressed]="
-          editingTextObject.textStyle?.fontWeight === 700
+          getObjectFontWeightCss(editingTextObject) >= 700
         "
         (click)="
           toggleTextBold()
@@ -1217,12 +1197,11 @@
         type="button"
         class="studio-text-toolbar__button"
         [class.is-active]="
-          editingTextObject.textStyle?.fontStyle === 'italic'
+          getObjectFontStyleCss(editingTextObject) === 'italic'
         "
         aria-label="Italic"
-        [disabled]="!!editingTextObject.pdfText"
         [attr.aria-pressed]="
-          editingTextObject.textStyle?.fontStyle === 'italic'
+          getObjectFontStyleCss(editingTextObject) === 'italic'
         "
         (click)="
           toggleTextItalic()
@@ -1310,6 +1289,11 @@
       >
         Done
       </button>
+
+      @if (editingTextObject.pdfText?.tableId) {
+        <span class="studio-text-toolbar__cell-hint">Table cell · Tab: next · Shift+Tab: previous</span>
+      }
+
 
     </div>
 

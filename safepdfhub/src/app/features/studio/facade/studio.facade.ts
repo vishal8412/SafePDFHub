@@ -4034,6 +4034,14 @@ updateTextObject(
   return selection;
 }
 
+restoreTextEdit(object: StudioObject): void {
+  if (!this.hasDocument() || !this.objectService.get(object.id)) return;
+  const before = this.captureHistorySnapshot();
+  this.objectService.add(object);
+  this.state.clearSelection();
+  this.commitHistoryMutation('Cancel text edit', before);
+}
+
 updateTextStyle(
   objectId: string,
   style: Partial<StudioTextStyle>

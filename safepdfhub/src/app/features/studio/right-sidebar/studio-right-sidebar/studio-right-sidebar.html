@@ -190,7 +190,7 @@
               @if (selectedObject()?.pdfText) {
                 <div class="properties__info-card">
                   <span class="properties__info-dot" aria-hidden="true"></span>
-                  <p>Drag the corners or use Width and Height to give your text more room. Text fits inside the chosen area. A compatible font is used if the original font cannot be edited.</p>
+                  <p>Drag the corners to give your text more room. Use Size, Bold and Italic to format the paragraph. A compatible font may be used for a different style.</p>
                 </div>
               }
               @if (selectedObject()?.pdfText) {
@@ -199,12 +199,12 @@
                   <span>Rotation {{ selectedObject()?.pdfText?.rotation ?? 0 }}°</span>
                   @if (selectedObject()?.pdfText?.sourceFontFamily) { <span>Source {{ selectedObject()?.pdfText?.sourceFontFamily }}</span> }
                 </div>
-                <label class="properties__field">
+                <label class="properties__field properties__field--stacked">
                   <span>Replacement fit</span>
-                  <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
-                    <option value="flow">Reflow paragraph at original size</option>
+                  <select aria-label="Replacement fit" [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
+                    <option value="flow">Reflow page at chosen size</option>
                     <option value="auto">Fit within text box</option>
-                    <option value="original">Keep original size</option>
+                    <option value="original">Keep chosen size</option>
                   </select>
                 </label>
                 <label class="properties__field">
@@ -272,7 +272,15 @@
                 </label>
               }
 
-              @if (!selectedObject()?.pdfText) {
+              @if (selectedObject()?.pdfText) {
+                <label class="properties__field">
+                  <span>Font size (pt)</span>
+                  <input type="number" min="1" max="512" step="0.1" aria-label="Replacement font size"
+                    [value]="selectedTextStyle()?.sourceFontSizePt"
+                    (change)="updatePdfFontSize($any($event.target).value)">
+                </label>
+                <p class="properties__field-help">Fit within text box may reduce the chosen size. Enlarge the area or choose Keep chosen size to preserve it.</p>
+              } @else {
                 <label class="properties__field">
                   <span>Font size</span>
                   <input type="number" min="0.5" max="200" step="0.1"
@@ -286,9 +294,9 @@
               </div>
 
               <div class="properties__segmented" aria-label="Text style">
-                <button type="button" [disabled]="!!selectedObject()?.pdfText" [class.is-active]="selectedTextStyle()?.fontWeight === 700"
-                  (click)="updateTextStyle({ fontWeight: selectedTextStyle()?.fontWeight === 700 ? 400 : 700 })">B</button>
-                <button type="button" class="properties__italic" [disabled]="!!selectedObject()?.pdfText" [class.is-active]="selectedTextStyle()?.fontStyle === 'italic'"
+                <button type="button" [class.is-active]="(selectedTextStyle()?.fontWeight ?? 400) >= 700"
+                  (click)="updateTextStyle({ fontWeight: (selectedTextStyle()?.fontWeight ?? 400) >= 700 ? 400 : 700 })">B</button>
+                <button type="button" class="properties__italic" [class.is-active]="selectedTextStyle()?.fontStyle === 'italic'"
                   (click)="updateTextStyle({ fontStyle: selectedTextStyle()?.fontStyle === 'italic' ? 'normal' : 'italic' })">I</button>
               </div>
 
@@ -398,7 +406,7 @@
               <input #imageReplacementInput class="properties__visually-hidden" type="file" accept="image/png,image/jpeg" (change)="onImageReplacementSelected($event)">
               <button type="button" class="properties__secondary-button properties__full-width-button" (click)="imageReplacementInput.click()">Replace image</button>
               @if (selectedObject()?.pdfImage) {
-                <label class="properties__field">
+                <label class="properties__field properties__field--stacked">
                   <span>Replacement fit</span>
                   <select [value]="selectedObject()?.pdfImage?.fitMode ?? 'fit'" (change)="updatePdfImageFitMode($any($event.target).value)">
                     <option value="fit">Fit</option>
@@ -424,12 +432,12 @@
                   <span>Rotation {{ selectedObject()?.pdfText?.rotation ?? 0 }}°</span>
                   @if (selectedObject()?.pdfText?.sourceFontFamily) { <span>Source {{ selectedObject()?.pdfText?.sourceFontFamily }}</span> }
                 </div>
-                <label class="properties__field">
+                <label class="properties__field properties__field--stacked">
                   <span>Replacement fit</span>
-                  <select [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
-                    <option value="flow">Reflow paragraph at original size</option>
+                  <select aria-label="Replacement fit" [value]="selectedObject()?.pdfText?.fitMode ?? 'auto'" (change)="updatePdfTextFidelity({ fitMode: $any($event.target).value })">
+                    <option value="flow">Reflow page at chosen size</option>
                     <option value="auto">Fit within text box</option>
-                    <option value="original">Keep original size</option>
+                    <option value="original">Keep chosen size</option>
                   </select>
                 </label>
                 <label class="properties__field">

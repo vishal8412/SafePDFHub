@@ -1,8 +1,8 @@
 {
   "checked_on": "2026-10-06",
   "unit_tests": {
-    "suites_passed": 10,
-    "tests_passed": 55
+    "suites_passed": 11,
+    "tests_passed": 62
   },
   "application_typecheck": "passed",
   "production_build": "passed",
@@ -16,6 +16,7 @@
   ],
   "large_pdf_pages_retained": 842,
   "unchanged_pages_pixel_identical": [
+    2,
     421,
     842
   ],
@@ -36,5 +37,17 @@
   "live_sidebar_draft": "passed; read-only during inline editing",
   "restore_original_text_geometry": "passed",
   "resized_heading_export_font_size_pt": 10.202573776245117,
-  "cold_start_limit": "Initial PDF analysis remains asynchronous; status is visible until ready"
+  "cold_start_limit": "Initial PDF analysis remains asynchronous; status is visible until ready",
+  "inline_toolbar_geometry_fields_removed": true,
+  "source_text_bold_italic_point_size": "passed in browser and export layout/drawing tests",
+  "paragraph_selection_contains_editor": "passed before and after formatting",
+  "cancel_restores_source_metadata": "passed",
+  "empty_size_preserves_previous_value": "passed",
+  "replacement_fit_dark_style": "passed",
+  "formatted_export_font": "Carlito-Bold",
+  "formatted_export_size_pt": 8,
+  "formatted_export_wrapped_lines": 4,
+  "larger_font_top_anchor": "passed",
+  "source_text_size_note": "Auto-fit can reduce the chosen size; Keep chosen size preserves it and wraps",
+  "validation_scope": "Supplied resume, supplied 842-page PDF, synthetic native-text table; not universal PDF/font/script coverage"
 }

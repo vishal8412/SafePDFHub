@@ -1,3 +1,4 @@
+import { pdfFontSize, textFontWeight, textFontStyle } from '../../services/studio-text-typography';
 import { readStudioImage } from '../../services/studio-image-import';
 import { FormsModule } from '@angular/forms';
 
@@ -117,7 +118,7 @@ export class StudioRightSidebar {
     }
 
     const pdfText = object.pdfText;
-    const sourceSize = pdfText?.fontSizePdf;
+    const sourceSize = pdfFontSize(pdfText);
     const sourceLineHeight =
       typeof pdfText?.fontSizePdf === 'number' &&
       pdfText.fontSizePdf > 0 &&
@@ -128,10 +129,10 @@ export class StudioRightSidebar {
 
     return {
       fontFamily: object.pdfText?.sourceFontFamily ?? object.textStyle?.fontFamily ?? 'Helvetica',
-      fontSize: object.pdfText?.detectedFontSize ?? object.textStyle?.fontSize ?? 0,
+      fontSize: object.textStyle?.fontSize ?? object.pdfText?.detectedFontSize ?? 0,
       sourceFontSizePt: typeof sourceSize === 'number' && Number.isFinite(sourceSize) ? sourceSize : null,
-      fontWeight: object.pdfText?.sourceFontWeight ?? object.textStyle?.fontWeight ?? 400,
-      fontStyle: object.pdfText?.sourceFontStyle ?? object.textStyle?.fontStyle ?? 'normal',
+      fontWeight: textFontWeight(object),
+      fontStyle: textFontStyle(object),
       textAlign: object.textStyle?.textAlign ?? 'left',
       lineHeight: sourceLineHeight && Number.isFinite(sourceLineHeight) ? sourceLineHeight : (object.textStyle?.lineHeight ?? 1.2),
       letterSpacing: object.textStyle?.letterSpacing ?? 0,
@@ -708,6 +709,13 @@ export class StudioRightSidebar {
     if (object?.type === 'text') {
       this.facade.updateTextObject(object.id, value);
     }
+  }
+
+  updatePdfFontSize(value: string): void {
+    const object = this.selectedObject();
+    const size = Number(value);
+    if (!object?.pdfText || !value.trim() || !Number.isFinite(size) || size < 1 || size > 512) return;
+    this.facade.updateTextStyle(object.id, { fontSize: size / (object.pdfText.pageHeightPdf ?? 800) });
   }
 
   updateTextStyle(

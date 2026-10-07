@@ -33,7 +33,7 @@ assert(process.env.STUDIO_RESUME_PDF,'Set STUDIO_RESUME_PDF');
   await editor.press('End');await editor.type(' — Software Engineer');
   await page.waitForTimeout(150);
   assert.equal(await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).previewGeneration),before,'typing must not export');
-  const width=page.getByRole('spinbutton',{name:'Text area width',exact:true});await width.fill('230');await width.press('Tab');
+  const width=page.getByRole('spinbutton',{name:'W',exact:true});await width.fill(String(230/object.pdfText.pageWidthPdf*100));await width.press('Tab');
   await page.waitForFunction(id=>ng.getComponent(document.querySelector('app-studio-canvas')).objectService.get(id).bounds.width>.3,object.id);
   assert.equal(await editor.inputValue(),'Vishal Suryawanshi — Software Engineer');
   // The resize handles must also work without leaving Edit PDF mode.

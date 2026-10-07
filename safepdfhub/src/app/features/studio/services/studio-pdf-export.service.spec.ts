@@ -19,6 +19,41 @@ describe('Studio PDF export regressions', () => {
     ] });
     service = TestBed.inject(StudioPdfExportService);
   });
+  it('uses chosen point size and font face in both the layout and drawing passes', async () => {
+    const doc = await PDFDocument.create(); doc.addPage([600,800]).drawText('Original', {x:60,y:720,size:12});
+    const bytes = await doc.save();
+    const file = { arrayBuffer: async () => bytes.slice().buffer } as File;
+    vi.spyOn(service, 'collectSourceFontBytes').mockResolvedValue(new Map());
+    const fonts = vi.spyOn(service, 'getFont');
+    const fits = vi.spyOn(service, 'resolveTextFit');
+    const object: any = { id:'formatted',type:'text',pageNumber:1,text:'Bold replacement',
+      bounds:{x:.1,y:.1,width:.7,height:.15},
+      textStyle:{fontSize:18/800,fontWeight:700,fontStyle:'italic',fontFamily:'Helvetica',textAlign:'left',lineHeight:1.2,letterSpacing:0,color:'#000000'},
+      pdfText:{originalText:'Original',fontName:'Helvetica',transform:[12,0,0,12,60,720],edited:true,
+        pageWidthPdf:600,pageHeightPdf:800,fontSizePdf:12,textWidthPdf:420,textHeightPdf:120,lineHeightPdf:14.4,
+        sourceFontFamily:'Helvetica',sourceFontWeight:400,sourceFontStyle:'normal',ascentPdf:10,descentPdf:-2,
+        replacementFontSizePdf:18,replacementFontWeight:700,replacementFontStyle:'italic',fitMode:'original'} };
+    const result = await service.exportTextObjects(file,[object],[{id:'one',kind:'source',sourcePageNumber:1,rotation:0}]);
+    expect(result.size).toBeGreaterThan(0);
+    expect(fonts.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const args of fonts.mock.calls) { expect(args[1]).toBe(700);expect(args[2]).toBe('italic');expect(args[5]).toBeNull(); }
+    for (const args of fits.mock.calls) expect(args[2]).toBe(18);
+    expect(service.resolveTextFit(object,await doc.embedFont('Helvetica-BoldOblique'),18,420,120,800).lineHeight).toBeCloseTo(21.6);
+  });
+  it('wraps long paragraphs at the chosen size instead of exporting an unwrapped line', async () => {
+    const doc = await PDFDocument.create(), font = await doc.embedFont('Helvetica');
+    const fit = service.resolveTextFit({text:'A paragraph with enough words to wrap across several lines.',pdfText:{fontSizePdf:12,lineHeightPdf:14.4,fitMode:'original'}},font,18,100,100,800);
+    expect(fit.fontSize).toBe(18);expect(fit.lines.length).toBeGreaterThan(1);
+    expect(fit.lines.join(' ')).toBe('A paragraph with enough words to wrap across several lines.');
+  });
+  it('anchors larger replacement text to the same top edge as the editor', () => {
+    const drawText = vi.fn();
+    const object: any = {textStyle:{textAlign:'left'},pdfText:{transform:[12,0,0,12,60,720],fontSizePdf:12,
+      ascentPdf:10,textWidthPdf:300,replacementFontSizePdf:18}};
+    service.drawEditedPdfTextFromSourceGeometry({drawText},object,['Larger'],{widthOfTextAtSize:()=>40},18,21.6);
+    expect(drawText.mock.calls[0][1].y).toBe(715);
+    expect(object.pdfText.transform[5]).toBe(720);
+  });
   it('parses the immutable source once across distinct page previews', async () => {
     const pdf = await PDFDocument.create();
     pdf.addPage([600,800]); pdf.addPage([300,400]);

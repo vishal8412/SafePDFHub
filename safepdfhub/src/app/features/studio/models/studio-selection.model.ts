@@ -83,6 +83,10 @@ export interface StudioPdfTextSource {
   readonly pageWidthPdf?: number;
   readonly pageHeightPdf?: number;
   readonly fontSizePdf?: number;
+  /** Explicit replacement typography; original metrics remain immutable for erasure. */
+  readonly replacementFontSizePdf?: number;
+  readonly replacementFontWeight?: StudioTextFontWeight;
+  readonly replacementFontStyle?: StudioTextFontStyle;
   readonly textWidthPdf?: number;
   readonly textHeightPdf?: number;
   readonly lineHeightPdf?: number;
@@ -107,7 +111,7 @@ export interface StudioPdfTextSource {
    * This is a stable source-font correction, not an auto-fit for edited text.
    */
   readonly metricScaleX?: number;
-  /** Existing PDF text keeps source typography unless an explicit future override is added. */
+  /** Keep automatic source refreshes from changing typography; explicit replacement overrides are allowed. */
   readonly typographyLocked?: boolean;
 }
 

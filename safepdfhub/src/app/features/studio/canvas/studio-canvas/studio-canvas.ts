@@ -1,3 +1,4 @@
+import { pdfFontSize, textFontWeight, textFontStyle, pdfFontFaceChanged } from '../../services/studio-text-typography';
 import { fitPreviewFontSize } from '../../services/studio-text-preview';
 import { readStudioImage } from '../../services/studio-image-import';
 import { visibleStudioSources, studioDisplayBounds } from '../../services/studio-source-visibility';
@@ -301,6 +302,11 @@ private activeRenderVersion: number | null = null;
   private editingOriginalText = '';
 
   private editingOriginalStyle: StudioTextStyle | null = null;
+  private editingOriginalObject: StudioObject | null = null;
+  private readonly editingVisualBounds = signal<{id: string; bounds: StudioObject['bounds']} | null>(null);
+  private editorLayoutFrame = 0;
+  private readonly requestedEditorFonts = new Set<string>();
+  readonly getObjectFontStyleCss = textFontStyle;
 
   /** Current font-size field value while the user is typing. */
   editingFontSizeInput = '14';
@@ -403,6 +409,12 @@ private activeRenderVersion: number | null = null;
 
   constructor() {
     this.facade.flushTextDraft = () => this.commitTextEdit();
+    effect(() => {
+      this.objectService.changes();
+      this.editingSession();
+      this.facade.zoom();
+      this.scheduleTextEditorLayout();
+    });
     effect(() => {
       this.objectService.changes();
       const transforming = this.textTransformActive() || !!this.editingSession();
@@ -867,7 +879,12 @@ ngAfterViewInit(): void {
 
   getSelectionBounds(id: string, fallback: StudioObject['bounds']): StudioObject['bounds'] {
     const object = this.objectService.get(id);
-    return object ? this.getDisplayBounds(object) : fallback;
+    const bounds = object ? this.getDisplayBounds(object) : fallback;
+    const visual = this.editingVisualBounds();
+    if (this.editingObjectId !== id || visual?.id !== id) return bounds;
+    const x = Math.min(bounds.x, visual.bounds.x), y = Math.min(bounds.y, visual.bounds.y);
+    return { x, y, width: Math.max(bounds.x + bounds.width, visual.bounds.x + visual.bounds.width) - x,
+      height: Math.max(bounds.y + bounds.height, visual.bounds.y + visual.bounds.height) - y };
   }
 
   /**
@@ -3607,6 +3624,8 @@ private async beginTextEditing(
   }
 
   if (this.activeRenderVersion === null) this.capturePdfTextAppearance(object);
+  this.editingOriginalObject = this.objectService.get(objectId);
+  this.editingVisualBounds.set(null);
   this.editingObjectId = objectId;
   this.editingSession.set(objectId);
   this.textDraft.set({ id: objectId, text: object.text ?? '' });
@@ -3623,7 +3642,7 @@ private async beginTextEditing(
       : null;
 
   this.editingFontSizeInput =
-    String(Number(this.getObjectFontSizePx(object).toFixed(3)));
+    String(Number((pdfFontSize(object.pdfText) ?? this.getObjectFontSizePx(object)).toFixed(3)));
 
   this.facade.selectObject(
     this.selectionEngine.toSelection(
@@ -3674,14 +3693,45 @@ onTextEditorInput(
  * Resize the native textarea to its actual wrapped content height. This keeps
  * the caret and every replacement glyph visible while editing a source run.
  */
+private scheduleTextEditorLayout(): void {
+  if (!this.isBrowser || this.destroyed || !this.editingObjectId || this.editorLayoutFrame) return;
+  this.editorLayoutFrame = requestAnimationFrame(() => {
+    this.editorLayoutFrame = 0;
+    if (!this.destroyed) this.syncTextEditorLayout();
+  });
+}
+
 private syncTextEditorLayout(): void {
   const editor = this.textEditorRef?.nativeElement;
   const object = this.editingTextObject;
   if (!editor || !object) return;
 
+  if (editor.dataset['editingObjectId'] !== object.id) return;
+  const sizeInput = document.querySelector('.studio-text-toolbar input[aria-label="Text size"]');
+  if (document.activeElement !== sizeInput) {
+    this.editingFontSizeInput = String(Number((pdfFontSize(object.pdfText) ?? this.getObjectFontSizePx(object)).toFixed(3)));
+  }
+  const draft = { ...object, text: editor.value };
+  const size = object.pdfText?.fitMode === 'auto' ? this.getPdfOverlayFontSizePx(draft) : this.getObjectFontSizePx(object);
+  editor.style.fontSize = `${size}px`;
   editor.style.height = '0px';
   const minimum = this.getPdfTextEditorHeightPx(object);
   editor.style.height = `${Math.max(minimum, editor.scrollHeight)}px`;
+  const page = this.pageRef?.nativeElement.getBoundingClientRect();
+  const rect = editor.getBoundingClientRect();
+  if (page && page.width > 0 && page.height > 0) {
+    this.editingVisualBounds.set({ id: object.id, bounds: {
+      x: (rect.left - page.left) / page.width, y: (rect.top - page.top) / page.height,
+      width: rect.width / page.width, height: rect.height / page.height } });
+  }
+  const font = `${textFontStyle(object)} ${textFontWeight(object)} ${size}px ${this.getObjectFontFamilyCss(object)}`;
+  if (!this.requestedEditorFonts.has(font)) {
+    this.requestedEditorFonts.add(font);
+    if (this.requestedEditorFonts.size > 64) this.requestedEditorFonts.delete(this.requestedEditorFonts.values().next().value!);
+    void document.fonts.load(font).then(() => {
+      if (this.editingObjectId === object.id) { this.overlaySizes.clear(); this.scheduleTextEditorLayout(); }
+    }).catch(() => {});
+  }
 }
 
 /**
@@ -3858,16 +3908,11 @@ cancelTextEdit(): void {
   const originalText =
     this.editingOriginalText;
 
-  if (this.objectService.get(objectId)?.text !== originalText) {
-    this.facade.updateTextObject(objectId, originalText);
+  if (this.editingOriginalObject && JSON.stringify(this.objectService.get(objectId)) !== JSON.stringify(this.editingOriginalObject)) {
+    this.facade.restoreTextEdit(this.editingOriginalObject);
   }
-
-  if (this.editingOriginalStyle && JSON.stringify(this.objectService.get(objectId)?.textStyle) !== JSON.stringify(this.editingOriginalStyle)) {
-    this.facade.updateTextStyle(
-      objectId,
-      this.editingOriginalStyle
-    );
-  }
+  this.editingOriginalObject = null;
+  this.editingVisualBounds.set(null);
 
   this.editingObjectId = null;
   this.editingSession.set(null);
@@ -3910,7 +3955,7 @@ getObjectFontSizePx(
     page?.getBoundingClientRect().height ?? 0;
 
   /* Existing PDF text must keep the exact PDF-derived size. */
-  const sourceSize = object.pdfText?.fontSizePdf;
+  const sourceSize = pdfFontSize(object.pdfText);
   const sourcePageHeight = object.pdfText?.pageHeightPdf;
   const sourceRatio =
     typeof sourceSize === 'number' && Number.isFinite(sourceSize) && sourceSize > 0 &&
@@ -3940,16 +3985,7 @@ getObjectFontSizePx(
 getObjectFontWeightCss(
   object: StudioObject
 ): 400 | 700 | 900 {
-  const sourceWeight = object.pdfText?.sourceFontWeight;
-  if (sourceWeight === 900) return 900;
-  if (sourceWeight === 700) return 700;
-  if (object.pdfText) return 400;
-
-  return object.textStyle?.fontWeight === 900
-    ? 900
-    : object.textStyle?.fontWeight === 700
-      ? 700
-      : 400;
+  return textFontWeight(object);
 }
 
 /**
@@ -3960,6 +3996,12 @@ getObjectFontFamilyCss(
   object: StudioObject
 ): string {
 
+  if (pdfFontFaceChanged(object)) {
+    if (/calibri|carlito/i.test(object.pdfText?.sourceFontFamily ?? '')) return '"StudioCarlito"';
+    if (object.textStyle?.fontFamily === 'Times Roman') return '"Times New Roman", Times, serif';
+    if (object.textStyle?.fontFamily === 'Courier') return '"Courier New", Courier, monospace';
+    return 'Arial, Helvetica, "StudioFallback", sans-serif';
+  }
   const sourceCssFamily =
     object.pdfText?.sourceFontCssFamily?.trim();
 
@@ -3973,7 +4015,7 @@ getObjectFontFamilyCss(
         .replace(/\\/g, '\\\\')
         .replace(/"/g, '\\\"');
 
-    return /calibri/i.test(object.pdfText?.sourceFontFamily??'') ? `"${escapedFamily}", "StudioCarlito"` : `"${escapedFamily}", "StudioFallback"`;
+    return /calibri|carlito/i.test(object.pdfText?.sourceFontFamily??'') ? `"${escapedFamily}", "StudioCarlito"` : `"${escapedFamily}", "StudioFallback"`;
   }
 
   const sourceFamily =
@@ -4051,7 +4093,7 @@ onFontSizeInput(
 
   const value = Number(target.value);
 
-  if (!Number.isFinite(value)) {
+  if (!target.value.trim() || !Number.isFinite(value) || value < 1 || value > 512) {
     return;
   }
 
@@ -4075,8 +4117,9 @@ onFontSizeChange(
 
 private commitFontSizeValue(valueText: string): void {
 
-  const parsed = Number(valueText);
-  const fallback = this.editingFontSizePx;
+  const parsed = valueText.trim() ? Number(valueText) : NaN;
+  const object = this.editingTextObject;
+  const fallback = object ? (pdfFontSize(object.pdfText) ?? this.getObjectFontSizePx(object)) : 14;
   const px = Number.isFinite(parsed)
     ? Math.max(1, Math.min(512, parsed))
     : fallback;
@@ -4101,7 +4144,7 @@ private applyFontSizePx(px: number): void {
     Math.max(1, Math.min(512, px));
 
   this.updateEditingTextStyle({
-    fontSize: clampedPx / pageHeight
+    fontSize: clampedPx / (this.editingTextObject?.pdfText?.pageHeightPdf ?? pageHeight)
   });
 }
 
@@ -4116,7 +4159,7 @@ toggleTextBold(): void {
 
   this.updateEditingTextStyle({
     fontWeight:
-      object.textStyle?.fontWeight ===
+      textFontWeight(object) >=
         700
         ? 400
         : 700
@@ -4134,7 +4177,7 @@ toggleTextItalic(): void {
 
   this.updateEditingTextStyle({
     fontStyle:
-      object.textStyle?.fontStyle ===
+      textFontStyle(object) ===
         'italic'
         ? 'normal'
         : 'italic'
@@ -6006,14 +6049,14 @@ onWindowKeyDown(
 
   getPdfOverlayFontSizePx(object: StudioObject): number {
     const maximum = this.getObjectFontSizePx(object);
-    if (!this.isBrowser || this.committedPreview() || object.pdfText?.fitMode !== 'auto') return maximum;
+    if (!this.isBrowser || (this.committedPreview() && this.editingObjectId !== object.id) || object.pdfText?.fitMode !== 'auto') return maximum;
     const rect = this.pageRef?.nativeElement.getBoundingClientRect();
     if (!rect) return maximum;
     const width = rect.width * object.bounds.width;
     const height = rect.height * object.bounds.height;
     const family = this.getObjectFontFamilyCss(object);
     const weight = this.getObjectFontWeightCss(object);
-    const style = object.pdfText?.sourceFontStyle ?? 'normal';
+    const style = textFontStyle(object);
     const lineHeight = this.getPdfTextLineHeight(object);
     const key = JSON.stringify([object.text, width, height, maximum, family, weight, style, lineHeight]);
     const cached = this.overlaySizes.get(key);
@@ -6652,6 +6695,7 @@ ngOnDestroy(): void {
    * immediately becomes non-authoritative.
    */
   this.destroyed = true;
+  if (this.editorLayoutFrame) cancelAnimationFrame(this.editorLayoutFrame);
 
   /**
    * Invalidate every pending and active component-level render.

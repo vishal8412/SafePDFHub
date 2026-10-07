@@ -1802,4 +1802,13 @@
   pointer-events: none;
   background: transparent;
 }
-.studio-text-toolbar { width: max-content; flex-wrap: wrap; }
+.studio-text-toolbar { width: max-content; flex-wrap: nowrap; overflow-x: auto; }
+.studio-text-toolbar > button, .studio-text-toolbar__size, .studio-text-toolbar__divider { flex-shrink: 0; }
+.studio-text-toolbar__cell-hint { font-size: 11px; color: #8ca2b5; white-space: nowrap; }
+.studio-text-editor { overflow-wrap: anywhere; }
+
+@font-face {font-family:StudioFallback;src:url('/assets/fonts/DejaVuSans-Bold.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap;}
+
+@font-face {font-family:StudioFallback;src:url('/assets/fonts/DejaVuSans-Oblique.ttf') format('truetype');font-weight:400;font-style:italic;font-display:swap;}
+
+@font-face {font-family:StudioFallback;src:url('/assets/fonts/DejaVuSans-BoldOblique.ttf') format('truetype');font-weight:700;font-style:italic;font-display:swap;}
