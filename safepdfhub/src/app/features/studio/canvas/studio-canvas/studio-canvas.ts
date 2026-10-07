@@ -5410,6 +5410,7 @@ private clientToPagePoint(clientX: number,clientY: number,pageRect: DOMRect): {
 onWindowKeyDown(
   event: KeyboardEvent
 ): void {
+  if (this.facade.exportBusy() || this.facade.exportResult()) return;
 
   /**
    * F7.2 Phase D — Escape must close an active comment editor even when

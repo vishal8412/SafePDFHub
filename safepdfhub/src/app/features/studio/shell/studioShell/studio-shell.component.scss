@@ -1771,6 +1771,7 @@ app-studio-status-bar {
 /* A subtle, app-like scrollbar instead of the browser default. */
 .studio-extract-dialog__body,
 .studio-extract-dialog__thumbnail-grid--compact,
+.studio-export-result,
 .studio-extract-dialog {
   scrollbar-width: thin;
   scrollbar-color: rgba(78, 185, 180, 0.7) rgba(255, 255, 255, 0.035);
@@ -1778,12 +1779,14 @@ app-studio-status-bar {
 
 .studio-extract-dialog__body::-webkit-scrollbar,
 .studio-extract-dialog__thumbnail-grid--compact::-webkit-scrollbar,
+.studio-export-result::-webkit-scrollbar,
 .studio-extract-dialog::-webkit-scrollbar {
   width: 8px;
 }
 
 .studio-extract-dialog__body::-webkit-scrollbar-track,
 .studio-extract-dialog__thumbnail-grid--compact::-webkit-scrollbar-track,
+.studio-export-result::-webkit-scrollbar-track,
 .studio-extract-dialog::-webkit-scrollbar-track {
   margin: 8px 0;
   border-radius: 999px;
@@ -1792,6 +1795,7 @@ app-studio-status-bar {
 
 .studio-extract-dialog__body::-webkit-scrollbar-thumb,
 .studio-extract-dialog__thumbnail-grid--compact::-webkit-scrollbar-thumb,
+.studio-export-result::-webkit-scrollbar-thumb,
 .studio-extract-dialog::-webkit-scrollbar-thumb {
   min-height: 44px;
   border: 2px solid transparent;
@@ -1802,6 +1806,7 @@ app-studio-status-bar {
 
 .studio-extract-dialog__body::-webkit-scrollbar-thumb:hover,
 .studio-extract-dialog__thumbnail-grid--compact::-webkit-scrollbar-thumb:hover,
+.studio-export-result::-webkit-scrollbar-thumb:hover,
 .studio-extract-dialog::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, rgba(121, 231, 220, 0.95), rgba(65, 167, 184, 0.9));
   background-clip: padding-box;
@@ -1914,3 +1919,12 @@ app-studio-status-bar {
   .studio-security-dialog__panel--security { padding: 14px; }
   .studio-security-dialog__modes button { font-size: 11px; }
 }
+
+/* Keep the editor mounted so returning preserves its page, zoom and history. */
+.studio--showing-result { visibility: hidden; pointer-events: none; }
+.studio-export-result {
+  position: absolute; inset: 0; z-index: 90; overflow-y: auto;
+  padding: 16px clamp(12px, 3vw, 40px); box-sizing: border-box;
+  background: #071423;
+}
+:host { position: relative; }

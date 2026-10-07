@@ -1,5 +1,7 @@
 <div
   class="studio"
+  [class.studio--showing-result]="!!facade.exportResult()"
+  [attr.inert]="facade.exportResult() ? '' : null"
   [class.studio--toolbar-collapsed]="!toolbarVisible()"
   [class.studio--header-collapsed]="!studioHeaderVisible()">
 
@@ -479,4 +481,18 @@
     (signed)="onSignatureCreated($event)"
     (fieldSelected)="onSigningFieldSelected($event)"
   />
+}
+
+@if (facade.exportResult(); as result) {
+  <main class="studio-export-result" aria-label="Studio export result">
+    <app-operation-result
+      [file]="result.file" [originalFileName]="result.originalName" [durationMs]="result.durationMs"
+      icon="edit" sizeUnitSystem="binary" eyebrow="STUDIO EXPORT READY" title="Your edited PDF is ready"
+      description="Download your PDF, or continue editing from where you left off."
+      [operationLabel]="'Edited PDF · ' + result.pageCount + (result.pageCount === 1 ? ' page' : ' pages')"
+      actionLabel="Download PDF" actionDescription="Save your prepared PDF to this device"
+      [showEditAgain]="true" editAgainLabel="Continue editing" processAnotherLabel="Open another PDF"
+      (download)="facade.downloadExport()" (editAgain)="continueEditing()" (processAnother)="openPdfPicker()"
+    />
+  </main>
 }

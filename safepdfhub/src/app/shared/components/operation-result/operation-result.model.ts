@@ -6,6 +6,7 @@ export type OperationResultIcon =
   | 'merge'
   | 'split'
   | 'compress'
+  | 'edit'
   | 'watermark'
   | 'watermark-complete';
 

@@ -51,7 +51,7 @@ assert(process.env.STUDIO_RESUME_PDF,'Set STUDIO_RESUME_PDF');
   await page.getByRole('button',{name:'Finish text edit',exact:true}).click();
   const preview=async()=>{await page.waitForFunction(()=>{const c=ng.getComponent(document.querySelector('app-studio-canvas'));return !c.previewBusy()&&!!c.committedPreview()},null,{timeout:120000});assert.equal(await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).previewError()),'')};
   await preview();await page.screenshot({path:path.join(out,'resized-heading.png'),fullPage:true});
-  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export PDF',exact:true}).click();await(await download).saveAs(path.join(out,'resized-resume.pdf'));
+  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Export PDF',exact:true}).click();await page.locator('.studio-export-result .operation-result__primary').click();await(await download).saveAs(path.join(out,'resized-resume.pdf'));await page.getByRole('button',{name:'Continue editing',exact:true}).click();
   await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.goToPage(2));
   await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.goToPage(1));await preview();
   assert.deepEqual(await page.evaluate(id=>ng.getComponent(document.querySelector('app-studio-canvas')).objectService.get(id).bounds,object.id),resized.bounds);

@@ -46,7 +46,7 @@ fs.mkdirSync(out,{recursive:true});
   await page.screenshot({path:path.join(out,'formatting-editor.png'),fullPage:true});
   await page.getByRole('button',{name:'Finish text edit',exact:true}).click();await preview();
   assert.equal((await obj()).pdfText.replacementFontWeight,700);
-  const download=page.waitForEvent('download',{timeout:180000});await page.getByRole('button',{name:'Export PDF',exact:true}).click();await(await download).saveAs(path.join(out,'formatted.pdf'));
+  const download=page.waitForEvent('download',{timeout:180000});await page.getByRole('button',{name:'Export PDF',exact:true}).click();await page.locator('.studio-export-result .operation-result__primary').click();await(await download).saveAs(path.join(out,'formatted.pdf'));await page.getByRole('button',{name:'Continue editing',exact:true}).click();
   await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.goToPage(2));
   await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.goToPage(1));await preview();
   assert.equal((await obj()).pdfText.replacementFontSizePdf,8);

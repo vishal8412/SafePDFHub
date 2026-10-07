@@ -1,3 +1,4 @@
+import { OperationResultComponent } from '../../../../shared/components/operation-result/operation-result.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -35,6 +36,7 @@ import type {
   selector: 'app-studio-shell',
   standalone: true,
   imports: [
+    OperationResultComponent,
     StudioHeader,
     StudioToolbar,
     StudioStatusBar,
@@ -50,7 +52,7 @@ import type {
 })
 export class StudioShellComponent implements OnDestroy {
 
-  private readonly facade =
+  readonly facade =
     inject(StudioFacade);
 
   @ViewChild('pdfInput')
@@ -584,6 +586,7 @@ export class StudioShellComponent implements OnDestroy {
       return;
     }
 
+    this.facade.continueEditing();
     void this.facade.loadPdf(file);
   }
 
@@ -596,6 +599,7 @@ export class StudioShellComponent implements OnDestroy {
 
 @HostListener('window:keydown', ['$event'])
 onKeyDown(event: KeyboardEvent): void {
+  if (this.facade.exportBusy() || this.facade.exportResult()) return;
   if (!this.facade.hasDocument()) {
     return;
   }
@@ -806,11 +810,18 @@ cancelPasswordPrompt(): void {
 
 async onExportPdf(): Promise<void> {
   await this.facade.exportPdf();
+  setTimeout(() => document.querySelector<HTMLElement>('.studio-export-result .operation-result__primary')?.focus(), 0);
 }
+
+  continueEditing(): void {
+    this.facade.continueEditing();
+    setTimeout(() => document.querySelector<HTMLElement>('[aria-label="Export PDF"]')?.focus(), 0);
+  }
 
   ngOnDestroy(): void {
     // Release signature data URLs and active signing state as soon as the
     // Studio route is destroyed. The service itself is component-scoped.
+    this.facade.clearExportSession();
     this.signingState.reset();
     this.watermark.clear();
   }

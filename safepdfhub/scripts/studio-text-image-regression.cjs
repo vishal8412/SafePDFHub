@@ -31,7 +31,7 @@ const canvas=()=>ng.getComponent(document.querySelector('app-studio-canvas'));
       assert(await temporary.isVisible(),'replacement text must remain visible during rendering');
     }
     await preview();};
-  const exportPdf=async(name)=>{const download=page.waitForEvent('download',{timeout:180000});await page.getByRole('button',{name:'Export PDF',exact:true}).click();await(await download).saveAs(path.join(out,name+'.pdf'));};
+  const exportPdf=async(name)=>{const download=page.waitForEvent('download',{timeout:180000});await page.getByRole('button',{name:'Export PDF',exact:true}).click();await page.locator('.studio-export-result .operation-result__primary').click();await(await download).saveAs(path.join(out,name+'.pdf'));await page.getByRole('button',{name:'Continue editing',exact:true}).click();};
   const testTable=async()=>{
     await page.goto('http://127.0.0.1:4930/studio');
     await page.locator('input[type=file][accept*="pdf"]').first().setInputFiles(path.join(root,'regression-fixtures/studio/text-table.pdf'));

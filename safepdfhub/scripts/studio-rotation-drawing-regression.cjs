@@ -27,7 +27,7 @@ fs.mkdirSync(out,{recursive:true});
   await page.getByRole('button',{name:'Cancel text edit',exact:true}).click();
   const im=initial.filter(o=>o.pdfImage).sort((a,b)=>b.bounds.width*b.bounds.height-a.bounds.width*a.bounds.height)[0];assert(im);
   const chooser=page.waitForEvent('filechooser');await page.locator(`[data-object-id="${im.id}"]`).click({position:{x:5,y:5}});await(await chooser).setFiles(path.join(root,'regression-fixtures/studio/replacement.png'));await preview();
-  const exportPdf=async name=>{const download=page.waitForEvent('download',{timeout:120000});await page.getByRole('button',{name:'Export PDF',exact:true}).click();await(await download).saveAs(path.join(out,name+'.pdf'));await page.locator('.app-loader').waitFor({state:'hidden'})};
+  const exportPdf=async name=>{const download=page.waitForEvent('download',{timeout:120000});await page.getByRole('button',{name:'Export PDF',exact:true}).click();await page.locator('.studio-export-result .operation-result__primary').click();await(await download).saveAs(path.join(out,name+'.pdf'));await page.getByRole('button',{name:'Continue editing',exact:true}).click();await page.locator('.app-loader').waitFor({state:'hidden'})};
   await exportPdf('image-0');
   for(const angle of [90,180,270,360]){
     await page.evaluate(()=>ng.getComponent(document.querySelector('app-studio-canvas')).facade.rotateCurrentPage('right'));

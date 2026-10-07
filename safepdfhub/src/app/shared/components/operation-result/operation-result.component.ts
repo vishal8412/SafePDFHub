@@ -13,6 +13,7 @@ import type { OperationResultIcon } from './operation-result.model';
 export class OperationResultComponent {
   @Input({ required: true }) file!: File;
   @Input() originalFileName = '';
+  @Input() sizeUnitSystem: 'decimal' | 'binary' = 'decimal';
   @Input() durationMs = 0;
 
   @Input() eyebrow = 'PROCESSING COMPLETE';
@@ -45,9 +46,19 @@ export class OperationResultComponent {
 
   get sizeLabel(): string {
     const bytes = this.file?.size ?? 0;
+    if (this.sizeUnitSystem === 'binary') {
+      if (bytes < 1024) return `${bytes} bytes`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
     if (bytes < 1000) return `${bytes} bytes`;
     if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(2)} KB`;
     return `${(bytes / 1_000_000).toFixed(2)} MB`;
+  }
+
+  get sizeTooltip(): string {
+    const bytes = (this.file?.size ?? 0).toLocaleString('en-US');
+    return `${bytes} bytes · 1 MB = ${this.sizeUnitSystem === 'binary' ? '1,048,576' : '1,000,000'} bytes`;
   }
 
   get durationLabel(): string {

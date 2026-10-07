@@ -1,8 +1,8 @@
 {
   "checked_on": "2026-10-07",
   "unit_tests": {
-    "suites_passed": 11,
-    "tests_passed": 66
+    "suites_passed": 13,
+    "tests_passed": 73
   },
   "application_typecheck": "passed",
   "production_build": "passed",
@@ -66,5 +66,87 @@
     "annotation_rotation_undo_pixel_identical": true,
     "image_four_turn_return_pixel_identical": true,
     "straight_stroke_svg_nonzero": true
+  },
+  "export_result_update": {
+    "passed": true,
+    "unchanged": {
+      "size": 15513995,
+      "duration": 9.899999999906868,
+      "name": "15-MB(1)_edited.pdf",
+      "pages": 842
+    },
+    "edited": {
+      "size": 10998815,
+      "duration": 17111.19999999972,
+      "name": "15-MB(1)_edited.pdf",
+      "pages": 842
+    },
+    "cached": {
+      "size": 10998815,
+      "duration": 19.5,
+      "name": "15-MB(1)_edited.pdf",
+      "pages": 842
+    },
+    "replaced": {
+      "size": 1264,
+      "duration": 18,
+      "name": "text-table_edited.pdf",
+      "pages": 1
+    },
+    "downloads": 5,
+    "browserErrors": [],
+    "original_bytes_preserved": true,
+    "cached_output_byte_identical": true,
+    "changed_annotation_verified": true,
+    "all_exported_pages_retained": 842,
+    "production_build": "passed"
+  },
+  "export_speed_update": {
+    "passed": true,
+    "unchanged": {
+      "size": 15513995,
+      "duration": 16.700000000186265,
+      "name": "15-MB(1)_edited.pdf",
+      "pages": 842
+    },
+    "edited": {
+      "size": 10998815,
+      "duration": 4410.699999999721,
+      "name": "15-MB(1)_edited.pdf",
+      "pages": 842
+    },
+    "cached": {
+      "size": 10998815,
+      "duration": 15,
+      "name": "15-MB(1)_edited.pdf",
+      "pages": 842
+    },
+    "mixed": {
+      "size": 11067445,
+      "duration": 4277.100000000093,
+      "name": "15-MB(1)_edited.pdf",
+      "pages": 842
+    },
+    "replaced": {
+      "size": 1264,
+      "duration": 16.799999999813735,
+      "name": "text-table_edited.pdf",
+      "pages": 1
+    },
+    "downloads": 6,
+    "browserErrors": [],
+    "previous_drawing_export_ms": 17111.2,
+    "source_indirect_objects_approximately": 240000,
+    "requested_five_second_target_met_in_test": true,
+    "five_second_guarantee_for_all_devices": false,
+    "sampled_render_fidelity_pages": [
+      1,
+      2,
+      421,
+      842
+    ],
+    "binary_size_and_exact_bytes_verified": true,
+    "dual_edit_completion_icon_verified": true,
+    "styled_scrollbar_verified": true
   }
 }

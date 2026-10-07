@@ -37,6 +37,15 @@
           <path class="operation-result__check" d="m40 31 4 4 7-8" />
         </svg>
       }
+      @case ('edit') {
+        <svg class="operation-result__success-mark operation-result__success-mark--standard" viewBox="0 0 64 64" fill="none" focusable="false">
+          <path class="operation-result__icon-stroke" d="M15 7h23l10 10v40H15z" />
+          <path class="operation-result__icon-stroke operation-result__icon-fold" d="M38 7v11h10" />
+          <path class="operation-result__icon-stroke" d="m22 38 14-14 5 5-14 14-7 2zM33 27l5 5M21 50h12" />
+          <circle class="operation-result__compress-check-badge" cx="47" cy="47" r="9" />
+          <path class="operation-result__check operation-result__check--badge" d="m42.5 47 3 3 6-7" />
+        </svg>
+      }
       @case ('compress') {
         <svg class="operation-result__success-mark operation-result__success-mark--standard operation-result__success-mark--compress" viewBox="0 0 64 64" fill="none" focusable="false">
           <path class="operation-result__icon-stroke" d="M17 7h21l9 9v41H17z" />
@@ -97,7 +106,10 @@
     </div>
     <div class="operation-result__file-copy">
       <strong [title]="file.name">{{ file.name }}</strong>
-      <span>{{ operationLabel }} <i aria-hidden="true">•</i> {{ sizeLabel }}</span>
+      <span>{{ operationLabel }} <i aria-hidden="true">•</i> <span [title]="sizeTooltip">{{ sizeLabel }}</span></span>
+      @if (sizeUnitSystem === 'binary') {
+        <span class="operation-result__exact-size">{{ file.size | number:'1.0-0' }} bytes</span>
+      }
     </div>
     <span class="operation-result__ready">
       <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 8 2.8 2.8L12.5 4.8" /></svg>

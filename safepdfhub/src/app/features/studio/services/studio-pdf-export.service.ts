@@ -80,7 +80,7 @@ export class StudioPdfExportService {
       // previews; copies are edited independently, never this source document.
       let pending = this.previewDocuments.get(sourceFile);
       if (!pending) {
-        pending = sourceFile.arrayBuffer().then(bytes => PDFDocument.load(bytes, { updateMetadata: false }));
+        pending = sourceFile.arrayBuffer().then(bytes => PDFDocument.load(bytes, { updateMetadata: false, parseSpeed: 10000 }));
         this.previewDocuments.set(sourceFile, pending);
       }
       let original: PDFDocument;
@@ -91,7 +91,7 @@ export class StudioPdfExportService {
     }
     const page = preview.getPage(0);
     page.setRotation(degrees((page.getRotation().angle + logicalPage.rotation) % 360));
-    const bytes = await preview.save();
+    const bytes = await preview.save({ objectsPerTick: 10000 });
     return new File([bytes.buffer as ArrayBuffer], 'studio-page-preview.pdf', {type: 'application/pdf'});
   }
 
@@ -129,7 +129,7 @@ export class StudioPdfExportService {
       await sourceFile.arrayBuffer(),
     );
 
-    const sourcePdf = await PDFDocument.load(sourceBytes, { updateMetadata: false });
+    const sourcePdf = await PDFDocument.load(sourceBytes, { updateMetadata: false, parseSpeed: 10000 });
     const sourcePages = sourcePdf.getPages();
     const manifest = logicalPages && logicalPages.length ? logicalPages : sourcePages.map((_, index) => ({ id: `source-${index + 1}`, kind: 'source' as const, sourcePageNumber: index + 1, rotation: 0 as const }));
     const samePageOrder = manifest.length === sourcePages.length && manifest.every((p, i) => p.kind === 'source' && p.sourcePageNumber === i + 1);
@@ -146,6 +146,11 @@ export class StudioPdfExportService {
     if (samePageOrder) {
       sourcePages.forEach((page, i) => page.setRotation(degrees((page.getRotation().angle + manifest[i].rotation) % 360)));
     } else {
+    // One copier retains shared resources across all reordered/duplicated pages.
+    const indices = manifest.filter(p => p.kind === 'source').map(p => (p.sourcePageNumber ?? 1)-1);
+    if (indices.some(i => i < 0 || i >= sourcePages.length)) throw new RangeError('Invalid logical source page.');
+    const copiedPages = await pdfDocument.copyPages(sourcePdf, indices);
+    let copiedIndex = 0;
     for (const logicalPage of manifest) {
       if (logicalPage.kind === 'blank') {
         const page = pdfDocument.addPage([logicalPage.blankWidth ?? 595.28, logicalPage.blankHeight ?? 841.89]);
@@ -153,7 +158,7 @@ export class StudioPdfExportService {
       } else {
         const sourceIndex = (logicalPage.sourcePageNumber ?? 1) - 1;
         if (sourceIndex < 0 || sourceIndex >= sourcePages.length) throw new RangeError('Invalid logical source page.');
-        const [copied] = await pdfDocument.copyPages(sourcePdf, [sourceIndex]);
+        const copied = copiedPages[copiedIndex++];
         copied.setRotation(degrees((copied.getRotation().angle + logicalPage.rotation) % 360));
         pdfDocument.addPage(copied);
       }
@@ -231,7 +236,7 @@ export class StudioPdfExportService {
 
     const nativeFonts = new Map<number, Map<string, Uint8Array>>();
     for (const object of editableObjects) {
-      if (!object.pdfText) continue;
+      if (!object.pdfText || pdfFontFaceChanged(object)) continue;
       const key = this.getSourceFontKey(object, manifest);
       const pageIndex = (manifest[object.pageNumber - 1]?.sourcePageNumber ?? object.pageNumber) - 1;
       if (!key || !sourcePages[pageIndex]) continue;
@@ -595,22 +600,15 @@ export class StudioPdfExportService {
       );
     }
 
+    // The default 50-object batches spend seconds in clamped browser timers
+    // on large PDFs. Bounded 10,000-object batches still yield to the UI.
     const bytes = await pdfDocument.save({
+      objectsPerTick: 10000,
       useObjectStreams: true,
       addDefaultPage: false,
     });
 
-    // Copy into a concrete ArrayBuffer so DOM BlobPart typing stays stable
-    // across TypeScript/lib.dom versions.
-    const outputBuffer =
-      new ArrayBuffer(bytes.byteLength);
-
-    new Uint8Array(outputBuffer).set(bytes);
-
-    const generated = new Blob(
-      [outputBuffer],
-      { type: 'application/pdf' },
-    );
+    const generated = new Blob([bytes as Uint8Array<ArrayBuffer>], {type:'application/pdf'});
 
     // pdf-lib has to reconstruct a document when Studio edits it. On large
     // PDFs that reconstruction can temporarily inflate compressed streams and
@@ -624,7 +622,7 @@ export class StudioPdfExportService {
           new File([generated], 'studio-export.pdf', { type: 'application/pdf' }),
         );
         if (candidate.size > 0 && candidate.size < generated.size) {
-          return new Blob([new Uint8Array(await candidate.arrayBuffer())], { type: 'application/pdf' });
+          return candidate;
         }
       } catch {
         // Keep the valid pdf-lib output when optimization is unavailable or fails.
@@ -665,7 +663,7 @@ export class StudioPdfExportService {
     objects: readonly StudioObject[],
   ): Promise<Blob> {
     const sourcePdf = await PDFDocument.load(
-      new Uint8Array(await sourceFile.arrayBuffer())
+      new Uint8Array(await sourceFile.arrayBuffer()), {parseSpeed: 10000}
     );
     const overlayPdf = await PDFDocument.create();
     const sourcePages = sourcePdf.getPages();
@@ -760,6 +758,7 @@ export class StudioPdfExportService {
     }
 
     const overlayBytes = await overlayPdf.save({
+      objectsPerTick: 10000,
       useObjectStreams: true,
       addDefaultPage: false,
     });
@@ -1888,6 +1887,7 @@ export class StudioPdfExportService {
       if (
         object.type !== 'text' ||
         !object.pdfText?.edited ||
+        pdfFontFaceChanged(object) ||
         !object.pdfText.fontName
       ) {
         continue;

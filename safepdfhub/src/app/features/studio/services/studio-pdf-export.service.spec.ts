@@ -19,6 +19,21 @@ describe('Studio PDF export regressions', () => {
     ] });
     service = TestBed.inject(StudioPdfExportService);
   });
+  it('copies reordered, duplicated and blank pages with one shared resource copier', async () => {
+    const source=await PDFDocument.create();source.addPage([300,400]);source.addPage([500,600]);
+    const bytes=await source.save();const file={arrayBuffer:async()=>bytes.slice().buffer} as File;
+    const spy=vi.spyOn(PDFDocument.prototype,'copyPages');
+    const result=await service.exportTextObjects(file,[],[
+      {id:'two',kind:'source',sourcePageNumber:2,rotation:90},
+      {id:'blank',kind:'blank',sourcePageNumber:null,rotation:0,blankWidth:200,blankHeight:250},
+      {id:'one',kind:'source',sourcePageNumber:1,rotation:0},
+      {id:'copy',kind:'source',sourcePageNumber:2,rotation:0}]);
+    expect(spy).toHaveBeenCalledTimes(1);expect(spy.mock.calls[0][1]).toEqual([1,0,1]);spy.mockRestore();
+    const data=await new Promise<ArrayBuffer>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result as ArrayBuffer);r.onerror=reject;r.readAsArrayBuffer(result)});
+    const exported=await PDFDocument.load(data);expect(exported.getPages().map(p=>p.getSize())).toEqual([
+      {width:500,height:600},{width:200,height:250},{width:300,height:400},{width:500,height:600}]);
+    expect(exported.getPage(0).getRotation().angle).toBe(90);expect(exported.getPage(3).getRotation().angle).toBe(0);
+  });
   it('paints highlights as one path so joints do not compound opacity', async () => {
     const doc=await PDFDocument.create(), page=doc.addPage([600,800]);
     const path=vi.spyOn(page,'drawSvgPath'), line=vi.spyOn(page,'drawLine');

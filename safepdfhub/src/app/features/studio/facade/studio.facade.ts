@@ -1,3 +1,4 @@
+import { StudioExportCache } from '../services/studio-export-cache';
 import {
   Injectable,
   computed,
@@ -53,6 +54,24 @@ import { PdfWatermarkService } from '../../../core/watermark/pdf-watermark.servi
   providedIn: 'root'
 })
 export class StudioFacade {
+  readonly exportBusy = signal(false);
+  readonly exportResult = signal<{file:File;originalName:string;pageCount:number;durationMs:number} | null>(null);
+  private readonly exportCache = new StudioExportCache();
+  private exportRequest = 0;
+
+  clearExportSession(): void {
+    this.exportRequest++;
+    this.exportResult.set(null);
+    this.exportCache.clear();
+  }
+
+  continueEditing(): void { this.exportResult.set(null); }
+
+  downloadExport(): void {
+    const result = this.exportResult();
+    if (result) saveAs(result.file, result.file.name);
+  }
+
   /** The canvas owns draft text; flush it before any export/security snapshot. */
   flushTextDraft: (() => void) | null = null;
   readonly inlineTextDraft = signal<{ id: string; text: string } | null>(null);
@@ -259,6 +278,7 @@ export class StudioFacade {
       /**
        * Commit the new document to application state.
        */
+      this.clearExportSession();
       this.state.setDocument(newDocument);
       this.renderScale.set(1);
       this.watermarkState.clear();
@@ -2451,85 +2471,52 @@ async exportCurrentDocumentFile(): Promise<File> {
     throw new Error('Open a PDF before exporting.');
   }
 
-  // A user can export immediately after rotation, before the canvas reanalysis
-  // finishes. Refresh only pages with source edits before taking the snapshot.
-  for (let pageNumber = 1; pageNumber <= this.pageCount(); pageNumber++) {
-    if (this.objectService.listForPage(pageNumber).some(o => o.pdfText?.edited || o.pdfImage?.replaced)) {
-      await this.ensurePageContent(document, pageNumber);
+  // Inspect the store once instead of cloning/filtering it for every PDF page.
+  const editedPages = new Set(this.objectService.snapshot()
+    .filter(o => o.pdfText?.edited || o.pdfImage?.replaced).map(o => o.pageNumber));
+  for (const pageNumber of editedPages) await this.ensurePageContent(document, pageNumber);
+  if (this.document() !== document) throw new Error('The PDF changed. Export the current document again.');
+
+  // Unchanged source overlays and review comments do not affect PDF bytes.
+  const allObjects = this.objectService.snapshot();
+  const objects = allObjects.filter(o =>
+    o.type !== 'comment' && (o.pdfText ? o.pdfText.edited : o.pdfImage ? o.pdfImage.replaced : true));
+  const pages = this.pageService.snapshot();
+  const watermark = this.watermarkState.committed();
+  const key = JSON.stringify([document.id, pages, objects, watermark]);
+  return this.exportCache.get(key, async () => {
+    const unchanged = !objects.length && pages.length === document.pageCount &&
+      pages.every((p,i) => p.kind === 'source' && p.sourcePageNumber === i+1 && p.rotation === 0);
+    const blob = unchanged ? document.file
+      : await this.pdfExportService.exportTextObjects(document.file, allObjects, pages);
+    const base = document.name.replace(/\.pdf$/i, '') || 'document';
+    let file = new File([blob], `${base}_edited.pdf`, {type:'application/pdf'});
+    if (watermark) {
+      const result = await this.pdfWatermark.apply(file, watermark);
+      file = new File([result.file], file.name, {type:'application/pdf'});
     }
-  }
-
-  const objects = Array.from(
-    { length: this.pageCount() },
-    (_, index) => this.objectService.listForPage(index + 1),
-  ).flat();
-
-  const blob = await this.pdfExportService.exportTextObjects(
-    document.file,
-    objects,
-    this.pages(),
-  );
-
-  const buffer = await blob.arrayBuffer();
-  const base = document.name.replace(/\.pdf$/i, '') || 'document';
-  let file = new File(
-    [buffer],
-    `${base}_edited.pdf`,
-    { type: 'application/pdf' },
-  );
-
-  const committedWatermark = this.watermarkState.committed();
-  if (committedWatermark) {
-    const result = await this.pdfWatermark.apply(file, committedWatermark);
-    const watermarkedBuffer = await result.file.arrayBuffer();
-    file = new File(
-      [watermarkedBuffer],
-      `${base}_edited.pdf`,
-      { type: 'application/pdf' },
-    );
-  }
-
-  return file;
+    return file;
+  });
 }
 
 async exportPdf(): Promise<void> {
-  if (!this.hasDocument()) {
-    this.toast.show(
-      'Open a PDF before exporting.',
-      'info'
-    );
-    return;
-  }
-
+  if (!this.hasDocument() || this.exportBusy()) return;
+  this.exportBusy.set(true);
+  const request = ++this.exportRequest;
+  const document = this.document()!;
+  const started = performance.now();
   try {
     this.loader.show('Preparing your edited PDF...');
-    this.loader.setText('Writing Studio changes into PDF...');
-
-    const output = await this.exportCurrentDocumentFile();
-
-    this.loader.setText('Downloading your PDF...');
-    saveAs(output, output.name);
-
-    this.loader.setText('PDF exported successfully');
-    this.toast.show(
-      this.watermarkState.committed()
-        ? 'Edited PDF with watermark exported successfully.'
-        : 'Edited PDF exported successfully.',
-      'success'
-    );
+    // Give the browser a chance to paint the processing state before parsing.
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    const file = await this.exportCurrentDocumentFile();
+    if (request !== this.exportRequest || this.document() !== document) return;
+    this.exportResult.set({file,originalName:document.name,pageCount:this.pageCount(),durationMs:performance.now()-started});
   } catch (error: unknown) {
-    console.error(
-      '[SafePDFHub Studio] PDF export failed:',
-      error
-    );
-
-    this.toast.show(
-      error instanceof Error
-        ? error.message
-        : 'Unable to export the edited PDF. Please try again.',
-      'error'
-    );
+    if (request === this.exportRequest) this.toast.show(
+      error instanceof Error ? error.message : 'Unable to prepare the PDF. Please try again.', 'error');
   } finally {
+    this.exportBusy.set(false);
     this.loader.hide();
   }
 }
