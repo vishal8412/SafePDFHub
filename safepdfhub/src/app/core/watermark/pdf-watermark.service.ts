@@ -1,6 +1,5 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { LocalProcessingCapabilityService } from '../capacity/local-processing-capability.service';
 import {
   PDFDocument,
   StandardFonts,
@@ -336,7 +335,6 @@ export function watermarkDisplayPointToPdfPoint(
 @Injectable({ providedIn: 'root' })
 export class PdfWatermarkService {
   private readonly platformId = inject(PLATFORM_ID);
-  private readonly capability = inject(LocalProcessingCapabilityService);
   private cancelled = false;
 
   cancel(): void {
@@ -355,20 +353,15 @@ export class PdfWatermarkService {
     this.cancelled = false;
     this.assertRequest(request);
 
-    const budget = this.capability.budget;
-    if (sourceFile.size > budget.maxFileBytes) {
-      throw new PdfWatermarkError(
-        `This PDF is larger than the ${this.formatBytes(budget.maxFileBytes)} local limit for this device.`,
-        'INPUT_INVALID',
-      );
-    }
-
+    // Capacity policy belongs to the caller. Studio passes an already edited
+    // file, whose size is not the uploaded input size. Do not impose a second,
+    // unrelated upload limit partway through an export.
     const sourceBytes = new Uint8Array(await sourceFile.arrayBuffer());
     this.throwIfCancelled();
 
     let pdf: PDFDocument;
     try {
-      pdf = await PDFDocument.load(sourceBytes, { updateMetadata: false });
+      pdf = await PDFDocument.load(sourceBytes, { updateMetadata: false, parseSpeed: sourceFile.size > 100 * 1024 * 1024 ? 500 : 10000 });
     } catch {
       throw new PdfWatermarkError('This file could not be opened as a valid PDF.', 'INPUT_INVALID');
     }
@@ -376,13 +369,6 @@ export class PdfWatermarkService {
     const pages = pdf.getPages();
     if (!pages.length) {
       throw new PdfWatermarkError('The PDF does not contain any pages.', 'INPUT_INVALID');
-    }
-
-    if (pages.length > budget.maxPages) {
-      throw new PdfWatermarkError(
-        `This PDF contains ${pages.length.toLocaleString()} pages, above the ${budget.maxPages.toLocaleString()} page local limit for this device.`,
-        'INPUT_INVALID',
-      );
     }
 
     const pageNumbers = this.resolvePageNumbers(request.pageSelection, pages.length);
@@ -398,6 +384,7 @@ export class PdfWatermarkService {
         ? await pdf.embedFont(this.standardFont(request.font))
         : null;
 
+      let lastYield = performance.now();
       for (let i = 0; i < pageNumbers.length; i += 1) {
         this.throwIfCancelled();
         const page = pages[pageNumbers[i] - 1];
@@ -412,12 +399,15 @@ export class PdfWatermarkService {
         }
 
         onProgress?.(Math.round(((i + 1) / pageNumbers.length) * 90));
-        await this.yieldToBrowser();
+        if (performance.now() - lastYield >= 12) {
+          await this.yieldToBrowser();
+          lastYield = performance.now();
+        }
       }
 
       this.throwIfCancelled();
       onProgress?.(95);
-      const bytes = await pdf.save({ useObjectStreams: true });
+      const bytes = await pdf.save({ useObjectStreams: true, objectsPerTick: sourceFile.size > 100 * 1024 * 1024 ? 500 : 10000 });
       this.throwIfCancelled();
 
       const buffer = new ArrayBuffer(bytes.byteLength);
@@ -665,14 +655,6 @@ export class PdfWatermarkService {
     }
   }
 
-  private formatBytes(bytes: number): string {
-    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-    const MB = 1024 * 1024;
-    const GB = 1024 * MB;
-    if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
-    return `${(bytes / MB).toFixed(bytes >= 100 * MB ? 0 : 1)} MB`;
-  }
-
   private hexToRgb(value: string): { r: number; g: number; b: number } {
     const parsed = Number.parseInt(value.slice(1), 16);
     return {
@@ -695,7 +677,7 @@ export class PdfWatermarkService {
       throw new PdfWatermarkError('The generated watermark PDF is missing its EOF marker.', 'OUTPUT_INVALID');
     }
     try {
-      const reopened = await PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false });
+      const reopened = await PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false, parseSpeed: file.size > 100 * 1024 * 1024 ? 500 : 10000 });
       if (reopened.getPageCount() !== expectedPageCount) {
         throw new PdfWatermarkError('Watermarking changed the PDF page count.', 'OUTPUT_INVALID');
       }

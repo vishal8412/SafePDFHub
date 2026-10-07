@@ -1,3 +1,4 @@
+import { studioSourcePages } from './studio-source-page';
 import { Injectable, signal } from '@angular/core';
 import { collectPageFontPrograms, normalizePdfFontName, type PdfFontMetrics } from './pdf-source-fonts';
 import type { PDFPageProxy } from 'pdfjs-dist/types/src/display/api';
@@ -22,17 +23,18 @@ export class PdfContentAnalysisService {
 
   private readonly registeredFontFaces = new Set<FontFace>();
   private sourceFile: File | null = null;
-  private nativePdf: Promise<import('pdf-lib').PDFDocument> | null = null;
   private readonly nativeFontMetrics = new Map<number, Map<string, PdfFontMetrics>>();
   private readonly nativeFonts = new Map<number, Promise<Map<string, Uint8Array>>>();
   private originalFonts(file: File, pageNumber: number): Promise<Map<string, Uint8Array>> {
     const cached = this.nativeFonts.get(pageNumber);
     if (cached) return cached;
-    const pdf = this.nativePdf ??= import('pdf-lib').then(async ({ PDFDocument }) =>
-      PDFDocument.load(await file.arrayBuffer(), { updateMetadata: false }));
+    const pdf = studioSourcePages.read(file, pageNumber).then(async bytes => {
+      const { PDFDocument } = await import('pdf-lib');
+      return PDFDocument.load(bytes, { updateMetadata: false, parseSpeed: 500 });
+    });
     const task = pdf.then(document => {
       const metrics = new Map<string, PdfFontMetrics>();
-      const programs = collectPageFontPrograms(document, pageNumber - 1, metrics);
+      const programs = collectPageFontPrograms(document, 0, metrics);
       if (this.sourceFile === file) this.nativeFontMetrics.set(pageNumber, metrics);
       return programs;
     }).catch(() => new Map<string, Uint8Array>());
@@ -57,7 +59,7 @@ export class PdfContentAnalysisService {
     this.fontPrograms.clear();
     this.nativeFonts.clear();
     this.nativeFontMetrics.clear();
-    this.nativePdf = null;
+    studioSourcePages.reset();
     this.inFlight.clear();
     this.sourceFontFaces.clear();
     this.analysisState.set(null);

@@ -334,15 +334,20 @@
             [class.sidebar__pages-list--comfortable]="sidebarPageView() === 'comfortable'"
             [class.sidebar__pages-list--compact]="sidebarPageView() === 'compact'"
             [class.sidebar__pages-list--grid]="sidebarPageView() === 'grid'"
+            [class.sidebar__pages-list--virtual]="virtualPages()"
+            [style.--page-columns]="pageColumns()"
+            (scroll)="onPagesScroll()"
             aria-label="PDF pages">
 
-            @for (page of pages(); track page.id) {
+            @if (virtualPages()) { <div class="sidebar__virtual-spacer" [style.height.px]="pageWindow().top" aria-hidden="true"></div> }
+            @for (page of visiblePages(); track page.id) {
 
               <div
                 #pageItem
                 class="sidebar__page-item"
+                [style.height.px]="virtualPages() ? rowHeight() : null"
                 [class.sidebar__page-item--active]="
-                  $index + 1 === currentPage()
+                  pageWindow().start + $index + 1 === currentPage()
                 "
                 [class.sidebar__page-item--multi-selected]="
                   isPageMultiSelected(page.id)
@@ -351,25 +356,25 @@
                   draggedPageIds.includes(page.id)
                 "
                 [attr.aria-current]="
-                  $index + 1 === currentPage()
+                  pageWindow().start + $index + 1 === currentPage()
                     ? 'page'
                     : null
                 "
-                [attr.data-page-number]="$index + 1"
+                [attr.data-page-number]="pageWindow().start + $index + 1"
                 draggable="true"
-                (dragstart)="onPageDragStart($index + 1, $event)"
+                (dragstart)="onPageDragStart(pageWindow().start + $index + 1, $event)"
                 (dragover)="$event.preventDefault()"
-                (drop)="onPageDrop($index + 1, $event)"
+                (drop)="onPageDrop(pageWindow().start + $index + 1, $event)"
                 (dragend)="onPageDragEnd()">
 
                 @defer (on viewport) {
 
                   <app-studio-page-thumbnail
-          [displayPageNumber]="$index + 1"
+          [displayPageNumber]="pageWindow().start + $index + 1"
           [sourcePageNumber]="page.sourcePageNumber"
           [rotation]="page.rotation"
           [blank]="page.kind === 'blank'"
-          [selected]="$index + 1 === currentPage()"
+          [selected]="pageWindow().start + $index + 1 === currentPage()"
           [multiSelected]="isPageMultiSelected(page.id)"
           [selectionMode]="pageSelectionMode()"
           [viewMode]="sidebarPageView()"
@@ -393,7 +398,7 @@
                     <div
                       class="sidebar__thumbnail-placeholder-number">
 
-                      {{ $index + 1 }}
+                      {{ pageWindow().start + $index + 1 }}
 
                     </div>
 
@@ -404,6 +409,7 @@
               </div>
 
             }
+            @if (virtualPages()) { <div class="sidebar__virtual-spacer" [style.height.px]="pageWindow().bottom" aria-hidden="true"></div> }
 
           </div>
 

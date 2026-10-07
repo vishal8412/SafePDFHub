@@ -2826,3 +2826,22 @@
     transition: none;
   }
 }
+
+/* Large documents mount only visible rows and a small overscan window. */
+.sidebar__pages-list.sidebar__pages-list--virtual,
+.studio-workspace--organize-focus .sidebar__pages-list.sidebar__pages-list--virtual {
+  display: grid;
+  grid-template-columns: repeat(var(--page-columns), minmax(0, 1fr));
+  align-content: start;
+  gap: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow-anchor: none;
+}
+.sidebar__pages-list--virtual .sidebar__page-item {
+  margin: 0;
+  padding: 3px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.sidebar__virtual-spacer { grid-column: 1 / -1; pointer-events: none; }

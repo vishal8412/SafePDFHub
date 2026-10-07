@@ -1,3 +1,4 @@
+import { studioPageWindow } from '../../services/studio-page-window';
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
@@ -40,9 +41,49 @@ export class StudioWorkspace
   readonly facade = inject(StudioFacade);
   readonly watermark = inject(StudioWatermarkStateService);
 
+  private pagesList?: ElementRef<HTMLElement>;
+  private listObserver?: ResizeObserver;
+  readonly listScrollTop = signal(0);
+  readonly listWidth = signal(240);
+  readonly listHeight = signal(600);
+  readonly virtualPages = computed(() => this.pages().length > 200);
+  readonly rowHeight = computed(() => this.sidebarPageView() === 'compact' ? 130 : this.sidebarPageView() === 'grid' ? 152 : 176);
+  readonly pageColumns = computed(() => {
+    if (this.organizeFocusMode()) return Math.max(1, Math.floor(this.listWidth() / (this.sidebarPageView() === 'compact' ? 140 : 220)));
+    return this.sidebarPageView() === 'grid' ? 2 : 1;
+  });
+  readonly pageWindow = computed(() => this.virtualPages()
+    ? studioPageWindow(this.pages().length, this.listScrollTop(), this.listHeight(), this.pageColumns(), this.rowHeight())
+    : { start: 0, end: this.pages().length, top: 0, bottom: 0 });
+  readonly visiblePages = computed(() => this.pages().slice(this.pageWindow().start, this.pageWindow().end));
+
   @ViewChild('pagesList')
-private readonly pagesList!:
-  ElementRef<HTMLElement>;
+  set pageListElement(value: ElementRef<HTMLElement> | undefined) {
+    if (this.pagesList?.nativeElement === value?.nativeElement) return;
+    this.listObserver?.disconnect();
+    this.pagesList = value;
+    if (!value || typeof ResizeObserver === 'undefined') return;
+    this.listObserver = new ResizeObserver(() => {
+      const width = value.nativeElement.clientWidth, height = value.nativeElement.clientHeight;
+      if (width === this.listWidth() && height === this.listHeight()) return;
+      this.listWidth.set(width);
+      this.listHeight.set(height);
+      // Switching organizer/density can change column count after layout.
+      // Re-anchor with the new geometry, not the old sidebar width.
+      this.scheduleActivePageScroll();
+    });
+    this.listObserver.observe(value.nativeElement);
+    this.scheduleActivePageScroll();
+  }
+
+  onPagesScroll(): void {
+    this.listScrollTop.set(this.pagesList?.nativeElement.scrollTop ?? 0);
+  }
+
+  ngOnDestroy(): void {
+    this.listObserver?.disconnect();
+    this.cancelActivePageScroll();
+  }
 
   /**
    * Wrapper element around every page thumbnail.
@@ -236,6 +277,8 @@ private readonly pagesList!:
 
     effect(() => {
 
+      this.sidebarPageView();
+      this.organizeFocusMode();
       const page =
         this.currentPage();
 
@@ -271,7 +314,7 @@ private readonly pagesList!:
      * Initial synchronization.
      */
     this.pageItems.changes.subscribe(() => {
-      this.scheduleActivePageScroll();
+      if (!this.virtualPages()) this.scheduleActivePageScroll();
     });
 
     this.scheduleActivePageScroll();
@@ -750,6 +793,15 @@ private readonly pagesList!:
 
   const list =
     this.pagesList?.nativeElement;
+
+  if (list && this.virtualPages()) {
+    const top = Math.floor((page - 1) / this.pageColumns()) * this.rowHeight();
+    if (top < list.scrollTop || top + this.rowHeight() > list.scrollTop + list.clientHeight) {
+      list.scrollTop = Math.max(0, top - (list.clientHeight - this.rowHeight()) / 2);
+    }
+    this.onPagesScroll();
+    return;
+  }
 
   if (
     !list ||

@@ -297,7 +297,7 @@ export class StudioFacade {
       // Start the editable-content foundation with page 1 only after the new
       // document session is clean. Remaining pages are analyzed lazily.
       this.contentAnalysis.begin(newDocument);
-      void this.ensurePageContent(newDocument, 1);
+      if (this.shouldPreparePageContent(newDocument)) void this.ensurePageContent(newDocument, 1);
 
       /**
        * A new PDF is a new history session.
@@ -1184,6 +1184,8 @@ fitWidth(): void {
       this.objectService.clearAll();
       this.pendingCommentDrafts.clear();
       this.pageService.clear();
+      this.contentAnalysis.reset();
+      this.clearExportSession();
       this.history.reset();
       this.state.clear();
     }
@@ -2341,7 +2343,7 @@ goToPage(page: number): void {
   if (
     page === this.currentPage()
   ) {
-    if (document) {
+    if (document && this.shouldPreparePageContent(document)) {
       void this.ensurePageContent(document, page);
     }
     return;
@@ -2355,7 +2357,7 @@ goToPage(page: number): void {
     page
   );
 
-  if (document) {
+  if (document && this.shouldPreparePageContent(document)) {
     void this.ensurePageContent(document, page);
   }
 }
@@ -2368,6 +2370,13 @@ goToPage(page: number): void {
    * edit-pdf-text tool must not require a tool toggle after page navigation
    * just because PDF.js text extraction is asynchronous.
    */
+  private shouldPreparePageContent(document: StudioPdfDocument): boolean {
+    // Viewing, drawing and organizing a large PDF do not require a second
+    // document parse for original font programs. Prepare it on edit activation.
+    return this.activeTool() === 'edit-pdf-text' || this.activeTool() === 'edit-pdf-image'
+      || (document.file.size < 50 * 1024 * 1024 && document.pageCount < 2000);
+  }
+
   async ensureCurrentPageContent(): Promise<void> {
     const document = this.document();
     if (!document) {

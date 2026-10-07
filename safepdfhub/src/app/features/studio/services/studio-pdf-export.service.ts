@@ -1,3 +1,4 @@
+import { studioSourcePages } from './studio-source-page';
 import { pdfFontSize, textFontWeight, textFontStyle, pdfFontFaceChanged } from './studio-text-typography';
 import { pdfTextDestination } from './studio-pdf-text-geometry';
 import { collectPageFontPrograms, normalizePdfFontName } from './pdf-source-fonts';
@@ -67,8 +68,6 @@ export class StudioPdfExportService {
   private readonly qpdf = inject(QpdfWasmPrototypeService);
   private readonly signingText = inject(SigningPdfTextService);
 
-  private readonly previewDocuments = new WeakMap<File, Promise<PDFDocument>>();
-
   /** Prepare a bounded, single-page preview input once per logical page.
    * Full-document export always continues to use the original uploaded file. */
   async createPreviewFile(sourceFile: File, logicalPage: StudioPage): Promise<File> {
@@ -76,17 +75,9 @@ export class StudioPdfExportService {
     if (logicalPage.kind === 'blank') {
       preview.addPage([logicalPage.blankWidth ?? 595.28, logicalPage.blankHeight ?? 841.89]);
     } else {
-      // Files are immutable. Reuse the read-only source parse across page
-      // previews; copies are edited independently, never this source document.
-      let pending = this.previewDocuments.get(sourceFile);
-      if (!pending) {
-        pending = sourceFile.arrayBuffer().then(bytes => PDFDocument.load(bytes, { updateMetadata: false, parseSpeed: 10000 }));
-        this.previewDocuments.set(sourceFile, pending);
-      }
-      let original: PDFDocument;
-      try { original = await pending; }
-      catch (error) { this.previewDocuments.delete(sourceFile); throw error; }
-      const [page] = await preview.copyPages(original, [(logicalPage.sourcePageNumber ?? 1) - 1]);
+      const bytes = await studioSourcePages.read(sourceFile, logicalPage.sourcePageNumber ?? 1);
+      const original = await PDFDocument.load(bytes, { updateMetadata: false, parseSpeed: 500 });
+      const [page] = await preview.copyPages(original, [0]);
       preview.addPage(page);
     }
     const page = preview.getPage(0);

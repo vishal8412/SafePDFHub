@@ -105,12 +105,11 @@ export class PdfPageRendererService {
 
     await previousQueue;
 
-    this.throwIfRequestIsStale(state, requestVersion);
-
     let page: PDFPageProxy | undefined;
     let renderTask: ActiveRenderTask | undefined;
 
     try {
+      this.throwIfRequestIsStale(state, requestVersion);
 
       /*
        * If the previous render was cancelled, wait for
@@ -315,9 +314,8 @@ export class PdfPageRendererService {
 
     await previousQueue;
 
-    this.throwIfRequestIsStale(state, requestVersion);
-
     try {
+      this.throwIfRequestIsStale(state, requestVersion);
 
       if (state.task) {
         try {
