@@ -367,7 +367,7 @@
                 <input type="range" min="1" max="48" step="1" [value]="styleWidthToUi(selectedObject()?.shape?.style?.strokeWidth, 0.03)" (input)="updateShapeStrokeWidth($any($event.target).value)">
               </label>
               <label class="properties__field">
-                <span>Opacity <b>{{ percent((selectedObject()?.shape?.style?.opacity ?? 1) * 100) }}%</b></span>
+                <span>Opacity <b>{{ percent(selectedObject()?.shape?.style?.opacity ?? 1) }}%</b></span>
                 <input type="range" min="5" max="100" step="1" [value]="(selectedObject()?.shape?.style?.opacity ?? 1) * 100" (input)="updateShapeOpacity($any($event.target).value)">
               </label>
             </div>
@@ -384,7 +384,7 @@
                 <input type="range" min="1" max="48" step="1" [value]="styleWidthToUi(selectedObject()?.drawing?.style?.strokeWidth, 0.05)" (input)="updateDrawingWidth($any($event.target).value)">
               </label>
               <label class="properties__field">
-                <span>Opacity <b>{{ percent((selectedObject()?.drawing?.style?.opacity ?? 1) * 100) }}%</b></span>
+                <span>Opacity <b>{{ percent(selectedObject()?.drawing?.style?.opacity ?? 1) }}%</b></span>
                 <input type="range" min="5" max="100" step="1" [value]="(selectedObject()?.drawing?.style?.opacity ?? 1) * 100" (input)="updateDrawingOpacity($any($event.target).value)">
               </label>
             </div>

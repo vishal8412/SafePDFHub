@@ -1,8 +1,8 @@
 {
-  "checked_on": "2026-10-06",
+  "checked_on": "2026-10-07",
   "unit_tests": {
     "suites_passed": 11,
-    "tests_passed": 62
+    "tests_passed": 66
   },
   "application_typecheck": "passed",
   "production_build": "passed",
@@ -49,5 +49,22 @@
   "formatted_export_wrapped_lines": 4,
   "larger_font_top_anchor": "passed",
   "source_text_size_note": "Auto-fit can reduce the chosen size; Keep chosen size preserves it and wraps",
-  "validation_scope": "Supplied resume, supplied 842-page PDF, synthetic native-text table; not universal PDF/font/script coverage"
+  "validation_scope": "Supplied resume, supplied 842-page PDF, synthetic native-text table; not universal PDF/font/script coverage",
+  "rotation_annotation_update": {
+    "sample": "first page extracted from supplied 842-page PDF",
+    "browser": "Chromium",
+    "image_rotations": [
+      0,
+      90,
+      180,
+      270,
+      360
+    ],
+    "explicit_font_size_enlarges_live_text": true,
+    "font_size_automatically_selects_chosen_size": true,
+    "highlight_export_single_path_opacity": 0.3,
+    "annotation_rotation_undo_pixel_identical": true,
+    "image_four_turn_return_pixel_identical": true,
+    "straight_stroke_svg_nonzero": true
+  }
 }

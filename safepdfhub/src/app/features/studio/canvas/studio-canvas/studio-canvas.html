@@ -299,6 +299,7 @@
                   class="studio-editor-object__image"
                   [src]="object.image?.dataUrl ?? ''"
                   [style.object-fit]="getPdfImagePreviewFit(object)"
+                  [style]="getPdfImagePreviewStyle(object)"
                   alt="Inserted image"
                   draggable="false"
                   (dragstart)="$event.preventDefault()"
@@ -320,11 +321,11 @@
                     object.shape.kind === 'rectangle'
                   ) {
 
-                    <rect
-                      x="1"
-                      y="1"
-                      width="98"
-                      height="98"
+                    <rect vector-effect="non-scaling-stroke"
+                      x="0"
+                      y="0"
+                      width="100"
+                      height="100"
                       [attr.stroke]="
                         object.shape.style.strokeColor
                       "
@@ -348,11 +349,11 @@
                     object.shape.kind === 'ellipse'
                   ) {
 
-                    <ellipse
+                    <ellipse vector-effect="non-scaling-stroke"
                       cx="50"
                       cy="50"
-                      rx="49"
-                      ry="49"
+                      rx="50"
+                      ry="50"
                       [attr.stroke]="
                         object.shape.style.strokeColor
                       "
@@ -379,7 +380,7 @@
 
                     @let linePoints = getShapeLineSvgPoints(object);
 
-                    <line
+                    <line vector-effect="non-scaling-stroke"
                       [attr.x1]="linePoints.x1"
                       [attr.y1]="linePoints.y1"
                       [attr.x2]="linePoints.x2"
@@ -400,17 +401,7 @@
                       object.shape.kind === 'arrow'
                     ) {
 
-                      <polygon
-                        [attr.points]="
-                          getArrowHeadSvgPoints(object)
-                        "
-                        [attr.fill]="
-                          object.shape.style.strokeColor
-                        "
-                        [attr.fill-opacity]="
-                          object.shape.style.opacity
-                        "
-                      />
+                      <polyline vector-effect="non-scaling-stroke" [attr.points]="getArrowHeadSvgPoints(object)" fill="none" [attr.stroke]="object.shape.style.strokeColor" [attr.stroke-width]="shapeStrokeWidthSvg(object)" [attr.stroke-opacity]="object.shape.style.opacity" stroke-linecap="round" stroke-linejoin="round" />
 
                     }
 
@@ -433,7 +424,7 @@
                   aria-hidden="true"
                 >
 
-                  <polyline
+                  <polyline vector-effect="non-scaling-stroke"
                     [attr.points]="
                       getObjectDrawingSvgPoints(object)
                     "
@@ -531,15 +522,16 @@
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                   >
-                    <rect
-                      x="1"
-                      y="1"
-                      width="98"
-                      height="98"
+                    <rect vector-effect="non-scaling-stroke"
+                      x="0"
+                      y="0"
+                      width="100"
+                      height="100"
                       [attr.stroke]="
                         drawingInteraction.shapeStyle.strokeColor
                       "
                       [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
+                      [attr.stroke-opacity]="drawingInteraction.shapeStyle.opacity"
                       [attr.fill]="
                         drawingInteraction.shapeStyle.fillColor
                           ?? 'none'
@@ -561,15 +553,16 @@
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                   >
-                    <ellipse
+                    <ellipse vector-effect="non-scaling-stroke"
                       cx="50"
                       cy="50"
-                      rx="49"
-                      ry="49"
+                      rx="50"
+                      ry="50"
                       [attr.stroke]="
                         drawingInteraction.shapeStyle.strokeColor
                       "
                       [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
+                      [attr.stroke-opacity]="drawingInteraction.shapeStyle.opacity"
                       [attr.fill]="
                         drawingInteraction.shapeStyle.fillColor
                           ?? 'none'
@@ -591,7 +584,7 @@
                   >
                     @let previewLinePoints = getDrawingPreviewLineSvgPoints();
 
-                    <line
+                    <line vector-effect="non-scaling-stroke"
                       [attr.x1]="previewLinePoints.x1"
                       [attr.y1]="previewLinePoints.y1"
                       [attr.x2]="previewLinePoints.x2"
@@ -600,20 +593,14 @@
                         drawingInteraction.shapeStyle.strokeColor
                       "
                       [attr.stroke-width]="shapePreviewStrokeWidthSvg()"
+                      [attr.stroke-opacity]="drawingInteraction.shapeStyle.opacity"
                       stroke-linecap="round"
                     />
 
                     @if (
                       drawingInteraction.shapeKind === 'arrow'
                     ) {
-                      <polygon
-                        [attr.points]="
-                          getDrawingPreviewArrowHeadSvgPoints()
-                        "
-                        [attr.fill]="
-                          drawingInteraction.shapeStyle.strokeColor
-                        "
-                      />
+                      <polyline vector-effect="non-scaling-stroke" [attr.points]="getDrawingPreviewArrowHeadSvgPoints()" fill="none" [attr.stroke]="drawingInteraction.shapeStyle.strokeColor" [attr.stroke-width]="shapePreviewStrokeWidthSvg()" [attr.stroke-opacity]="drawingInteraction.shapeStyle.opacity" stroke-linecap="round" stroke-linejoin="round" />
                     }
                   </svg>
 
@@ -626,7 +613,7 @@
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
                 >
-                  <polyline
+                  <polyline vector-effect="non-scaling-stroke"
                     [attr.points]="
                       getDrawingPreviewRelativePoints()
                     "

@@ -21,6 +21,7 @@ import {
   PDFDict, PDFRawStream, decodePDFRawStream,
   PDFName,
   PDFString,
+  setLineJoin,
   pushGraphicsState,
   popGraphicsState,
   rectangle,
@@ -1157,7 +1158,7 @@ export class StudioPdfExportService {
         opacity: fillColor
           ? style.opacity * 0.28
           : 0,
-        rotate: degrees(compensation)
+        rotate: degrees(0)
       });
 
       return;
@@ -1229,17 +1230,7 @@ export class StudioPdfExportService {
             end.y - start.y
           );
 
-        const headLength =
-          Math.min(
-            24,
-            Math.max(
-              2,
-              Math.min(
-                strokeWidth * 2.8,
-                lineLength * 0.28
-              )
-            )
-          );
+        const headLength = Math.min(strokeWidth * 2.8, lineLength * 0.28);
 
         const headAngle =
           Math.PI / 7;
@@ -1304,7 +1295,7 @@ export class StudioPdfExportService {
       opacity: fillColor
         ? style.opacity * 0.28
         : 0,
-      rotate: degrees(compensation)
+      rotate: degrees(0)
     });
   }
 
@@ -1347,48 +1338,18 @@ export class StudioPdfExportService {
         )
       );
 
-    for (
-      let index = 1;
-      index < drawing.points.length;
-      index++
-    ) {
-
-      const from =
-        drawing.points[index - 1];
-
-      const to =
-        drawing.points[index];
-
-      const start =
-        this.displayToPdfPoint(
-          from.x * displayWidth,
-          from.y * displayHeight,
-          displayWidth,
-          displayHeight,
-          rotation
-        );
-
-      const end =
-        this.displayToPdfPoint(
-          to.x * displayWidth,
-          to.y * displayHeight,
-          displayWidth,
-          displayHeight,
-          rotation
-        );
-
-      this.drawPdfLine(
-        page,
-        start.x,
-        start.y,
-        end.x,
-        end.y,
-        stroke,
-        strokeWidth,
-        drawing.style.opacity
-      );
-    }
+    // Paint a stroke once. Painting every segment separately compounds
+    // highlighter opacity at each joint and makes dense samples darker.
+    const points = drawing.points.map(point => this.displayToPdfPoint(
+      point.x * displayWidth, point.y * displayHeight,
+      displayWidth, displayHeight, rotation));
+    const path = points.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${-p.y}`).join(' ');
+    page.pushOperators(pushGraphicsState(), setLineJoin(1));
+    page.drawSvgPath(path, {x:0,y:0,borderColor:stroke,borderWidth:strokeWidth,
+      borderOpacity:drawing.style.opacity,borderLineCap:1});
+    page.pushOperators(popGraphicsState());
   }
+
 
   private drawPdfLine(
     page: PDFPage,

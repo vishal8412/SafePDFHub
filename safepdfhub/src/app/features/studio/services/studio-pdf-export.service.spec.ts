@@ -19,6 +19,25 @@ describe('Studio PDF export regressions', () => {
     ] });
     service = TestBed.inject(StudioPdfExportService);
   });
+  it('paints highlights as one path so joints do not compound opacity', async () => {
+    const doc=await PDFDocument.create(), page=doc.addPage([600,800]);
+    const path=vi.spyOn(page,'drawSvgPath'), line=vi.spyOn(page,'drawLine');
+    service.drawDrawingObject(page,{drawing:{points:[{x:.1,y:.2},{x:.2,y:.2},{x:.3,y:.2}],
+      style:{strokeColor:'#00ff00',strokeWidth:.01,opacity:.3}}},600,800,0);
+    expect(path).toHaveBeenCalledTimes(1);expect(line).not.toHaveBeenCalled();
+    expect(path.mock.calls[0][0]).toBe('M 60 -640 L 120 -640 L 180 -640');
+    expect(path.mock.calls[0][1]).toMatchObject({borderWidth:8,borderOpacity:.3,borderLineCap:1});
+    expect((await doc.save()).length).toBeGreaterThan(0);
+  });
+  it('places rectangles and ellipses correctly on a rotated PDF', async () => {
+    const doc=await PDFDocument.create(),page=doc.addPage([600,800]);
+    const rectangle=vi.spyOn(page,'drawRectangle'),ellipse=vi.spyOn(page,'drawEllipse');
+    const object:any={bounds:{x:.1,y:.2,width:.3,height:.1},shape:{kind:'rectangle',style:{strokeColor:'#ff0000',strokeWidth:.005,opacity:.5}}};
+    service.drawShapeObject(page,object,800,600,90);
+    expect(rectangle.mock.calls[0][0]).toMatchObject({x:120,y:80,width:60,height:240,rotate:{angle:0}});
+    object.shape.kind='ellipse';service.drawShapeObject(page,object,800,600,90);
+    expect(ellipse.mock.calls[0][0]).toMatchObject({x:150,y:200,xScale:30,yScale:120,rotate:{angle:0}});
+  });
   it('uses chosen point size and font face in both the layout and drawing passes', async () => {
     const doc = await PDFDocument.create(); doc.addPage([600,800]).drawText('Original', {x:60,y:720,size:12});
     const bytes = await doc.save();

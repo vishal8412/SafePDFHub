@@ -11,7 +11,7 @@ describe('replacement text typography',()=>{
   it('accepts explicit size, bold and italic without changing source erasure metrics',()=>{
     const service=new StudioObjectService(),original=source();service.add(original);
     const result=service.updateTextStyle(original.id,{fontSize:24/800,fontWeight:700,fontStyle:'italic'})!;
-    expect(pdfFontSize(result.pdfText)).toBe(24);expect(textFontWeight(result)).toBe(700);expect(textFontStyle(result)).toBe('italic');
+    expect(pdfFontSize(result.pdfText)).toBe(24);expect(result.pdfText?.fitMode).toBe('original');expect(textFontWeight(result)).toBe(700);expect(textFontStyle(result)).toBe('italic');
     expect(pdfFontFaceChanged(result)).toBe(true);expect(result.pdfText?.edited).toBe(true);
     expect(result.pdfText?.fontSizePdf).toBe(12);expect(result.pdfText?.sourceFontWeight).toBe(400);
     expect(result.pdfText?.transform).toEqual(original.pdfText?.transform);expect(result.bounds).toEqual(original.bounds);
@@ -33,5 +33,38 @@ describe('replacement text typography',()=>{
   it('does not require a different face just to change the point size',()=>{
     const base=source();const original={...base,pdfText:{...base.pdfText!,replacementFontSizePdf:18}};
     expect(pdfFontSize(original.pdfText)).toBe(18);expect(pdfFontFaceChanged(original)).toBe(false);
+  });
+});
+
+describe('replacement image rotation', () => {
+  it('rotates a resized destination through all four orientations without drift', () => {
+    const service = new StudioObjectService();
+    const original = {x:.15,y:.25,width:.5,height:.2};
+    service.add({id:'image',pageNumber:1,type:'image',bounds:original,
+      pdfImage:{sourceName:'Im1',confidence:'high',rotation:0,displayRotation:0,replaced:true,fitMode:'fit'}} as any);
+    const expected = [{x:.55,y:.15,width:.2,height:.5},{x:.35,y:.55,width:.5,height:.2},
+      {x:.25,y:.35,width:.2,height:.5},original];
+    [90,180,270,360].forEach((angle,i)=>{
+      service.syncPdfImageBlocks([{id:'image',pageNumber:1,x:0,y:0,width:.1,height:.1,displayRotation:angle}] as any);
+      const b=service.get('image')!.bounds;
+      for(const key of ['x','y','width','height'] as const) expect(b[key]).toBeCloseTo(expected[i][key]);
+      service.syncPdfImageBlocks([{id:'image',pageNumber:1,x:0,y:0,width:.1,height:.1,displayRotation:angle}] as any);
+      expect(service.get('image')!.bounds).toEqual(b);
+    });
+  });
+});
+
+describe('vector annotation rotation',()=>{
+  it('preserves physical stroke width and geometry across rotation and reversal',()=>{
+    const service=new StudioObjectService();
+    const original=service.createDrawingObject(1,[{x:.1,y:.2},{x:.5,y:.2},{x:.5,y:.4}],{strokeColor:'#00ff00',strokeWidth:.005,opacity:.3},'highlight')!;
+    service.rotateVectorObjects(1,90,800/600);
+    const rotated=service.get(original.id)!;
+    expect(rotated.drawing!.points[0]).toEqual({x:.8,y:.1});
+    expect(rotated.drawing!.style.strokeWidth*600).toBeCloseTo(4);
+    service.rotateVectorObjects(1,-90,600/800);
+    const restored=service.get(original.id)!;
+    expect(restored.drawing!.style.strokeWidth).toBeCloseTo(.005);
+    restored.drawing!.points.forEach((p,i)=>{expect(p.x).toBeCloseTo(original.drawing!.points[i].x);expect(p.y).toBeCloseTo(original.drawing!.points[i].y)});
   });
 });

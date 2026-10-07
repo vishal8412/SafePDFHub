@@ -326,13 +326,42 @@ export class StudioObjectService {
     };
   }
 
+  /** Keep vector annotations attached to the page when its orientation changes. */
+  rotateVectorObjects(pageNumber: number, delta: number, oldHeightOverWidth: number): void {
+    const clockwise = delta > 0;
+    const point = (p: StudioPoint): StudioPoint => clockwise ? {x:1-p.y,y:p.x} : {x:p.y,y:1-p.x};
+    let changed = false;
+    for (const [id, object] of this.objects) {
+      if (object.pageNumber !== pageNumber || (!object.drawing && !object.shape)) continue;
+      const b = object.bounds;
+      const bounds = clockwise ? {x:1-b.y-b.height,y:b.x,width:b.height,height:b.width}
+        : {x:b.y,y:1-b.x-b.width,width:b.height,height:b.width};
+      this.objects.set(id, {...object,bounds,
+        ...(object.drawing ? {drawing:{...object.drawing,points:object.drawing.points.map(point),
+          style:{...object.drawing.style,strokeWidth:object.drawing.style.strokeWidth*oldHeightOverWidth}}} : {}),
+        ...(object.shape ? {shape:{...object.shape,points:object.shape.points ? [point(object.shape.points[0]),point(object.shape.points[1])] as const : undefined,
+          style:{...object.shape.style,strokeWidth:object.shape.style.strokeWidth*oldHeightOverWidth}}} : {})});
+      changed = true;
+    }
+    if (changed) this.touch();
+  }
+
   /** Phase 5C.1 — create transparent selectable overlays for detected original PDF images. */
   syncPdfImageBlocks(blocks: readonly PdfExistingImageBlock[]): void {
     let changed = false;
     for (const block of blocks) {
       const existing = this.objects.get(block.id);
       if (existing?.pdfImage) {
-        this.objects.set(block.id, { ...existing, pageNumber: block.pageNumber, pdfImage: { ...existing.pdfImage, displayRotation: block.displayRotation, sourceBounds: {x:block.x,y:block.y,width:block.width,height:block.height} }, bounds: existing.pdfImage.replaced ? existing.bounds : { x:block.x,y:block.y,width:block.width,height:block.height } });
+        const delta = (((block.displayRotation ?? 0) - (existing.pdfImage.displayRotation ?? 0)) % 360 + 360) % 360;
+        const b = existing.bounds;
+        // Rotate the entire destination rectangle, including any user move/resize.
+        const bounds = delta === 90 ? {x:1-b.y-b.height,y:b.x,width:b.height,height:b.width}
+          : delta === 180 ? {x:1-b.x-b.width,y:1-b.y-b.height,width:b.width,height:b.height}
+          : delta === 270 ? {x:b.y,y:1-b.x-b.width,width:b.height,height:b.width} : b;
+        this.objects.set(block.id, { ...existing, pageNumber: block.pageNumber,
+          pdfImage: { ...existing.pdfImage, displayRotation: block.displayRotation,
+            sourceBounds: {x:block.x,y:block.y,width:block.width,height:block.height} },
+          bounds: existing.pdfImage.replaced ? bounds : {x:block.x,y:block.y,width:block.width,height:block.height} });
         changed = true; continue;
       }
       const object: StudioPdfImageObject = {
@@ -1284,7 +1313,7 @@ export class StudioObjectService {
       bounds: adjustedBounds,
       textStyle: nextStyle,
       ...(object.pdfText ? { pdfText: { ...object.pdfText,
-        ...(style.fontSize !== undefined ? { replacementFontSizePdf: nextStyle.fontSize * (object.pdfText.pageHeightPdf ?? 800) } : {}),
+        ...(style.fontSize !== undefined ? { replacementFontSizePdf: nextStyle.fontSize * (object.pdfText.pageHeightPdf ?? 800), fitMode: object.pdfText.fitMode === 'flow' ? 'flow' : 'original' } : {}),
         ...(style.fontWeight !== undefined ? { replacementFontWeight: nextStyle.fontWeight } : {}),
         ...(style.fontStyle !== undefined ? { replacementFontStyle: nextStyle.fontStyle } : {}),
         edited: object.pdfText.edited || JSON.stringify(nextStyle) !== JSON.stringify(currentStyle)

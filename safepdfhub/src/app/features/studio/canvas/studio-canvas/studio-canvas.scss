@@ -1104,20 +1104,15 @@
 ============================================================ */
 
 .studio-editor-object--shape {
+  border: 0;
+  border-radius: 0;
   overflow: visible;
 }
 
-/*
- * Draw/Highlight paths are stored in tight normalized bounds.
- * Their SVG must therefore clip to those bounds. Allowing the SVG itself to
- * overflow can expose polyline coordinates outside the current object after a
- * move/resize/normalization round-trip, which appears as unwanted line segments
- * before and after the real pointer stroke.
- *
- * Keep the object container itself usable for selection/resize UI; only the
- * drawing pixels are clipped.
- */
+/* Tight path bounds must allow the round stroke caps to extend beyond them. */
 .studio-editor-object--drawing {
+  border: 0;
+  border-radius: 0;
   overflow: visible;
 }
 
@@ -1136,7 +1131,7 @@
 }
 
 .studio-editor-object--drawing .studio-editor-object__svg {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .studio-drawing-preview {
@@ -1149,11 +1144,11 @@
   box-sizing: border-box;
 
   /* Preview uses the same tight point bounds as committed drawings. */
-  overflow: hidden;
+  overflow: visible;
 }
 
 .studio-drawing-preview .studio-editor-object__svg {
-  overflow: hidden;
+  overflow: visible;
 }
 
 

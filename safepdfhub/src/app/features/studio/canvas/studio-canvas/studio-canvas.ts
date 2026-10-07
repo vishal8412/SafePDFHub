@@ -2408,37 +2408,9 @@ private async render(
   }
 
 
-  getArrowHeadSvgPoints(
-    object: StudioObject
-  ): string {
-
-    const line =
-      this.getShapeLineSvgPoints(object);
-
-    const strokeWidth =
-      this.shapeStrokeWidthSvg(object);
-
-    const dx = line.x2 - line.x1;
-    const dy = line.y2 - line.y1;
-    const lineLength = Math.hypot(dx, dy);
-
-    const length =
-      Math.min(20,
-        Math.max(2,
-          Math.min(
-            strokeWidth * 2.6,
-            lineLength * 0.28
-          )
-        )
-      );
-
-    return this.makeArrowHead(
-      line.x1,
-      line.y1,
-      line.x2,
-      line.y2,
-      length
-    );
+  getArrowHeadSvgPoints(object: StudioObject): string {
+    return this.arrowHeadInBox(this.getShapeLineSvgPoints(object), object.bounds,
+      this.shapeStrokeWidthSvg(object));
   }
 
   getDrawingPreviewLineSvgPoints(): {
@@ -2516,76 +2488,22 @@ private async render(
   }
 
   getDrawingPreviewArrowHeadSvgPoints(): string {
-    const line =
-      this.getDrawingPreviewLineSvgPoints();
-
-    const dx = line.x2 - line.x1;
-    const dy = line.y2 - line.y1;
-    const lineLength = Math.hypot(dx, dy);
-
-    const length =
-      Math.min(20,
-        Math.max(2,
-          Math.min(
-            this.drawingPreviewStrokeWidthSvg() * 2.6,
-            lineLength * 0.28
-          )
-        )
-      );
-
-    return this.makeArrowHead(
-      line.x1,
-      line.y1,
-      line.x2,
-      line.y2,
-      length
-    );
+    const b = this.drawingPreviewBounds;
+    return b ? this.arrowHeadInBox(this.getDrawingPreviewLineSvgPoints(),
+      {width:b.width/100,height:b.height/100}, this.shapePreviewStrokeWidthSvg()) : '';
   }
 
-  private makeArrowHead(
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    length: number
-  ): string {
-
-    const angle =
-      Math.atan2(
-        y2 - y1,
-        x2 - x1
-      );
-
-    const spread =
-      Math.PI / 7;
-
-    const left = {
-      x:
-        x2 -
-        length *
-          Math.cos(angle - spread),
-      y:
-        y2 -
-        length *
-          Math.sin(angle - spread)
-    };
-
-    const right = {
-      x:
-        x2 -
-        length *
-          Math.cos(angle + spread),
-      y:
-        y2 -
-        length *
-          Math.sin(angle + spread)
-    };
-
-    return (
-      `${x2},${y2} ` +
-      `${left.x},${left.y} ` +
-      `${right.x},${right.y}`
-    );
+  private arrowHeadInBox(line: {x1:number;y1:number;x2:number;y2:number},
+    bounds: {width:number;height:number}, stroke: number): string {
+    const page = this.pageRef?.nativeElement.getBoundingClientRect();
+    const w = Math.max(.001, bounds.width * (page?.width ?? 0));
+    const h = Math.max(.001, bounds.height * (page?.height ?? 0));
+    const dx = (line.x2-line.x1)*w/100, dy = (line.y2-line.y1)*h/100;
+    const length = Math.min(stroke*2.8, Math.hypot(dx,dy)*.28);
+    const angle = Math.atan2(dy,dx), spread = Math.PI/7;
+    const tip = `${line.x2},${line.y2}`;
+    const side = (a:number) => `${line.x2-length*Math.cos(a)*100/w},${line.y2-length*Math.sin(a)*100/h}`;
+    return `${side(angle-spread)} ${tip} ${side(angle+spread)}`;
   }
 
   getObjectDrawingSvgPoints(
@@ -2619,113 +2537,38 @@ private async render(
       .join(' ');
   }
 
+  // SVG paths use a non-scaling stroke: widths are CSS pixels, independent
+  // of the object's aspect ratio, but scale with the displayed PDF page.
   shapePreviewStrokeWidthSvg(): number {
-    const bounds = this.drawingPreviewBounds;
-    const page = this.pageRef?.nativeElement;
-    const pageHeight = page?.getBoundingClientRect().height ?? 0;
-    const widthPx = this.drawingInteraction?.shapeStyle
-      ? this.drawingInteraction.shapeStyle.strokeWidth * pageHeight
-      : this.selectedShapeWidthPx;
-
-    if (!bounds || pageHeight <= 0) {
-      return 2;
-    }
-
-    const objectHeightPx =
-      Math.max(1, (bounds.height / 100) * pageHeight);
-
-    return Math.max(
-      0.25,
-      Math.min(
-        80,
-        (widthPx * 100) / objectHeightPx
-      )
-    );
+    return (this.drawingInteraction?.shapeStyle.strokeWidth ?? 0) * this.renderedPageHeight();
   }
 
   drawingPreviewStrokeWidthSvg(): number {
-    const bounds = this.drawingPreviewBounds;
-    const page = this.pageRef?.nativeElement;
-    const pageHeight = page?.getBoundingClientRect().height ?? 0;
-
-    const widthPx =
-      this.drawingInteraction?.drawingStyle
-        ? this.drawingInteraction.drawingStyle.strokeWidth * pageHeight
-        : this.activeDrawingWidthPx;
-
-    if (!bounds || pageHeight <= 0) {
-      return 2;
-    }
-
-    const objectHeightPx =
-      Math.max(1, (bounds.height / 100) * pageHeight);
-
-    return Math.max(
-      0.25,
-      Math.min(
-        80,
-        (widthPx * 100) / objectHeightPx
-      )
-    );
+    return (this.drawingInteraction?.drawingStyle.strokeWidth ?? 0) * this.renderedPageHeight();
   }
 
-  shapeStrokeWidthSvg(
-    object: StudioObject
-  ): number {
-
-    if (
-      object.type !== 'shape' ||
-      !object.shape
-    ) {
-      return 2;
-    }
-
-    const page = this.pageRef?.nativeElement;
-    const pageHeight = page?.getBoundingClientRect().height ?? 0;
-    const objectHeightPx = object.bounds.height * pageHeight;
-
-    if (pageHeight <= 0 || objectHeightPx <= 0) {
-      return 2;
-    }
-
-    const strokeCssPx =
-      object.shape.style.strokeWidth * pageHeight;
-
-    return Math.max(
-      0.25,
-      Math.min(
-        80,
-        (strokeCssPx * 100) / objectHeightPx
-      )
-    );
+  shapeStrokeWidthSvg(object: StudioObject): number {
+    return (object.shape?.style.strokeWidth ?? 0) * this.renderedPageHeight();
   }
 
-  drawingStrokeWidthSvg(
-    object: StudioObject
-  ): number {
+  drawingStrokeWidthSvg(object: StudioObject): number {
+    return (object.drawing?.style.strokeWidth ?? 0) * this.renderedPageHeight();
+  }
 
-    if (!object.drawing) {
-      return 2;
-    }
+  private renderedPageHeight(): number {
+    return this.pageRef?.nativeElement.getBoundingClientRect().height ?? 0;
+  }
 
-    const page = this.pageRef?.nativeElement;
-    const pageHeight = page?.getBoundingClientRect().height ?? 0;
-    const objectHeightPx = object.bounds.height * pageHeight;
-
-    if (pageHeight <= 0 || objectHeightPx <= 0) {
-      return 2;
-    }
-
-    const strokeCssPx =
-      object.drawing.style.strokeWidth * pageHeight;
-
-    return Math.max(
-      0.25,
-      Math.min(
-        80,
-        (strokeCssPx * 100) / objectHeightPx
-      )
-    );
+  getPdfImagePreviewStyle(object: StudioObject): Record<string, string> {
+    const angle = object.pdfImage?.displayRotation ?? 0;
+    const swapped = Math.abs(Math.round(angle / 90)) % 2 === 1;
+    const page = this.pageRef?.nativeElement.getBoundingClientRect();
+    const width = object.bounds.width * (page?.width ?? 0);
+    const height = object.bounds.height * (page?.height ?? 0);
+    return { position:'absolute', left:'50%', top:'50%',
+      width: swapped ? `${height}px` : '100%', height: swapped ? `${width}px` : '100%',
+      'max-width':'none', 'max-height':'none',
+      transform:`translate(-50%, -50%) rotate(${angle}deg)` };
   }
 
   getDrawingPreviewBounds(): {

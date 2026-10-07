@@ -641,6 +641,7 @@ async renderCurrentPage(
     return null;
   }
 
+  this.vectorPageDimensions.set(logicalPage.id, {width:rendered.width,height:rendered.height,rotation:logicalPage.rotation});
   this.renderScale.set(Math.max(0.0001, rendered.scale));
 
   return rendered;
@@ -2009,6 +2010,7 @@ private async resolveBlankPageDimensions(
         let changed = false;
 
         for (const pageNumber of selected) {
+          this.rotatePageAnnotations(pageNumber,delta);
           changed = this.pageService.rotate(pageNumber, delta) || changed;
           const document = this.document();
           if (document) void this.ensurePageContent(document, pageNumber);
@@ -2102,6 +2104,17 @@ private async resolveBlankPageDimensions(
     ).sort((a, b) => a - b);
   }
 
+  private readonly vectorPageDimensions = new Map<string, {width:number;height:number;rotation:number}>();
+
+  private rotatePageAnnotations(pageNumber:number, delta:number): void {
+    const page = this.pages()[pageNumber-1];
+    if (!page) return;
+    const dimensions = this.vectorPageDimensions.get(page.id);
+    let ratio = dimensions ? dimensions.height/dimensions.width : 1;
+    if (dimensions && Math.abs(page.rotation-dimensions.rotation)%180 === 90) ratio = 1/ratio;
+    this.objectService.rotateVectorObjects(pageNumber,delta,ratio);
+  }
+
   rotateCurrentPage(
     direction:
       | 'left'
@@ -2114,6 +2127,7 @@ private async resolveBlankPageDimensions(
         : 'Rotate page right',
       () => {
 
+        this.rotatePageAnnotations(this.currentPage(), direction === 'left' ? -90 : 90);
         const changed =
           this.pageService.rotate(
             this.currentPage(),
@@ -2359,7 +2373,7 @@ goToPage(page: number): void {
     const pdfPage = await document.pdf.getPage(sourcePageNumber);
     const result = await this.contentAnalysis.ensurePage(document, sourcePageNumber,
       n => this.pdfEngine.getPage(document, n));
-    if (!result || this.document()?.id !== document.id || this.pages()[pageNumber - 1]?.id !== logicalPage.id) return;
+    if (!result || this.document()?.id !== document.id || this.pages()[pageNumber - 1]?.id !== logicalPage.id || this.pages()[pageNumber - 1]?.rotation !== logicalPage.rotation) return;
     const rotation = ((pdfPage.rotate + logicalPage.rotation) % 360 + 360) % 360;
     const v = pdfPage.getViewport({ scale: 1 / (pdfPage.userUnit || 1), rotation: 0 });
     const swapped = rotation === 90 || rotation === 270;
@@ -2435,6 +2449,14 @@ async exportCurrentDocumentFile(): Promise<File> {
   const document = this.document();
   if (!document) {
     throw new Error('Open a PDF before exporting.');
+  }
+
+  // A user can export immediately after rotation, before the canvas reanalysis
+  // finishes. Refresh only pages with source edits before taking the snapshot.
+  for (let pageNumber = 1; pageNumber <= this.pageCount(); pageNumber++) {
+    if (this.objectService.listForPage(pageNumber).some(o => o.pdfText?.edited || o.pdfImage?.replaced)) {
+      await this.ensurePageContent(document, pageNumber);
+    }
   }
 
   const objects = Array.from(
