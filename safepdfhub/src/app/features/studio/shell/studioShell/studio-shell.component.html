@@ -5,95 +5,11 @@
   [class.studio--toolbar-collapsed]="!toolbarVisible()"
   [class.studio--header-collapsed]="!studioHeaderVisible()">
 
-  @if (studioHeaderVisible()) {
-    <app-studio-header
-      [projectName]="projectName()"
-      [browserProcessing]="browserProcessing()"
-      [zoom]="zoom()"
-      [canUndo]="canUndo()"
-      [canRedo]="canRedo()"
-      [pdfLoaded]="pdfLoaded()"
-      (exportPdf)="onExportPdf()"
-      (security)="openSecurityMenu()"
-      (openPdf)="openPdfPicker()"
-      (undo)="onUndo()"
-      (redo)="onRedo()"
-      (zoomChanged)="onZoomChanged($event)"
-    />
-  }
-
-  <!--
-    Header handle is an absolute overlay.
-    It does not participate in the Studio CSS grid.
-  -->
-  <button
-    type="button"
-    class="studio-chrome-handle studio-header-toggle"
-    [attr.aria-expanded]="studioHeaderVisible()"
-    [attr.aria-label]="
-      studioHeaderVisible()
-        ? 'Hide Studio Header'
-        : 'Show Studio Header'
-    "
-    [title]="
-      studioHeaderVisible()
-        ? 'Hide Studio Header'
-        : 'Show Studio Header'
-    "
-    (click)="toggleStudioHeader()">
-
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M7 8h10M7 12h10M7 16h10"
-        stroke="currentColor"
-        stroke-width="1.6"
-        stroke-linecap="round" />
-    </svg>
-  </button>
-
+  <app-studio-header [projectName]="projectName()" [browserProcessing]="browserProcessing()" [pdfLoaded]="pdfLoaded()" [documentBarVisible]="studioHeaderVisible()" [toolbarVisible]="toolbarVisible()" (documentBarToggle)="toggleStudioHeader()" (toolbarToggle)="toggleToolbar()" (exportPdf)="onExportPdf()" (security)="openSecurityMenu()" (openPdf)="openPdfPicker()" />
   <div class="studio-toolbar-region">
     @if (toolbarVisible()) {
-     <app-studio-toolbar
-      [activeTool]="activeTool()"
-      [canUndo]="canUndo()"
-      [canRedo]="canRedo()"
-      (toolSelected)="onToolSelected($event)"
-      (undo)="onUndo()"
-      (redo)="onRedo()"
-     />
+      <app-studio-toolbar [activeTool]="activeTool()" [canUndo]="canUndo()" [canRedo]="canRedo()" (toolSelected)="onToolSelected($event)" (undo)="onUndo()" (redo)="onRedo()" />
     }
-
-    <button
-      type="button"
-      class="studio-chrome-handle studio-toolbar-toggle"
-      [attr.aria-expanded]="toolbarVisible()"
-      [attr.aria-label]="
-        toolbarVisible()
-          ? 'Hide editing toolbar'
-          : 'Show editing toolbar'
-      "
-      [title]="
-        toolbarVisible()
-          ? 'Hide editing toolbar'
-          : 'Show editing toolbar'
-      "
-      (click)="toggleToolbar()">
-
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true">
-        <circle cx="8" cy="8" r="1.25" fill="currentColor" />
-        <circle cx="12" cy="8" r="1.25" fill="currentColor" />
-        <circle cx="16" cy="8" r="1.25" fill="currentColor" />
-        <circle cx="8" cy="12" r="1.25" fill="currentColor" />
-        <circle cx="12" cy="12" r="1.25" fill="currentColor" />
-        <circle cx="16" cy="12" r="1.25" fill="currentColor" />
-      </svg>
-    </button>
   </div>
 
   <app-studio-workspace />
@@ -115,7 +31,7 @@
 
   @if (passwordPromptOpen()) {
     <div class="studio-security-dialog" role="presentation">
-      <section class="studio-security-dialog__panel" role="dialog" aria-modal="true" aria-labelledby="studio-password-title">
+      <section class="studio-security-dialog__panel" role="dialog" aria-modal="true" aria-labelledby="studio-password-title" studioDialogFocus (dialogEscape)="cancelPasswordPrompt()">
         <header class="studio-security-dialog__header">
           <div>
             <span class="studio-security-dialog__eyebrow">Protected PDF</span>
@@ -150,23 +66,21 @@
 
   @if (securityDialogOpen()) {
     <div class="studio-security-dialog" role="presentation">
-      <section class="studio-security-dialog__panel studio-security-dialog__panel--security" role="dialog" aria-modal="true" aria-labelledby="studio-security-title">
+      <section class="studio-security-dialog__panel studio-security-dialog__panel--security" studioDialogFocus (dialogEscape)="closeSecurityDialog()" role="dialog" aria-modal="true" aria-labelledby="studio-security-title">
         <header class="studio-security-dialog__header">
           <div>
             <span class="studio-security-dialog__eyebrow">PDF Security</span>
-            <h2 id="studio-security-title">Protect or remove PDF password</h2>
-            <p>Security operations run locally on this device.</p>
+            <h2 id="studio-security-title">Protect your PDF</h2>
+            <p>Add a password to the PDF you download. Your editing session stays open.</p>
           </div>
           <button type="button" class="studio-security-dialog__close" [disabled]="securityDialogBusy()" (click)="closeSecurityDialog()" aria-label="Close security dialog">×</button>
         </header>
 
-        <div class="studio-security-dialog__modes">
-          <button type="button" [class.is-active]="securityDialogMode() === 'protect'" [disabled]="securityDialogBusy()" (click)="selectSecurityMode('protect')">Protect PDF</button>
-          <button type="button" [class.is-active]="securityDialogMode() === 'unlock'" [disabled]="securityDialogBusy()" (click)="selectSecurityMode('unlock')">Unlock PDF</button>
-        </div>
-
+        @if (facade.document()?.sourceWasProtected) {
+          <div class="studio-password-context"><strong>Original password removed locally</strong><p>Export PDF creates a password-free copy of your edits. Add a new password below to protect the download.</p></div>
+        }
         <app-pdf-security-form
-          [mode]="securityDialogMode()"
+          mode="protect" appearance="studio"
           [fileName]="projectName()"
           [busy]="securityDialogBusy()"
           [errorMessage]="securityDialogError()"

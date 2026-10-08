@@ -255,49 +255,15 @@ get statusLabel(): string {
 
   private readonly zoomSteps = [50, 75, 100, 125, 150, 175, 200];
 
-zoomOut(): void {
-
-  const currentIndex =
-    this.zoomSteps.indexOf(
-      this.zoom
-    );
-
-  const nextIndex =
-    currentIndex > 0
-      ? currentIndex - 1
-      : 0;
-
-  this.setZoom(
-    this.zoomSteps[nextIndex]
-  );
-}
-
-zoomIn(): void {
-
-  const currentIndex =
-    this.zoomSteps.indexOf(
-      this.zoom
-    );
-
-  const nextIndex =
-    currentIndex === -1
-      ? 0
-      : Math.min(
-          currentIndex + 1,
-          this.zoomSteps.length - 1
-        );
-
-  this.setZoom(
-    this.zoomSteps[nextIndex]
-  );
-}
+zoomOut(): void { this.setZoom([...this.zoomSteps].reverse().find(value => value < this.zoom) ?? this.minZoom); }
+zoomIn(): void { this.setZoom(this.zoomSteps.find(value => value > this.zoom) ?? this.maxZoom); }
 
   onZoomSelect(event: Event): void {
     const target =
       event.target as HTMLSelectElement;
 
-    const value =
-      Number(target.value);
+    if (target.value === 'fit-page' || target.value === 'fit-width') { this.viewModeChanged.emit(target.value); return; }
+    const value = Number(target.value);
 
     if (!Number.isFinite(value)) {
       return;

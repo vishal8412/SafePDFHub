@@ -59,6 +59,9 @@ export class StudioWorkspace
 
   @ViewChild('pagesList')
   set pageListElement(value: ElementRef<HTMLElement> | undefined) {
+    // Angular refreshes view queries when deferred/virtual thumbnail rows change.
+    // Re-observing the same list would scroll back to the active page on every wheel event.
+    if (value?.nativeElement === this.pagesList?.nativeElement) return;
     this.listObserver?.disconnect();
     this.pagesList = value;
     if (!value || typeof ResizeObserver === 'undefined') return;
@@ -307,9 +310,8 @@ export class StudioWorkspace
     /**
      * Initial synchronization.
      */
-    this.pageItems.changes.subscribe(() => {
-      if (!this.virtualPages()) this.scheduleActivePageScroll();
-    });
+    // Deferred thumbnails and virtual rows mount during manual scrolling.
+    // Only explicit page/view changes should scroll back to the active page.
 
     this.scheduleActivePageScroll();
   }

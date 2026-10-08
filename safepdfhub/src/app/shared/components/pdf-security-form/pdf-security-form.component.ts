@@ -23,6 +23,7 @@ import type {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PdfSecurityFormComponent {
+  @Input() appearance: 'default' | 'studio' = 'default';
   @Input() mode: PdfSecurityMode = 'protect';
   @Input() busy = false;
   @Input() fileName = '';

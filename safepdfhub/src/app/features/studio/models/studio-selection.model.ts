@@ -165,6 +165,8 @@ export type StudioShapeKind =
 export interface StudioShapeStyle {
   readonly strokeColor: string;
   readonly fillColor: string | null;
+  /** Preserve the chosen color while the fill is switched off. */
+  readonly rememberedFillColor?: string;
   readonly strokeWidth: number;
   readonly opacity: number;
 }
@@ -253,6 +255,8 @@ export type StudioPdfTextFitMode =
 
 /** Common immutable identity and geometry shared by every Studio object. */
 export interface StudioObjectBase {
+  /** Clockwise display rotation for inserted content; bounds remain its axis-aligned selection box. */
+  readonly contentRotation?: number;
   readonly id: string;
   readonly pageNumber: number;
   readonly bounds: StudioObjectBounds;

@@ -1,8 +1,8 @@
 {
-  "checked_on": "2026-10-07",
+  "checked_on": "2026-10-08",
   "unit_tests": {
-    "suites_passed": 13,
-    "tests_passed": 73
+    "suites_passed": 24,
+    "tests_passed": 111
   },
   "application_typecheck": "passed",
   "production_build": "passed",
@@ -178,5 +178,55 @@
       "cancelPlacement": true,
       "uploadRequiresConfirmation": true
     }
+  },
+  "workspace_ux_update": {
+    "checked_on": "2026-10-08",
+    "unit_tests": {
+      "suites_passed": 23,
+      "tests_passed": 107
+    },
+    "production_build": "passed",
+    "browser_results": {
+      "passed": true,
+      "browserErrors": [],
+      "manualSidebarScroll": {
+        "top": 8000,
+        "height": 42240,
+        "client": 531,
+        "first": "44"
+      },
+      "guardConfirmations": 2
+    },
+    "viewports": [
+      "1366x900",
+      "390x844",
+      "1024x600"
+    ],
+    "export_pages": 240,
+    "inserted_text_intrinsic_rotation_export": "upright",
+    "image_four_turn_preview_aspect_ratio": "passed",
+    "download_checkpoint_clears_dirty_state": "passed",
+    "scope": "Studio; shared guard available for registration by other tool workspaces"
+  },
+  "current_update": {
+    "name": "Studio navigation and dialog polish",
+    "unit_tests": 111,
+    "suites": 24,
+    "production_build": "passed",
+    "browser_regression": "scripts/studio-workspace-ux-regression.cjs",
+    "browser_status": "passed",
+    "viewports": [
+      1366,
+      1024,
+      390
+    ],
+    "fixture_pages": 240,
+    "protected_export_inspection": {
+      "encrypted": true,
+      "pages": 240,
+      "inserted_text_retained": true,
+      "committed_watermark_retained": true
+    },
+    "historical_fields_note": "Other feature-specific fields below retain earlier validation; they do not imply a full re-run of every historical sample."
   }
 }

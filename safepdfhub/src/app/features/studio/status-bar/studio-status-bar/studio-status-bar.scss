@@ -45,7 +45,7 @@
     sans-serif;
 
   margin: 0;
-  flex-shrink: 0;   
+  flex-shrink: 0;
 }
 
 
@@ -816,3 +816,5 @@
     transition: none;
   }
 }
+.zoom-control .zoom-select {width:140px;min-width:140px;max-width:none;padding-right:24px;}
+@media(max-width:600px){.zoom-control .zoom-select{width:120px;min-width:120px;}}

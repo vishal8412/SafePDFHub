@@ -328,3 +328,6 @@
     transition: none;
   }
 }
+/* Keep tool names readable; narrow screens scroll the toolbar horizontally. */
+.studio-toolbar__tool { width: auto; min-width: 58px; padding-inline: 8px; }
+.studio-toolbar__tool .studio-toolbar__label { overflow: visible; text-overflow: clip; }

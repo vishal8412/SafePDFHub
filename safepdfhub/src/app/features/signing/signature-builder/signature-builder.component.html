@@ -40,7 +40,7 @@
           <svg class="sign-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="activeDrawTool.path" /></svg>
           <span>{{ activeDrawTool.label }}</span>
         </div>
-        <canvas #pad width="1200" height="430" [class.canvas--pen]="drawTool === 'pen'" [class.canvas--pencil]="drawTool === 'pencil'" [class.canvas--brush]="drawTool === 'brush'" [class.canvas--eraser]="drawTool === 'eraser'" (pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)" (pointercancel)="onPointerUp($event)" (pointerleave)="onPointerLeave()"></canvas>
+        <canvas [style.cursor]="drawCursor" #pad width="1200" height="430" [class.canvas--pen]="drawTool === 'pen'" [class.canvas--pencil]="drawTool === 'pencil'" [class.canvas--brush]="drawTool === 'brush'" [class.canvas--eraser]="drawTool === 'eraser'" (pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)" (pointercancel)="onPointerUp($event)" (pointerleave)="onPointerLeave()"></canvas>
         @if (pointerPreviewVisible) {
           <span class="pointer-size-preview" [class.pointer-size-preview--eraser]="drawTool === 'eraser'" [style.left.px]="pointerPreviewX" [style.top.px]="pointerPreviewY" [style.width.px]="pointerPreviewSize" [style.height.px]="pointerPreviewSize" aria-hidden="true"></span>
         }

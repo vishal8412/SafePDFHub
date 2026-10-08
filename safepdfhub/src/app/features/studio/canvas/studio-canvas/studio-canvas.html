@@ -171,16 +171,16 @@
                 editingObjectId === object.id
               "
               [style.left.%]="
-                object.bounds.x * 100
+                getObjectDisplayBounds(object).x * 100
               "
               [style.top.%]="
-                object.bounds.y * 100
+                getObjectDisplayBounds(object).y * 100
               "
               [style.width.%]="
-                object.bounds.width * 100
+                getObjectDisplayBounds(object).width * 100
               "
               [style.height.%]="
-                object.bounds.height * 100
+                getObjectDisplayBounds(object).height * 100
               "
               [style.font-size.px]="
                 getObjectFontSizePx(object)
@@ -202,7 +202,7 @@
               "
               [style.line-height]="getPdfTextLineHeight(object)"
               [style.letter-spacing.em]="object.textStyle?.letterSpacing ?? 0"
-              [style.color]="object.pdfText?.edited ? (object.pdfText?.textColor ?? object.textStyle?.color ?? '#000000') : null"
+              [style.color]="object.pdfText?.textColor ?? object.textStyle?.color ?? null"
               [style.background-color]="null"
               [style.transform]="getPdfTextTransform(object)"
               [style.transform-origin]="object.pdfText ? 'top left' : null"
@@ -354,7 +354,7 @@
                       "
                       [attr.fill-opacity]="
                         object.shape.style.fillColor
-                          ? object.shape.style.opacity * 0.28
+                          ? object.shape.style.opacity
                           : 0
                       "
                     />
@@ -382,7 +382,7 @@
                       "
                       [attr.fill-opacity]="
                         object.shape.style.fillColor
-                          ? object.shape.style.opacity * 0.28
+                          ? object.shape.style.opacity
                           : 0
                       "
                     />
@@ -552,7 +552,7 @@
                       "
                       [attr.fill-opacity]="
                         drawingInteraction.shapeStyle.fillColor
-                          ? drawingInteraction.shapeStyle.opacity * 0.28
+                          ? drawingInteraction.shapeStyle.opacity
                           : 0
                       "
                     />
@@ -583,7 +583,7 @@
                       "
                       [attr.fill-opacity]="
                         drawingInteraction.shapeStyle.fillColor
-                          ? drawingInteraction.shapeStyle.opacity * 0.28
+                          ? drawingInteraction.shapeStyle.opacity
                           : 0
                       "
                     />
@@ -860,6 +860,12 @@
               />
               Fill
             </label>
+            @if (selectedShapeKind !== 'line' && selectedShapeKind !== 'arrow') {
+              <label class="studio-shape-palette__color">
+                <span>Fill color</span>
+                <input type="color" aria-label="Shape fill color" [value]="selectedShapeFillColor" [disabled]="!selectedShapeFillEnabled" (input)="setShapeFillColor($any($event.target).value)" />
+              </label>
+            }
 
             <label class="studio-shape-palette__width">
               <span>Width</span>

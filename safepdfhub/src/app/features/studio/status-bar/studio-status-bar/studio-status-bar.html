@@ -223,10 +223,12 @@
 
       <select
         class="zoom-select"
-        [value]="zoom"
+        [value]="viewMode === 'zoom' ? zoom : viewMode"
         [attr.aria-label]="'Zoom level ' + zoom + '%'"
         (change)="onZoomSelect($event)">
 
+        <option value="fit-page">Fit page{{ viewMode === 'fit-page' ? ' · ' + zoom + '%' : '' }}</option>
+        <option value="fit-width">Fit width{{ viewMode === 'fit-width' ? ' · ' + zoom + '%' : '' }}</option>
         <option value="50">50%</option>
         <option value="75">75%</option>
         <option value="100">100%</option>

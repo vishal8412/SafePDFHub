@@ -56,6 +56,12 @@ export class SignatureBuilderComponent implements AfterViewInit, OnDestroy {
   private strokes: Stroke[] = [];
   private redoStrokes: Stroke[] = [];
 
+  get drawCursor(): string {
+    const path = this.drawTools.find(tool => tool.id === this.drawTool)?.path ?? '';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path d="${path}" fill="white" stroke="#075e57" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 4 28, crosshair`;
+  }
+
   pointerPreviewVisible = false;
   pointerPreviewX = 0;
   pointerPreviewY = 0;

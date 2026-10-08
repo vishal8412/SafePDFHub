@@ -1813,3 +1813,9 @@
 .studio-sign-ghost { position:absolute; z-index:70; pointer-events:none; border:1px dashed #00bfa5; border-radius:4px; background:#dcfff433; opacity:.7; display:grid; place-items:center; }
 .studio-sign-ghost img { width:100%; height:100%; object-fit:contain; }
 .studio-sign-ghost span { color:#183849; font-size:14px; }
+
+/* Wrap options inside the page instead of overflowing the viewport. */
+.studio-shape-palette:not(.studio-shape-palette--collapsed) {flex-wrap:wrap;width:max-content;max-width:calc(100% - 16px);white-space:normal;overflow:visible;gap:6px;}
+.studio-shape-palette > * {flex-shrink:0;}
+.studio-shape-palette__button {padding:6px 9px;}
+.studio-shape-palette__collapse {margin-left:auto;}

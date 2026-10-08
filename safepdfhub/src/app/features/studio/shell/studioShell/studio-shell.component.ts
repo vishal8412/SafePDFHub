@@ -1,3 +1,5 @@
+import { StudioDialogFocusDirective } from '../../signing/studio-dialog-focus.directive';
+import { UnsavedWorkService } from '../../../../core/guards/unsaved-work.service';
 import { OperationResultComponent } from '../../../../shared/components/operation-result/operation-result.component';
 import {
   ChangeDetectionStrategy,
@@ -36,6 +38,7 @@ import type {
   selector: 'app-studio-shell',
   standalone: true,
   imports: [
+    StudioDialogFocusDirective,
     OperationResultComponent,
     StudioHeader,
     StudioToolbar,
@@ -55,6 +58,9 @@ export class StudioShellComponent implements OnDestroy {
   readonly facade =
     inject(StudioFacade);
 
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unregisterUnsavedWork = this.unsavedWork.register(this, () => this.facade.hasUnsavedChanges());
+
   @ViewChild('pdfInput')
   private pdfInput?: ElementRef<HTMLInputElement>;
 
@@ -67,7 +73,7 @@ export class StudioShellComponent implements OnDestroy {
 
   readonly browserProcessing = this.facade.isReady;
 
-  readonly zoom = this.facade.zoom;
+  readonly zoom = computed(() => this.facade.viewMode() === 'zoom' ? this.facade.zoom() : Math.round(this.facade.renderScale() * 100));
 
   readonly viewMode = this.facade.viewMode;
 
@@ -569,7 +575,7 @@ export class StudioShellComponent implements OnDestroy {
   /**
    * Receive the selected PDF.
    */
-  onPdfSelected(event: Event): void {
+  async onPdfSelected(event: Event): Promise<void> {
     const input =
       event.target as HTMLInputElement;
 
@@ -586,6 +592,7 @@ export class StudioShellComponent implements OnDestroy {
       return;
     }
 
+    if (!(await this.unsavedWork.confirmLeave('replace'))) return;
     this.facade.continueEditing();
     void this.facade.loadPdf(file);
   }
@@ -822,6 +829,7 @@ async onExportPdf(): Promise<void> {
   }
 
   ngOnDestroy(): void {
+    this.unregisterUnsavedWork();
     // Release signature data URLs and active signing state as soon as the
     // Studio route is destroyed. The service itself is component-scoped.
     this.facade.clearExportSession();

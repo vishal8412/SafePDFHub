@@ -1,19 +1,45 @@
+import { TOOLS } from '../../../../config/tools.config';
+import { RouterLink } from '@angular/router';
 import {
   ChangeDetectionStrategy,
   Component,
   EventEmitter,
   Input,
-  Output
+  Output,
+  HostListener,
+  ElementRef,
+  inject,
 } from '@angular/core';
 
 @Component({
   selector: 'app-studio-header',
   standalone: true,
+  imports: [RouterLink],
   templateUrl: './studio-header.html',
   styleUrl: './studio-header.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StudioHeader {
+  @Input() documentBarVisible = true;
+  @Input() toolbarVisible = true;
+  @Output() readonly documentBarToggle = new EventEmitter<void>();
+  @Output() readonly toolbarToggle = new EventEmitter<void>();
+  readonly toolsCatalog = [...TOOLS].sort((a, b) => a.displayOrder - b.displayOrder);
+  private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
+  closeMenus(): void {
+    this.element.nativeElement
+      .querySelectorAll('details[open]')
+      .forEach((el) => el.removeAttribute('open'));
+  }
+  @HostListener('document:click', ['$event']) outside(event: MouseEvent): void {
+    if (!this.element.nativeElement.contains(event.target as Node)) this.closeMenus();
+  }
+  @HostListener('keydown.escape', ['$event']) escape(event: Event): void {
+    const open = this.element.nativeElement.querySelector<HTMLDetailsElement>('details[open]');
+    this.closeMenus();
+    open?.querySelector<HTMLElement>('summary')?.focus();
+    event.stopPropagation();
+  }
 
   // =========================================================
   // Document state
@@ -70,9 +96,7 @@ export class StudioHeader {
   // =========================================================
 
   get openButtonLabel(): string {
-    return this.pdfLoaded
-      ? 'Replace PDF'
-      : 'Open PDF';
+    return this.pdfLoaded ? 'Replace PDF' : 'Open PDF';
   }
 
   get documentName(): string {
@@ -88,9 +112,7 @@ export class StudioHeader {
       return 'Open a PDF to begin';
     }
 
-    return this.browserProcessing
-      ? 'Private • Ready'
-      : 'Private • Browser processing';
+    return this.browserProcessing ? 'Private • Ready' : 'Private • Browser processing';
   }
 
   get statusReady(): boolean {
@@ -98,9 +120,7 @@ export class StudioHeader {
   }
 
   onZoomSelect(event: Event): void {
-    const value = Number(
-      (event.target as HTMLSelectElement).value
-    );
+    const value = Number((event.target as HTMLSelectElement).value);
 
     if (!Number.isFinite(value)) {
       return;

@@ -1,328 +1,112 @@
-  <header
-  class="studio-header"
-  [class.studio-header--empty]="!pdfLoaded">
-
-  <!-- =====================================================
-       LEFT — DOCUMENT
-  ====================================================== -->
-
-  <div class="header-left">
-
-    <div
-      class="document-info"
-      [class.document-info--empty]="!pdfLoaded">
-
-      <div class="document-icon" aria-hidden="true">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          aria-hidden="true">
-
-          <path
-            d="M6 3.75h8.25L19 8.5v11.75H6V3.75Z"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linejoin="round" />
-
-          <path
-            d="M14 3.75V8.5h4.75"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linejoin="round" />
-
-          <path
-            d="M9 12h6M9 15.5h6"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round" />
-
-        </svg>
-      </div>
-
-      <div class="document-copy">
-
-        <div
-          class="project-name"
-          [title]="pdfLoaded ? documentName : ''">
-          {{ documentName }}
+<header class="studio-header">
+  <div class="studio-navigation">
+    <a class="studio-brand" routerLink="/" aria-label="SafePDFHub home"
+      ><img src="assets/brand/safepdfhub-logo-navbar.svg" alt="SafePDFHub" width="178" height="38"
+    /></a>
+    <span class="studio-title">PDF Studio</span>
+    <nav class="studio-navigation__actions" aria-label="Studio navigation">
+      <details name="studio-navigation" class="studio-nav-menu studio-tools-menu">
+        <summary>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" /></svg
+          ><span>PDF Tools</span
+          ><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m7 10 5 5 5-5" />
+          </svg>
+        </summary>
+        <div class="studio-menu-panel">
+          <div class="studio-menu-heading">
+            <strong>More ways to work with PDFs</strong><span>Explore SafePDFHub tools</span>
+          </div>
+          <div class="studio-tools-grid">
+            @for (tool of toolsCatalog; track tool.slug) {
+              <a [routerLink]="['/tools', tool.slug]" (click)="closeMenus()"
+                ><strong>{{ tool.label }}</strong
+                ><span>{{ tool.shortDescription }}</span></a
+              >
+            }
+          </div>
+          <a class="studio-all-tools" routerLink="/" fragment="tools" (click)="closeMenus()"
+            >Explore all PDF tools <span aria-hidden="true">→</span></a
+          >
         </div>
-
-        <div class="project-status">
-          <span
-            class="status-dot"
-            [class.status-dot--ready]="statusReady"
-            [class.status-dot--idle]="!pdfLoaded"
-            aria-hidden="true">
-          </span>
-
-          <span>
-            {{ documentStatus }}
-          </span>
+      </details>
+      <details name="studio-navigation" class="studio-nav-menu studio-layout-menu">
+        <summary>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M3 9h18M8 9v11" /></svg
+          ><span>Layout</span
+          ><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m7 10 5 5 5-5" />
+          </svg>
+        </summary>
+        <div class="studio-menu-panel">
+          <strong class="studio-layout-heading">Workspace layout</strong
+          ><label
+            ><span><strong>Document bar</strong><small>File actions and export</small></span
+            ><input
+              type="checkbox"
+              [checked]="documentBarVisible"
+              (change)="documentBarToggle.emit()" /></label
+          ><label
+            ><span><strong>Editing toolbar</strong><small>Text, images and annotations</small></span
+            ><input type="checkbox" [checked]="toolbarVisible" (change)="toolbarToggle.emit()"
+          /></label>
         </div>
-
+      </details>
+    </nav>
+  </div>
+  @if (documentBarVisible) {
+    <div class="studio-document-bar">
+      <div class="document-info">
+        <span class="document-icon" aria-hidden="true"
+          ><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6" /></svg
+        ></span>
+        <div class="document-copy">
+          <strong class="project-name" [title]="documentName">{{ documentName }}</strong
+          ><span class="project-status"
+            ><i [class.is-ready]="statusReady"></i>{{ documentStatus }}</span
+          >
+        </div>
       </div>
-
+      <div class="header-right">
+        <button
+          type="button"
+          class="secondary-btn open-btn"
+          (click)="openPdf.emit()"
+          [attr.aria-label]="openButtonLabel"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 3h8l4 4v4M14 3v5h4M6 3v18h7M16 15h6m-3-3v6" /></svg
+          >{{ openButtonLabel }}</button
+        ><button
+          type="button"
+          class="secondary-btn security-btn"
+          [disabled]="!pdfLoaded"
+          (click)="security.emit()"
+          aria-label="Protect PDF"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="10" width="14" height="11" rx="2" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg
+          >Protect PDF</button
+        ><button
+          type="button"
+          class="primary-btn"
+          [disabled]="!pdfLoaded"
+          (click)="exportPdf.emit()"
+          aria-label="Export PDF"
+        >
+          Export PDF
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" />
+          </svg>
+        </button>
+      </div>
     </div>
-
-  </div>
-
-
-  <!-- =====================================================
-       CENTER — DOCUMENT CONTROLS
-  ====================================================== -->
-
-  <div class="header-center">
-
-    <button
-      type="button"
-      class="icon-btn"
-      [disabled]="!canUndo"
-      aria-label="Undo"
-      title="Undo"
-      (click)="undo.emit()">
-
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true">
-
-        <path
-          d="M9 8 4 12l5 4"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round" />
-
-        <path
-          d="M5 12h8.5a5.5 5.5 0 0 1 5.5 5.5"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round" />
-
-      </svg>
-    </button>
-
-
-    <button
-      type="button"
-      class="icon-btn"
-      [disabled]="!canRedo"
-      aria-label="Redo"
-      title="Redo"
-      (click)="redo.emit()">
-
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true">
-
-        <path
-          d="m15 8 5 4-5 4"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round" />
-
-        <path
-          d="M19 12h-8.5A5.5 5.5 0 0 0 5 17.5"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round" />
-
-      </svg>
-    </button>
-
-    <div
-      class="header-divider"
-      aria-hidden="true">
-    </div>
-
-    <label class="zoom-control">
-      <span class="sr-only">
-        Zoom level
-      </span>
-
-      <select
-        class="zoom-select"
-        [value]="zoom"
-        aria-label="Zoom level"
-        (change)="onZoomSelect($event)">
-
-        <option value="50">50%</option>
-        <option value="75">75%</option>
-        <option value="100">100%</option>
-        <option value="125">125%</option>
-        <option value="150">150%</option>
-        <option value="200">200%</option>
-
-      </select>
-
-      <svg
-        class="zoom-chevron"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true">
-
-        <path
-          d="m7 9 5 5 5-5"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round" />
-
-      </svg>
-    </label>
-
-
-    <button
-      type="button"
-      class="icon-btn"
-      aria-label="Search document"
-      title="Search document"
-      [disabled]="!pdfLoaded"
-      (click)="search.emit()">
-
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true">
-
-        <circle
-          cx="10.8"
-          cy="10.8"
-          r="5.8"
-          stroke="currentColor"
-          stroke-width="1.8" />
-
-        <path
-          d="m15.2 15.2 4.2 4.2"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round" />
-
-      </svg>
-    </button>
-
-  </div>
-
-
-  <!-- =====================================================
-       RIGHT — ACTIONS
-  ====================================================== -->
-
-  <div class="header-right">
-
-    <button
-      type="button"
-      class="secondary-btn tools-btn"
-      [disabled]="!pdfLoaded"
-      (click)="tools.emit()">
-
-      <span>Tools</span>
-
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true">
-
-        <path
-          d="m7 9 5 5 5-5"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round" />
-
-      </svg>
-    </button>
-
-
-    <button
-      type="button"
-      class="secondary-btn open-btn"
-      [disabled]="false"
-      (click)="openPdf.emit()"
-      [attr.aria-label]="openButtonLabel">
-
-      <svg
-        class="open-btn__icon"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true">
-
-        @if (pdfLoaded) {
-          <path
-            d="M7 6.5v11A2.5 2.5 0 0 0 9.5 20h7A2.5 2.5 0 0 0 19 17.5V9l-4-4H9.5A2.5 2.5 0 0 0 7 7.5Z"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linejoin="round" />
-
-          <path
-            d="M14.5 5v4H18"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linejoin="round" />
-
-          <path
-            d="M12 17V12.5M9.5 15h5"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round" />
-        } @else {
-          <path
-            d="M7 6.5v11A2.5 2.5 0 0 0 9.5 20h7A2.5 2.5 0 0 0 19 17.5V9l-4-4H9.5A2.5 2.5 0 0 0 7 7.5Z"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linejoin="round" />
-
-          <path
-            d="M14.5 5v4H18"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linejoin="round" />
-
-          <path
-            d="M12 17V12.5M9.5 15h5"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round" />
-        }
-      </svg>
-
-      <span class="open-btn__label">
-        {{ openButtonLabel }}
-      </span>
-    </button>
-
-
-    <button
-      type="button"
-      class="secondary-btn security-btn"
-      [disabled]="!pdfLoaded"
-      (click)="security.emit()"
-      aria-label="PDF security">
-
-      <span>Security</span>
-    </button>
-
-    <button
-      type="button"
-      class="primary-btn"
-      [disabled]="!pdfLoaded"
-      (click)="exportPdf.emit()"
-      aria-label="Export PDF">
-
-      <span>Export</span>
-    </button>
-
-
-    <button
-      type="button"
-      class="avatar"
-      aria-label="Account"
-      title="Account">
-      VS
-    </button>
-
-  </div>
-
+  }
 </header>

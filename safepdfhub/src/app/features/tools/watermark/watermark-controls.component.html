@@ -1,7 +1,18 @@
 <div class="watermark-controls" [class.watermark-controls--compact]="compact" aria-label="Watermark settings">
+  @if (!compact) {
   <div class="section-heading">
     <div><span class="section-kicker">WATERMARK</span><h2>Customize</h2></div>
   </div>
+
+  }
+  @if (compact && (showApplyButton || showRemoveButton)) {
+    <div class="actions">
+      @if (showApplyButton) {
+        <button type="button" class="primary-btn" [disabled]="!canApply" (click)="apply()">{{ busy ? 'Processing…' : applyLabel }}</button>
+      }
+      <button type="button" class="secondary-btn" [disabled]="busy" (click)="resetOptions()">Reset</button>
+    </div>
+  }
 
   <div class="mode-switch" role="tablist" aria-label="Watermark type">
     <button type="button" role="tab" [attr.aria-selected]="kind === 'text'" [class.active]="kind === 'text'" [disabled]="busy" (click)="selectKind('text')">T Text</button>
@@ -109,7 +120,7 @@
     <div class="error-box" role="alert">⚠ {{ errorMessage || imageErrorMessage }}</div>
   }
 
-  @if (showApplyButton || showRemoveButton) {
+  @if (!compact && (showApplyButton || showRemoveButton)) {
     <div class="actions">
       @if (showApplyButton) {
         <button type="button" class="primary-btn" [disabled]="!canApply" (click)="apply()">{{ busy ? 'Processing…' : applyLabel }}</button>

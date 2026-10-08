@@ -109,24 +109,6 @@
 
       </nav>
 
-      @if (sidebarTab() === 'pages' && !pageSelectionMode() && !selectionHintDismissed()) {
-        <div class="sidebar__selection-hint" role="note">
-          <div class="sidebar__selection-hint-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="15" rx="3" /><path d="M8 12h8M12 8v8" /></svg>
-          </div>
-          <div class="sidebar__selection-hint-copy">
-            <strong>Select multiple pages at once</strong>
-            <span>Use this to move, duplicate, rotate or delete several pages together.</span>
-            <span class="sidebar__selection-hint-instruction">Click <b>+</b> to start, then choose pages. Shift-click selects a range.</span>
-          </div>
-          <button type="button" class="sidebar__selection-hint-dismiss" aria-label="Dismiss multi-page selection hint" title="Hide this hint" (click)="dismissSelectionHint()">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
-          </button>
-        </div>
-      }
-
-
-
       <div class="sidebar__body">
 
         @if (sidebarTab() === 'pages') {

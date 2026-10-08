@@ -58,6 +58,7 @@ export class StudioFacade {
   readonly exportResult = signal<{file:File;originalName:string;pageCount:number;durationMs:number} | null>(null);
   private readonly exportCache = new StudioExportCache();
   private exportRequest = 0;
+  private exportedRevision: number | null = null;
 
   clearExportSession(): void {
     this.exportRequest++;
@@ -69,7 +70,7 @@ export class StudioFacade {
 
   downloadExport(): void {
     const result = this.exportResult();
-    if (result) saveAs(result.file, result.file.name);
+    if (result) { saveAs(result.file, result.file.name); if (this.exportedRevision !== null) this.history.markDownloaded(this.exportedRevision); }
   }
 
   /** The canvas owns draft text; flush it before any export/security snapshot. */
@@ -109,6 +110,12 @@ export class StudioFacade {
 
   private readonly history =
     inject(StudioHistoryService);
+
+  readonly hasUnsavedChanges = computed(() => {
+    if (!this.hasDocument()) return false;
+    const draft = this.inlineTextDraft();
+    return this.history.hasUnsavedChanges() || this.watermarkState.hasUnappliedChanges() || !!(draft && draft.text !== this.objectService.get(draft.id)?.text);
+  });
 
   private readonly pdfSecurity =
     inject(PdfSecurityService);
@@ -435,17 +442,9 @@ export class StudioFacade {
         );
       }
 
-      const sourceBlob = await this.pdfExportService.exportTextObjects(
-        document.file,
-        this.collectAllObjects(),
-        this.pages()
-      );
-
-      const exportedFile = new File(
-        [sourceBlob],
-        document.file.name,
-        { type: 'application/pdf' }
-      );
+      this.flushTextDraft?.();
+      const revision = this.history.revision();
+      const exportedFile = await this.exportCurrentDocumentFile();
 
       let outputFile = exportedFile;
 
@@ -472,9 +471,11 @@ export class StudioFacade {
         outputFile = result.file;
       }
 
+      if (this.document() !== document) throw new Error('The PDF changed. Export the current document again.');
       saveAs(outputFile, request.mode === 'protect'
         ? outputFile.name
         : this.securityOutputName(document.file.name, request.mode));
+      this.history.markDownloaded(revision);
       this.securityDialogOpen.set(false);
       this.toast.show(
         request.mode === 'protect'
@@ -2483,7 +2484,7 @@ async exportCurrentDocumentFile(): Promise<File> {
     o.type !== 'comment' && (o.pdfText ? o.pdfText.edited : o.pdfImage ? o.pdfImage.replaced : true));
   const pages = this.pageService.snapshot();
   const watermark = this.watermarkState.committed();
-  const key = JSON.stringify([document.id, pages, objects, watermark]);
+  const key = JSON.stringify([document.id, pages, objects, watermark, this.exportCache.fileIdentity(watermark?.imageFile)]);
   return this.exportCache.get(key, async () => {
     const unchanged = !objects.length && pages.length === document.pageCount &&
       pages.every((p,i) => p.kind === 'source' && p.sourcePageNumber === i+1 && p.rotation === 0);
@@ -2509,8 +2510,11 @@ async exportPdf(): Promise<void> {
     this.loader.show('Preparing your edited PDF...');
     // Give the browser a chance to paint the processing state before parsing.
     await new Promise<void>(resolve => setTimeout(resolve, 0));
+    this.flushTextDraft?.();
+    const revision = this.history.revision();
     const file = await this.exportCurrentDocumentFile();
     if (request !== this.exportRequest || this.document() !== document) return;
+    this.exportedRevision = revision;
     this.exportResult.set({file,originalName:document.name,pageCount:this.pageCount(),durationMs:performance.now()-started});
   } catch (error: unknown) {
     if (request === this.exportRequest) this.toast.show(
@@ -3288,6 +3292,12 @@ createSignatureObject(
   return selection;
 }
 
+private currentPageAspectRatio(): number {
+  const page = this.pages()[this.currentPage()-1];
+  const dimensions = page && this.vectorPageDimensions.get(page.id);
+  return dimensions ? dimensions.height / dimensions.width : 1;
+}
+
 createImageObject(
   x: number,
   y: number,
@@ -3306,7 +3316,8 @@ createImageObject(
       this.currentPage(),
       x,
       y,
-      image
+      image,
+      this.currentPageAspectRatio()
     );
 
   const selection: StudioSelection = {

@@ -20,6 +20,22 @@ describe('Studio PDF export regressions', () => {
     ] });
     service = TestBed.inject(StudioPdfExportService);
   });
+  it('exports inserted text upright on an already rotated page', () => {
+    const draw = vi.spyOn(service, 'drawTrackedText').mockImplementation(() => {});
+    service.drawObject({getCropBox:()=>({x:10,y:20})}, {
+      type:'text',bounds:{x:.2,y:.3,width:.22,height:.055},textStyle:{textAlign:'left'}
+    }, ['Hello'], {widthOfTextAtSize:()=>30}, 12, 14.4, 800, 600, 90);
+    expect(draw.mock.calls[0][8]).toEqual({type:'degrees',angle:90});
+    draw.mockRestore();
+  });
+  it('uses the selected opacity for shape fills in the PDF', () => {
+    const drawRectangle=vi.fn(),drawEllipse=vi.fn();
+    for(const kind of ['rectangle','ellipse']) service.drawShapeObject({drawRectangle,drawEllipse}, {
+      type:'shape',bounds:{x:.2,y:.3,width:.2,height:.1},shape:{kind,style:{strokeColor:'#00aa88',fillColor:'#00aa88',fillEnabled:true,strokeWidth:.003,opacity:1}}
+    },600,800,0);
+    expect(drawRectangle.mock.calls[0][0].opacity).toBe(1);
+    expect(drawEllipse.mock.calls[0][0].opacity).toBe(1);
+  });
   it('copies reordered, duplicated and blank pages with one shared resource copier', async () => {
     const source=await PDFDocument.create();source.addPage([300,400]);source.addPage([500,600]);
     const bytes=await source.save();const file={arrayBuffer:async()=>bytes.slice().buffer} as File;

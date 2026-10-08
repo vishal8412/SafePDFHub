@@ -897,7 +897,7 @@ export class StudioRightSidebar {
 
     this.facade.updateShapeStyle(object.id, {
       fillColor: enabled
-        ? (object.shape?.style.fillColor ?? '#00d4b3')
+        ? (object.shape?.style.fillColor ?? object.shape?.style.rememberedFillColor ?? '#00d4b3')
         : null
     });
   }

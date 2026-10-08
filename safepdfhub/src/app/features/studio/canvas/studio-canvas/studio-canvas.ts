@@ -204,6 +204,7 @@ private activeRenderVersion: number | null = null;
    * without making exported strokes depend on the current zoom/fit mode.
    */
   private currentPageRenderScale = 1;
+  readonly pageDisplaySize = signal({width:0,height:0});
 
   /**
    * True after Angular has created the view.
@@ -755,6 +756,7 @@ private activeRenderVersion: number | null = null;
       if (
         this.editingObjectId &&
         activeTool !== 'text' &&
+        activeTool !== 'select' &&
         activeTool !== 'edit-pdf-text'
       ) {
         this.commitTextEdit();
@@ -1171,6 +1173,7 @@ private async render(
      * Only the render that still owns the canvas may restore
      * viewport state or reposition floating palettes.
      */
+    if (rendered) this.pageDisplaySize.set({width:Math.ceil(rendered.width),height:Math.ceil(rendered.height)});
     this.restoreZoomAnchor();
     this.clampPalettePositions();
 
@@ -2584,17 +2587,17 @@ private async render(
   }
 
   private renderedPageHeight(): number {
-    return this.pageRef?.nativeElement.getBoundingClientRect().height ?? 0;
+    return this.pageDisplaySize().height;
   }
 
   getPdfImagePreviewStyle(object: StudioObject): Record<string, string> {
-    const angle = object.pdfImage?.displayRotation ?? 0;
+    const angle = object.pdfImage?.displayRotation ?? object.contentRotation ?? 0;
     const swapped = Math.abs(Math.round(angle / 90)) % 2 === 1;
-    const page = this.pageRef?.nativeElement.getBoundingClientRect();
+    const page = this.pageDisplaySize();
     const width = object.bounds.width * (page?.width ?? 0);
     const height = object.bounds.height * (page?.height ?? 0);
     return { position:'absolute', left:'50%', top:'50%',
-      width: swapped ? `${height}px` : '100%', height: swapped ? `${width}px` : '100%',
+      width: `${swapped ? height : width}px`, height: `${swapped ? width : height}px`,
       'max-width':'none', 'max-height':'none',
       transform:`translate(-50%, -50%) rotate(${angle}deg)` };
   }
@@ -3289,6 +3292,8 @@ private handleTextToolPointerDown(
     return;
   }
 
+  if (event.clientX < pageRect.left || event.clientX > pageRect.right || event.clientY < pageRect.top || event.clientY > pageRect.bottom) return;
+
   const point =
     this.clientToPagePoint(
       event.clientX,
@@ -3306,6 +3311,7 @@ private handleTextToolPointerDown(
     return;
   }
 
+  this.facade.setActiveTool('select');
   this.beginTextEditing(
     selection.objectId
   );
@@ -3334,6 +3340,8 @@ private handleImageToolPointerDown(
   ) {
     return;
   }
+
+  if (event.clientX < pageRect.left || event.clientX > pageRect.right || event.clientY < pageRect.top || event.clientY > pageRect.bottom) return;
 
   this.pendingImagePlacement =
     this.clientToPagePoint(
@@ -3427,6 +3435,7 @@ async onImageSelected(
     return;
   }
 
+  this.facade.setActiveTool('select');
   this.facade.selectObject(
     selection
   );
@@ -3823,7 +3832,7 @@ getObjectFontSizePx(
     this.pageRef?.nativeElement;
 
   const pageHeight =
-    page?.getBoundingClientRect().height ?? 0;
+    this.pageDisplaySize().height;
 
   /* Existing PDF text must keep the exact PDF-derived size. */
   const sourceSize = pdfFontSize(object.pdfText);
@@ -5176,6 +5185,7 @@ if (updatedObject) {
 
       this.selectedShapeFillColor =
         object.shape.style.fillColor ??
+        object.shape.style.rememberedFillColor ??
         this.selectedShapeFillColor;
 
       const page =
@@ -5845,7 +5855,7 @@ onWindowKeyDown(
     const source = object.pdfText;
 
     if (!source || pageHeight <= 0) {
-      return Math.max(18, pageHeight * Math.max(object.bounds.height, 0.01));
+      return Math.max(18, pageHeight * Math.max(this.getObjectDisplayBounds(object).height, 0.01));
     }
 
     const fontSizePx = this.getObjectFontSizePx(object);
@@ -5911,8 +5921,18 @@ onWindowKeyDown(
     return mode === 'fit' ? 'contain' : mode === 'fill' ? 'cover' : 'fill';
   }
 
+  getObjectDisplayBounds(object: StudioObject) {
+    const b = object.bounds;
+    if (object.type !== 'text' || object.pdfText || (object.contentRotation ?? 0) % 180 === 0) return b;
+    const page = this.pageDisplaySize();
+    if (!page?.width || !page.height) return b;
+    const width = b.height * page.height / page.width;
+    const height = b.width * page.width / page.height;
+    return {x:b.x+(b.width-width)/2,y:b.y+(b.height-height)/2,width,height};
+  }
+
   getPdfTextTransform(object: StudioObject): string | null {
-    if (!object.pdfText) return null;
+    if (!object.pdfText) return object.type === 'text' && object.contentRotation ? `rotate(${object.contentRotation}deg)` : null;
     const rotation = object.pdfText.displayRotation ?? -(object.pdfText.rotation ?? 0);
     return Math.abs(rotation) > 0.1 ? `rotate(${rotation}deg)` : null;
   }

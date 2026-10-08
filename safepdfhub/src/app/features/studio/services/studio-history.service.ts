@@ -33,6 +33,8 @@ export interface StudioHistorySnapshot {
 }
 
 interface StudioHistoryEntry {
+  readonly beforeRevision: number;
+  readonly afterRevision: number;
   readonly label:
     string;
 
@@ -63,6 +65,12 @@ interface StudioHistoryEntry {
   providedIn: 'root'
 })
 export class StudioHistoryService {
+  private nextRevision = 0;
+  readonly revision = signal(0);
+  private readonly downloadedRevision = signal(0);
+  readonly hasUnsavedChanges = computed(() => this.revision() !== this.downloadedRevision());
+  markDownloaded(revision: number): void { this.downloadedRevision.set(revision); }
+
 
   private readonly undoStack =
     signal<
@@ -112,6 +120,8 @@ export class StudioHistoryService {
   private nextHistoryFileId = 1;
 
   reset(): void {
+    this.revision.set(++this.nextRevision);
+    this.downloadedRevision.set(this.revision());
     this.undoStack.set([]);
     this.redoStack.set([]);
     this.undoBytes = 0;
@@ -135,6 +145,8 @@ export class StudioHistoryService {
     }
 
     const entry: StudioHistoryEntry = {
+      beforeRevision: this.revision(),
+      afterRevision: ++this.nextRevision,
       label,
       before:
         this.cloneSnapshot(before),
@@ -145,6 +157,7 @@ export class StudioHistoryService {
         afterJson.length
     };
 
+    this.revision.set(entry.afterRevision);
     const nextUndo = [
       ...this.undoStack(),
       entry
@@ -181,6 +194,7 @@ export class StudioHistoryService {
       return null;
     }
 
+    this.revision.set(entry.beforeRevision);
     this.undoStack.set(
       entries.slice(0, -1)
     );
@@ -233,6 +247,7 @@ export class StudioHistoryService {
       this.redoBytes - entry.byteSize
     );
 
+    this.revision.set(entry.afterRevision);
     const nextUndo = [
       ...this.undoStack(),
       entry

@@ -1,5 +1,7 @@
+import { UnsavedWorkService } from './core/guards/unsaved-work.service';
+import { UnsavedWorkDialogComponent } from './shared/components/unsaved-work-dialog/unsaved-work-dialog.component';
 import { TOOLS } from './config/tools.config';
-import { Component, DestroyRef, inject, PLATFORM_ID } from '@angular/core';
+import { Component, DestroyRef, inject, PLATFORM_ID, signal } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
@@ -11,12 +13,14 @@ import { SeoService } from './core/services/seo.service';
 
 @Component({
   selector: 'app-root',
-  imports: [HeaderComponent, FooterComponent, RouterOutlet, LoaderComponent, ToastComponent],
+  imports: [UnsavedWorkDialogComponent, HeaderComponent, FooterComponent, RouterOutlet, LoaderComponent, ToastComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
 export class App {
+  readonly unsavedWork = inject(UnsavedWorkService);
   private readonly router = inject(Router);
+  readonly isStudio = signal(this.router.url.split(/[?#]/)[0].startsWith('/studio'));
   private readonly destroyRef = inject(DestroyRef);
   private readonly seo = inject(SeoService);
   private readonly platformId = inject(PLATFORM_ID);
@@ -55,6 +59,7 @@ export class App {
       .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
       .subscribe(event => {
         const url = event.urlAfterRedirects;
+        this.isStudio.set(/^\/studio(?:\/|$)/.test(url.split(/[?#]/)[0]));
 
         if (!TOOLS.some(tool => url.split(/[?#]/)[0].replace(/\/+$/, '') === `/tools/${tool.slug}`)) {
           this.seo.updateForUrl(url);

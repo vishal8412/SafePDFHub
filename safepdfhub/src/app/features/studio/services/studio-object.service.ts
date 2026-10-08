@@ -332,11 +332,13 @@ export class StudioObjectService {
     const point = (p: StudioPoint): StudioPoint => clockwise ? {x:1-p.y,y:p.x} : {x:p.y,y:1-p.x};
     let changed = false;
     for (const [id, object] of this.objects) {
-      if (object.pageNumber !== pageNumber || (!object.drawing && !object.shape)) continue;
+      if (object.pageNumber !== pageNumber || object.pdfText || object.pdfImage || (!object.drawing && !object.shape && object.type !== 'text' && object.type !== 'image')) continue;
       const b = object.bounds;
       const bounds = clockwise ? {x:1-b.y-b.height,y:b.x,width:b.height,height:b.width}
         : {x:b.y,y:1-b.x-b.width,width:b.height,height:b.width};
       this.objects.set(id, {...object,bounds,
+        ...((object.type === 'text' || object.type === 'image') ? {contentRotation: ((object.contentRotation ?? 0) + delta + 360) % 360} : {}),
+        ...(object.type === 'text' && object.textStyle ? {textStyle:{...object.textStyle,fontSize:object.textStyle.fontSize*oldHeightOverWidth}} : {}),
         ...(object.drawing ? {drawing:{...object.drawing,points:object.drawing.points.map(point),
           style:{...object.drawing.style,strokeWidth:object.drawing.style.strokeWidth*oldHeightOverWidth}}} : {}),
         ...(object.shape ? {shape:{...object.shape,points:object.shape.points ? [point(object.shape.points[0]),point(object.shape.points[1])] as const : undefined,
@@ -743,7 +745,8 @@ export class StudioObjectService {
     pageNumber: number,
     normalizedX: number,
     normalizedY: number,
-    image: StudioImageData
+    image: StudioImageData,
+    pageHeightOverWidth = 1
   ): StudioObject {
 
     const maxDimension = 0.38;
@@ -753,15 +756,15 @@ export class StudioObjectService {
         : 1;
 
     let width = maxDimension;
-    let height = width / sourceRatio;
+    let height = width / sourceRatio / pageHeightOverWidth;
 
     if (height > maxDimension) {
       height = maxDimension;
-      width = height * sourceRatio;
+      width = height * sourceRatio * pageHeightOverWidth;
     }
 
-    width = Math.min(0.75, Math.max(0.06, width));
-    height = Math.min(0.75, Math.max(0.06, height));
+    width = Math.min(0.75, Math.max(0.001, width));
+    height = Math.min(0.75, Math.max(0.001, height));
 
     const bounds: StudioObjectBounds = {
       x: this.clamp(
@@ -1648,6 +1651,7 @@ export class StudioObjectService {
               '#00d4b3'
             )
           : null,
+      rememberedFillColor: this.normalizeColor(style.fillColor ?? style.rememberedFillColor ?? '#00d4b3', '#00d4b3'),
       strokeWidth:
         this.clamp(
           style.strokeWidth,

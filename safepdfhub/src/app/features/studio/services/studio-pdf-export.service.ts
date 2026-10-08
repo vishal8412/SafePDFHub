@@ -554,7 +554,7 @@ export class StudioPdfExportService {
           : null;
       const boxWidth = Math.max(
         1,
-        sourceBoxWidth ?? object.bounds.width * displayWidth,
+        sourceBoxWidth ?? ((object.contentRotation ?? 0) % 180 !== 0 ? object.bounds.height * displayHeight : object.bounds.width * displayWidth),
       );
 
       const sourceBoxHeight =
@@ -564,7 +564,7 @@ export class StudioPdfExportService {
         object.pdfText.textHeightPdf > 0
           ? destination?.textHeightPdf ?? object.pdfText.textHeightPdf
           : null;
-      const boxHeight = Math.max(1, sourceBoxHeight ?? object.bounds.height * displayHeight);
+      const boxHeight = Math.max(1, sourceBoxHeight ?? ((object.contentRotation ?? 0) % 180 !== 0 ? object.bounds.width * displayWidth : object.bounds.height * displayHeight));
       const fit = this.resolveTextFit(
         object, font, fontSize, boxWidth, boxHeight, displayHeight
       );
@@ -1146,7 +1146,7 @@ export class StudioPdfExportService {
         borderOpacity: style.opacity,
         color: fillColor,
         opacity: fillColor
-          ? style.opacity * 0.28
+          ? style.opacity
           : 0,
         rotate: degrees(0)
       });
@@ -1283,7 +1283,7 @@ export class StudioPdfExportService {
       borderOpacity: style.opacity,
       color: fillColor,
       opacity: fillColor
-        ? style.opacity * 0.28
+        ? style.opacity
         : 0,
       rotate: degrees(0)
     });
@@ -1672,7 +1672,7 @@ export class StudioPdfExportService {
       displayHeight;
 
     const fitMode = object.pdfImage?.fitMode ?? 'stretch';
-    const orientation = object.pdfImage?.displayRotation ?? 0;
+    const orientation = object.pdfImage?.displayRotation ?? object.contentRotation ?? 0;
     const swapped = Math.abs(Math.round(orientation / 90)) % 2 === 1;
     const localWidth = swapped ? boxHeight : boxWidth;
     const localHeight = swapped ? boxWidth : boxHeight;
@@ -2104,14 +2104,14 @@ export class StudioPdfExportService {
       this.drawEditedPdfTextFromSourceGeometry(page, { ...object, pdfText: pdfTextDestination(object, rotation) }, lines, font, fontSize, lineHeight);
       return;
     }
-    const boxX =
-      object.bounds.x * displayWidth;
-
-    const boxY =
-      object.bounds.y * displayHeight;
-
-    const boxWidth =
-      object.bounds.width * displayWidth;
+    const contentAngle = (object.contentRotation ?? 0) * Math.PI / 180;
+    const swapped = (object.contentRotation ?? 0) % 180 !== 0;
+    const boxWidth = swapped ? object.bounds.height * displayHeight : object.bounds.width * displayWidth;
+    const boxHeight = swapped ? object.bounds.width * displayWidth : object.bounds.height * displayHeight;
+    const centerX = (object.bounds.x + object.bounds.width/2) * displayWidth;
+    const centerY = (object.bounds.y + object.bounds.height/2) * displayHeight;
+    const boxX = -boxWidth/2;
+    const boxY = -boxHeight/2;
 
     for (
       let index = 0;
@@ -2157,18 +2157,19 @@ export class StudioPdfExportService {
 
       const point =
         this.displayToPdfPoint(
-          alignedX,
-          displayBaselineY,
+          centerX + Math.cos(contentAngle)*alignedX - Math.sin(contentAngle)*displayBaselineY,
+          centerY + Math.sin(contentAngle)*alignedX + Math.cos(contentAngle)*displayBaselineY,
           displayWidth,
           displayHeight,
           rotation,
         );
 
+      const crop = page.getCropBox();
       this.drawTrackedText(
-        page, line, point.x, point.y, font, fontSize,
+        page, line, point.x + crop.x, point.y + crop.y, font, fontSize,
         object.textStyle?.letterSpacing ?? 0,
         this.hexToPdfRgb(object.pdfText?.textColor ?? object.textStyle?.color ?? '#000000'),
-        degrees(this.textCompensationRotation(rotation) - (object.pdfText?.rotation ?? 0)),
+        degrees(rotation - (object.contentRotation ?? 0) - (object.pdfText?.rotation ?? 0)),
         this.resolveSourceScaleX(object),
       );
     }
