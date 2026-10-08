@@ -1847,3 +1847,52 @@ border:
 .tool-guide p, .tool-guide li { line-height: 1.7; }
 .tool-guide li { margin: 8px 0; }
 .tool-guide a { text-decoration: underline; }
+
+/* Merge help: readable steps and progressively disclosed answers. */
+.merge-guide {
+  max-width: 1120px;
+  margin: 64px auto 48px;
+  color: #eaf4ff;
+  text-align: left;
+  h2, h3, p { margin: 0; }
+  p { color: #aec2d4; line-height: 1.75; font-size: 15px; }
+  h2 { font-size: clamp(24px, 3vw, 32px); line-height: 1.25; letter-spacing: -.6px; }
+  h3 { font-size: 18px; line-height: 1.4; }
+}
+.merge-guide-heading { max-width: 720px; margin-bottom: 28px; p { margin-top: 14px; } }
+.merge-guide-eyebrow { display: block; color: #54dfca; font-size: 11px; font-weight: 700; letter-spacing: 1.6px; margin-bottom: 12px; }
+.merge-guide-steps {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px;
+  padding: 0; margin: 0; list-style: none;
+  li { padding: 26px; background: linear-gradient(145deg, #0e293d, #0a2033); border: 1px solid #244357; border-radius: 18px; }
+  h3 { margin: 20px 0 10px; }
+}
+.merge-step-number { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 12px; color: #60e9d2; background: #103c43; font-size: 18px; font-weight: 700; }
+.merge-guide-note { display: flex; gap: 16px; align-items: flex-start; padding: 24px; margin: 22px 0 48px; background: #0b2d36; border: 1px solid #205454; border-radius: 16px; h3 { margin-bottom: 6px; font-size: 17px; } }
+.merge-note-icon { color: #5de5cf; font-size: 22px; flex-shrink: 0; }
+.merge-faq { display: grid; grid-template-columns: 1fr 1.65fr; gap: 48px; }
+.merge-faq-heading p { margin-top: 14px; }
+.merge-faq-list {
+  details { border-bottom: 1px solid #294356; padding: 0 0 18px; margin-bottom: 18px; }
+  summary { cursor: pointer; font-size: 16px; font-weight: 600; line-height: 1.5; padding: 6px 4px; }
+  summary::marker { color: #52d9c6; }
+  summary:focus-visible { outline: 2px solid #54dfca; outline-offset: 4px; border-radius: 4px; }
+  p { margin-top: 12px; padding: 0 4px; }
+}
+.merge-guide-support { margin-top: 28px !important; padding-top: 22px; border-top: 1px solid #244357; a { color: #66e5d3; text-underline-offset: 4px; } a:focus-visible { outline: 2px solid #54dfca; outline-offset: 4px; } }
+@media (max-width: 760px) {
+  .merge-guide { margin: 40px auto 32px; }
+  .merge-guide-steps { grid-template-columns: 1fr; gap: 12px; li { padding: 22px; } h3 { margin-top: 14px; } }
+  .merge-faq { grid-template-columns: 1fr; gap: 24px; }
+  .merge-guide-note { padding: 20px; margin-bottom: 36px; }
+  .merge-guide-support a { display: inline-block; }
+}
+
+.upload-compact { background: transparent; color: inherit; font-family: inherit; }
+.upload-compact:focus-visible, .merge-add-file:focus-visible, .merge-btn:focus-visible { outline: 2px solid #54dfca; outline-offset: 5px; }
+.merge-next-step { text-align: center; max-width: 520px; margin: 10px 0 8px; }
+.merge-next-step h2 { color: #eaf4ff; font-size: clamp(20px, 3vw, 24px); margin: 0 0 10px; }
+.merge-next-step p { color: #aec2d4; font-size: 15px; line-height: 1.6; margin: 0; }
+.merge-add-file { display: inline-flex; margin-top: 18px; padding: 12px 22px; background: #103c43; border: 1px solid #2d7b77; border-radius: 12px; color: #70ecda; font: inherit; font-weight: 600; cursor: pointer; }
+.merge-add-file:hover { background: #174d51; }
+.merge-btn:disabled { background: #273d50; color: #a8bdcc; opacity: 1; box-shadow: none; transform: none; }
