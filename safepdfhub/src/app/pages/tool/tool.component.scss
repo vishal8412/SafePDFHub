@@ -1896,3 +1896,15 @@ border:
 .merge-add-file { display: inline-flex; margin-top: 18px; padding: 12px 22px; background: #103c43; border: 1px solid #2d7b77; border-radius: 12px; color: #70ecda; font: inherit; font-weight: 600; cursor: pointer; }
 .merge-add-file:hover { background: #174d51; }
 .merge-btn:disabled { background: #273d50; color: #a8bdcc; opacity: 1; box-shadow: none; transform: none; }
+
+.split-mode-guide { margin-top: 44px; }
+.split-mode-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+  article { display: flex; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid #244357; background: #0b2235; border-radius: 16px; }
+  h3 { margin: 14px 0 10px; }
+  p { margin-bottom: 18px; }
+  code { color: #d5fff5; background: #163943; padding: 2px 6px; border-radius: 5px; white-space: nowrap; font-size: 14px; }
+}
+.split-mode-label { color: #66e5d3; font-size: 12px; font-weight: 700; padding: 5px 10px; border: 1px solid #285a60; border-radius: 7px; }
+.split-mode-output { color: #b4ccd9; font-size: 13px; margin-top: auto; }
+@media (max-width: 760px) { .split-mode-grid { grid-template-columns: 1fr; article { padding: 22px; } } .split-mode-guide { margin-top: 32px; } }

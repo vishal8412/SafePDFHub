@@ -24,8 +24,18 @@ export const TOOL_GUIDES: Record<string, ToolGuide> = {
     ]
   },
   'split-pdf': {
-    steps: ['Choose a PDF.', 'Select the pages or page ranges you need in the split workspace.', 'Split and download the resulting PDF files.'],
-    questions: [{ question: 'Can I extract specific pages?', answer: 'Yes. Select the pages or ranges you want to keep. Check the resulting files before sharing them.' }]
+    steps: [
+      'Select a PDF from your device. Check the upload area for the file-size limit supported by this device.',
+      'Use Range, Every Page, Every N, or Extract. Enter the page numbers or group size, then review the list of files to be created.',
+      'Run the split operation. Save the ZIP containing your new PDFs, or download individual PDFs from the result page.'
+    ],
+    questions: [
+      { question: 'What is the difference between Range and Extract?', answer: 'Range creates a separate PDF for each comma-separated page range. For example, 1-3,4-10 creates two PDFs. Extract places selected individual pages, such as 1,5,8, together in one PDF.' },
+      { question: 'Which page numbers should I enter?', answer: 'Use the page position in the PDF, starting at 1. A printed page label may be different: a cover or contents page also counts. Choose only page numbers that exist in your document.' },
+      { question: 'How do I download the split files?', answer: 'The tool creates a ZIP containing the resulting PDFs. The result page also lets you download individual PDFs or download the ZIP again. Open the ZIP on your device to access all of its files.' },
+      { question: 'Does splitting change my original PDF or reduce image quality?', answer: 'Your original file stays unchanged. Selected pages are copied into new PDFs without converting them to screenshots or recompressing their images. Review the exported files before sharing them.' },
+      { question: 'Will splitting make my PDF smaller?', answer: 'A PDF containing fewer pages may be smaller, but splitting does not target a file size. Images, fonts, and other resources can be included in multiple outputs, so their combined size may exceed the original. Use Compress PDF if you need to reduce an output file further.' }
+    ]
   },
   'protect-pdf': {
     steps: ['Choose a PDF.', 'Set a password and review the available permissions.', 'Protect and download the encrypted PDF.'],
