@@ -1,3 +1,4 @@
+import { StudioDialogFocusDirective } from './studio-dialog-focus.directive';
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import { SignatureBuilderComponent } from '../../signing/signature-builder/signature-builder.component';
 import type { SigningAsset, SigningAssetKind, SigningFieldKind } from '../../../core/signing/models/signing.models';
@@ -5,7 +6,7 @@ import type { SigningAsset, SigningAssetKind, SigningFieldKind } from '../../../
 @Component({
   selector: 'app-studio-signing-dialog',
   standalone: true,
-  imports: [SignatureBuilderComponent],
+  imports: [SignatureBuilderComponent, StudioDialogFocusDirective],
   templateUrl: './studio-signing-dialog.component.html',
   styleUrl: './studio-signing-dialog.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -19,8 +20,8 @@ export class StudioSigningDialogComponent {
   showBuilder = false;
   builderKind: SigningAssetKind = 'signature';
   readonly fieldItems: readonly { kind: SigningFieldKind; label: string; description: string; icon: string }[] = [
-    { kind: 'signature', label: 'Signature', description: 'Your full signing mark', icon: '✍' },
-    { kind: 'initials', label: 'Initials', description: 'Short mark for initialing', icon: 'AB' },
+    { kind: 'signature', label: 'Signature', description: 'Sign with your full name or handwritten mark', icon: '✍' },
+    { kind: 'initials', label: 'Initials', description: 'Your name’s first letters, e.g. AB', icon: 'AB' },
     { kind: 'text', label: 'Text', description: 'Add custom text', icon: 'T' },
     { kind: 'date', label: 'Date', description: 'Add a signing date', icon: '▣' },
     { kind: 'checkbox', label: 'Checkbox', description: 'Add a check field', icon: '☑' },

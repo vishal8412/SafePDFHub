@@ -1,19 +1,6 @@
 import { LargeCompressionCapabilityService } from '../../core/compression/large/large-compression-capability.service';
-import {
-  LARGE_COMPRESSION_THRESHOLD,
-  LOSSLESS_ONLY_THRESHOLD,
-} from '../../core/compression/large/large-compression-policy';
-import {
-  Component,
-  OnInit,
-  ChangeDetectorRef,
-  OnDestroy,
-  Inject,
-  PLATFORM_ID,
-  ViewChild,
-  ElementRef,
-  HostListener,
-} from '@angular/core';
+import { LARGE_COMPRESSION_THRESHOLD, LOSSLESS_ONLY_THRESHOLD } from '../../core/compression/large/large-compression-policy';
+import { Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { TOOL_GUIDES } from '../../config/tool-guides.config';
@@ -30,32 +17,24 @@ import { ActionPanelComponent } from '../../shared/components/action-panel/actio
 import { AppIcons } from '../../shared/icons';
 import { CompressWorkspaceComponent } from '../../features/tools/compress/compress-workspace/compress-workspace.component';
 import { MergeWorkspaceComponent } from '../../features/tools/merge/merge-workspace/merge-workspace.component';
-import {
-  SplitRequest,
-  SplitWorkspaceComponent,
-} from '../../features/tools/split/split-workspace/split-workspace.component';
+import { SplitRequest, SplitWorkspaceComponent } from '../../features/tools/split/split-workspace/split-workspace.component';
 import { WorkspaceStateService } from '../../core/services/workspace-state.service';
 import { WorkspaceOperationsService } from '../../core/services/workspace-operations.service';
 import { NgZone } from '@angular/core';
 import { TOOL_BEHAVIORS, ToolBehavior } from '../../config/tool-behavior.config';
-import type {
-  ActionPanelAction,
-  ActionPanelTrustItem,
-} from '../../shared/components/action-panel/action-panel.component';
+import type { ActionPanelAction, ActionPanelTrustItem } from '../../shared/components/action-panel/action-panel.component';
 import { SplitEngine } from '../../core/engines/split.engine';
 import { SplitGroup } from '../../core/split/split.types';
 import { SplitExportService } from '../../core/split/split-export.service';
 import { SplitZipService } from '../../core/split/split-zip.service';
 import { CompressionState } from '../../core/compression/compression.state';
 import { CompressionFacade } from '../../core/compression/compress.facade';
+import { WorkspaceOutputService } from '../../core/workflow/workspace-output.service';
 import { WorkspaceUploadService } from '../../core/workflow/workspace-upload.service';
 import { LocalProcessingCapabilityService } from '../../core/capacity/local-processing-capability.service';
 import { PdfValidationService } from '../../core/capacity/pdf-validation.service';
 import { PdfWorkloadAnalyzerService } from '../../core/capacity/pdf-workload-analyzer.service';
-import {
-  LocalProcessingCapability,
-  WorkloadAssessment,
-} from '../../core/capacity/local-processing-capability.model';
+import { LocalProcessingCapability, WorkloadAssessment } from '../../core/capacity/local-processing-capability.model';
 import { SecurityWorkspaceComponent } from '../../features/tools/security/security-workspace/security-workspace.component';
 import { SignPdfWorkspaceComponent } from '../../features/tools/sign/sign-pdf-workspace/sign-pdf-workspace.component';
 import { WatermarkWorkspaceComponent } from '../../features/tools/watermark/watermark-workspace/watermark-workspace.component';
@@ -63,48 +42,30 @@ import { PdfSecurityService } from '../../core/security/pdf-security.service';
 import { SeoService } from '../../core/services/seo.service';
 import { HomeSectionNavigationService } from '../../shared/services/home-section-navigation.service';
 import { LargePdfSecurityCapabilityService } from '../../core/security/large-file/large-pdf-security-capability.service';
-import type {
-  PdfSecurityMode,
-  PdfSecurityRequest,
-  PdfSecurityResult,
-} from '../../core/security/pdf-security.types';
+import type { PdfSecurityMode, PdfSecurityRequest, PdfSecurityResult } from '../../core/security/pdf-security.types';
 import { PdfWatermarkService } from '../../core/watermark/pdf-watermark.service';
-import type {
-  PdfWatermarkRequest,
-  PdfWatermarkResult,
-} from '../../core/watermark/pdf-watermark.types';
+import type { PdfWatermarkRequest, PdfWatermarkResult } from '../../core/watermark/pdf-watermark.types';
 
 type WorkflowStep = 'merge' | 'compress' | 'split';
 
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [
-    CommonModule,
-    MergeWorkspaceComponent,
-    CompressWorkspaceComponent,
-    SplitWorkspaceComponent,
-    SecurityWorkspaceComponent,
-    SignPdfWorkspaceComponent,
-    WatermarkWorkspaceComponent,
-    DialogComponent,
-    BottomSheetComponent,
-    ActionPanelComponent,
-    RouterModule,
-  ],
+  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
+    DialogComponent, BottomSheetComponent, ActionPanelComponent, RouterModule],
   templateUrl: './tool.component.html',
-  styleUrls: ['./tool.component.scss'],
+  styleUrls: ['./tool.component.scss']
 })
+
 export class ToolComponent implements OnInit, OnDestroy {
+
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
   @ViewChild('uploadDropZone') uploadDropZone!: ElementRef<HTMLElement>;
   @ViewChild(MergeWorkspaceComponent) mergeWorkspace!: MergeWorkspaceComponent;
 
   tool!: Tool;
   behavior!: ToolBehavior;
-  get guide() {
-    return this.tool ? TOOL_GUIDES[this.tool.slug] : undefined;
-  }
+  get guide() { return this.tool ? TOOL_GUIDES[this.tool.slug] : undefined; }
   recommendedTools: Tool[] = [];
   suggestions: { label: string; action: () => void }[] = [];
   suggestionTitle = 'Suggested for you';
@@ -151,10 +112,6 @@ export class ToolComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Merge PDF result state
-  mergeResultFile: File | null = null;
-  mergeDurationMs = 0;
-
   // Split PDF
   splitResultFiles = 0;
   splitResultMode = '';
@@ -171,9 +128,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   watermarkResult: PdfWatermarkResult | null = null;
   watermarkErrorMessage: string | null = null;
 
-  get isWorkspaceMode(): boolean {
-    return this.workspace.files.length > 0;
-  }
+  get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
   constructor(
     private route: ActivatedRoute,
@@ -193,6 +148,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     private splitZipService: SplitZipService,
     private workflowService: WorkflowService,
     private previewService: PreviewService,
+    private workspaceOutput: WorkspaceOutputService,
     public workspace: WorkspaceStateService,
     private workspaceOps: WorkspaceOperationsService,
     private workspaceUpload: WorkspaceUploadService,
@@ -203,17 +159,17 @@ export class ToolComponent implements OnInit, OnDestroy {
     private pdfSecurity: PdfSecurityService,
     private pdfWatermark: PdfWatermarkService,
     private ngZone: NgZone,
-    @Inject(PLATFORM_ID) private platformId: Object,
-  ) {}
+    @Inject(PLATFORM_ID) private platformId: Object
+  ) { }
 
   ngOnInit() {
     this.isBrowser = isPlatformBrowser(this.platformId);
     this.localCapability = this.localProcessingCapability.current;
     this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
     this.workspaceUploadFileCapacity();
-    this.route.paramMap.subscribe((params) => {
+    this.route.paramMap.subscribe(params => {
       const slug = params.get('slug');
-      const match = TOOLS.find((t) => t.slug === slug);
+      const match = TOOLS.find(t => t.slug === slug);
       if (!match) {
         void this.router.navigate(['/']);
         return;
@@ -235,7 +191,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
       // SET TOOL
       this.tool = match;
-      const behavior = TOOL_BEHAVIORS.find((b) => b.slug === this.tool.slug);
+      const behavior = TOOL_BEHAVIORS.find(b => b.slug === this.tool.slug);
       if (!behavior) {
         void this.router.navigate(['/']);
         return;
@@ -252,8 +208,8 @@ export class ToolComponent implements OnInit, OnDestroy {
       if (shouldPreserve) {
         this.onFileSelect({
           target: {
-            files: filesFromState,
-          },
+            files: filesFromState
+          }
         });
         if (autoAction === 'compress') {
           setTimeout(() => {
@@ -302,13 +258,9 @@ export class ToolComponent implements OnInit, OnDestroy {
     return this.tool?.slug === 'split-pdf';
   }
 
-  get isSignTool(): boolean {
-    return this.tool?.slug === 'sign-pdf';
-  }
+  get isSignTool(): boolean { return this.tool?.slug === 'sign-pdf'; }
 
-  get isWatermarkTool(): boolean {
-    return this.tool?.slug === 'watermark-pdf';
-  }
+  get isWatermarkTool(): boolean { return this.tool?.slug === 'watermark-pdf'; }
 
   get isSecurityTool(): boolean {
     return this.tool?.category === 'security';
@@ -316,18 +268,15 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   get securityMode(): PdfSecurityMode {
     switch (this.tool?.slug) {
-      case 'unlock-pdf':
-        return 'unlock';
-      case 'remove-password':
-        return 'remove-password';
-      default:
-        return 'protect';
+      case 'unlock-pdf': return 'unlock';
+      case 'remove-password': return 'remove-password';
+      default: return 'protect';
     }
   }
 
   private resetWorkspaceState() {
     // cleanup previews
-    this.workspace.previews.forEach((p) => {
+    this.workspace.previews.forEach(p => {
       if (p) {
         URL.revokeObjectURL(p);
       }
@@ -383,27 +332,21 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get maxPages(): number {
-    if (this.isSecurityTool && this.largePdfSecurityCapability.supported)
-      return Number.MAX_SAFE_INTEGER;
+    if (this.isSecurityTool && this.largePdfSecurityCapability.supported) return Number.MAX_SAFE_INTEGER;
     return this.localCapability.budget.maxPages;
   }
 
   get capacityTierLabel(): string {
     switch (this.localCapability.tier) {
-      case 'maximum':
-        return 'High-capacity device';
-      case 'high':
-        return 'High-capacity device';
-      case 'standard':
-        return 'Standard device';
-      default:
-        return 'Conservative device profile';
+      case 'maximum': return 'High-capacity device';
+      case 'high': return 'High-capacity device';
+      case 'standard': return 'Standard device';
+      default: return 'Conservative device profile';
     }
   }
 
   get capacitySummary(): string {
-    if (this.isCompressTool)
-      return `Up to ${this.maxFileMB} MB on this device • up to 500 MB on supported desktops`;
+    if (this.isCompressTool) return `Up to ${this.maxFileMB} MB on this device • up to 500 MB on supported desktops`;
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {
       return 'Up to 1 GB per file • processed locally';
     }
@@ -418,24 +361,18 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get workloadIsLarge(): boolean {
-    return (
-      this.workloadAssessment?.risk === 'large' || this.workloadAssessment?.risk === 'high-risk'
-    );
+    return this.workloadAssessment?.risk === 'large' || this.workloadAssessment?.risk === 'high-risk';
   }
 
   get workloadMessage(): string {
     const assessment = this.workloadAssessment;
     if (!assessment || !this.workspace.files.length) return '';
-    if (this.isSecurityTool && !assessment.workload.knownPageCount)
-      return 'Ready for local PDF security processing; large files use the dedicated browser engine.';
-    if (this.isCompressTool && this.workspace.files[0]?.size > LARGE_COMPRESSION_THRESHOLD)
-      return this.workspace.files[0].size > LOSSLESS_ONLY_THRESHOLD
-        ? 'Above 200 MB: lossless compression with temporary disk storage. Previews are disabled.'
-        : 'Disk-backed compression: all modes are available. Previews are disabled to conserve memory.';
-    if (!assessment.workload.knownPageCount)
-      return 'Checking PDF workload; page limits will be verified before processing.';
-    if (assessment.risk === 'blocked')
-      return assessment.reasons[0] ?? 'This workload cannot be processed locally on this device.';
+    if (this.isSecurityTool && !assessment.workload.knownPageCount) return 'Ready for local PDF security processing; large files use the dedicated browser engine.';
+    if (this.isCompressTool && this.workspace.files[0]?.size > LARGE_COMPRESSION_THRESHOLD) return this.workspace.files[0].size > LOSSLESS_ONLY_THRESHOLD
+      ? 'Above 200 MB: lossless compression with temporary disk storage. Previews are disabled.'
+      : 'Disk-backed compression: all modes are available. Previews are disabled to conserve memory.';
+    if (!assessment.workload.knownPageCount) return 'Checking PDF workload; page limits will be verified before processing.';
+    if (assessment.risk === 'blocked') return assessment.reasons[0] ?? 'This workload cannot be processed locally on this device.';
     if (assessment.risk === 'large' || assessment.risk === 'high-risk') {
       return this.isSecurityTool
         ? 'Large PDF workload. The dedicated local security engine is being used.'
@@ -447,16 +384,12 @@ export class ToolComponent implements OnInit, OnDestroy {
   private refreshWorkloadAssessment(): void {
     this.workloadAssessment = this.isCompressTool
       ? this.pdfWorkloadAnalyzer.assessWithBudget(this.workspace.files, this.workspace.pageCounts, {
-          ...this.localCapability.budget,
-          maxFileBytes: this.compressionCapability.maxFileBytes,
-          maxTotalBytes: this.compressionCapability.maxFileBytes,
-          maxFiles: 1,
-          maxPages: this.compressionCapability.budget.maxPages,
-          largeWorkloadBytes: LARGE_COMPRESSION_THRESHOLD,
-        })
+          ...this.localCapability.budget, maxFileBytes: this.compressionCapability.maxFileBytes,
+          maxTotalBytes: this.compressionCapability.maxFileBytes, maxFiles: 1, maxPages: this.compressionCapability.budget.maxPages,
+          largeWorkloadBytes: LARGE_COMPRESSION_THRESHOLD })
       : this.isSecurityTool
-        ? this.pdfWorkloadAnalyzer.assessSecurity(this.workspace.files, this.workspace.pageCounts)
-        : this.pdfWorkloadAnalyzer.assess(this.workspace.files, this.workspace.pageCounts);
+      ? this.pdfWorkloadAnalyzer.assessSecurity(this.workspace.files, this.workspace.pageCounts)
+      : this.pdfWorkloadAnalyzer.assess(this.workspace.files, this.workspace.pageCounts);
     this.applyWorkspaceValidationState();
   }
 
@@ -489,7 +422,9 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   private setRecommendations() {
     if (!this.tool?.nextTools) return;
-    this.recommendedTools = TOOLS.filter((t) => this.tool.nextTools?.includes(t.slug));
+    this.recommendedTools = TOOLS.filter(t =>
+      this.tool.nextTools?.includes(t.slug)
+    );
   }
 
   goToTool(slug: string, autoAction?: string, preserveFiles = false) {
@@ -498,14 +433,11 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   private updateWorkflow() {
-    this.workflowSteps = this.workflowService.detectWorkflow(
-      this.workspace.files,
-      this.workspace.pageCounts,
-    );
+    this.workflowSteps = this.workflowService.detectWorkflow(this.workspace.files, this.workspace.pageCounts);
   }
 
   buildWorkflowLabel(steps: WorkflowStep[]) {
-    return steps.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(' + ');
+    return steps.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' + ');
   }
 
   async runWorkflow() {
@@ -523,7 +455,7 @@ export class ToolComponent implements OnInit, OnDestroy {
         (p, step) => {
           this.loader.setProgress?.(p);
           this.loader.setText(`${step.toUpperCase()}...`);
-        },
+        }
       );
       this.downloadFile(result);
 
@@ -543,8 +475,8 @@ export class ToolComponent implements OnInit, OnDestroy {
           previewLoading: true,
           previewProgress: 0,
           previewError: false,
-          previewQueued: false,
-        },
+          previewQueued: false
+        }
       ]);
 
       await this.generatePreview(result, mergedId);
@@ -555,6 +487,7 @@ export class ToolComponent implements OnInit, OnDestroy {
         this.loader.hide();
         this.toast.show('Workflow completed', 'success');
       }, 400);
+
     } catch (e) {
       console.error(e);
       this.loader.hide();
@@ -626,7 +559,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.toast.show(`${selected.length} files added`, 'success');
+    this.toast.show(`${selected.length} files added`,'success');
 
     // The Sign PDF workspace is single-file. Set its input before mutating the
     // workspace collection so Angular sees one stable input during the same
@@ -635,7 +568,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.signWorkspaceFile = selected[0] ?? null;
     }
 
-    const startIndex = this.workspaceUpload.addFiles(selected, this.behavior.replaceOnUpload);
+    const startIndex = this.workspaceUpload.addFiles(selected,this.behavior.replaceOnUpload);
 
     this.handlePostUploadProcessing();
     this.refreshWorkloadAssessment();
@@ -668,10 +601,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     // pairs. Ignore those internal transitions so the visual state does not
     // flicker while the user is positioning a file.
     const relatedTarget = event.relatedTarget;
-    if (
-      relatedTarget instanceof Node &&
-      this.uploadDropZone?.nativeElement.contains(relatedTarget)
-    ) {
+    if (relatedTarget instanceof Node && this.uploadDropZone?.nativeElement.contains(relatedTarget)) {
       return;
     }
 
@@ -712,7 +642,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   private previewQueue: Promise<void> = Promise.resolve();
 
   private queuePreview(file: File, id: string) {
-    const item = this.workspace.workspaceFiles.find((x) => x.id === id);
+    const item = this.workspace.workspaceFiles.find(x => x.id === id);
     if (!item) return;
     // already queued
     if (item.previewQueued) return;
@@ -721,9 +651,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     item.previewQueued = true;
     this.previewQueue = this.previewQueue
       .then(() => this.generatePreview(file, id))
-      .finally(() => {
-        item.previewQueued = false;
-      });
+      .finally(() => { item.previewQueued = false; });
   }
 
   private queueInitialPreviews(startIndex: number): void {
@@ -731,8 +659,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     const pendingBytes = pendingFiles.reduce((sum, item) => sum + item.file.size, 0);
     // Preview only what is needed for the first viewport. Large local workloads
     // should not pay the memory cost of rendering five PDFs before processing.
-    const immediatePreviewCount =
-      pendingBytes >= 150 * 1024 * 1024 ? 1 : Math.min(3, pendingFiles.length);
+    const immediatePreviewCount = pendingBytes >= 150 * 1024 * 1024 ? 1 : Math.min(3, pendingFiles.length);
     const end = Math.min(startIndex + immediatePreviewCount, this.workspace.workspaceFiles.length);
     for (let i = startIndex; i < end; i++) {
       const item = this.workspace.workspaceFiles[i];
@@ -774,16 +701,16 @@ export class ToolComponent implements OnInit, OnDestroy {
     const valid: File[] = [];
     const existing = [...this.workspace.files];
 
-    for (const file of this.isCompressTool ? newFiles.slice(0, 1) : newFiles) {
+    for (const file of (this.isCompressTool ? newFiles.slice(0, 1) : newFiles)) {
       const result = this.isCompressTool
         ? this.pdfValidation.validateCompressionSelection(file)
         : this.isSecurityTool
-          ? this.pdfValidation.validateSecuritySelection(file)
-          : this.pdfValidation.validateSelection(
-              file,
-              [...existing, ...valid],
-              this.behavior.allowMultiple,
-            );
+        ? this.pdfValidation.validateSecuritySelection(file)
+        : this.pdfValidation.validateSelection(
+            file,
+            [...existing, ...valid],
+            this.behavior.allowMultiple
+          );
 
       if (!result.valid) {
         const level = result.code === 'duplicate' ? 'info' : 'error';
@@ -799,30 +726,26 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   // =====================
   // UPLOAD
-  // =====================
+  // =====================  
   triggerUpload() {
     this.fileInput?.nativeElement?.click();
   }
 
   // =====================
   // SPLIT PDF
-  // =====================
+  // ===================== 
   async splitPdf(request: SplitRequest) {
     const startedAt = performance.now();
     const totalPages = this.workspace.pageCounts[0];
     let groups: SplitGroup[] = [];
     switch (request.mode) {
-      case 'range':
-        groups = this.splitEngine.splitByRanges(request.ranges!);
+      case 'range': groups = this.splitEngine.splitByRanges(request.ranges!);
         break;
-      case 'every-page':
-        groups = this.splitEngine.splitEveryPage(totalPages);
+      case 'every-page': groups = this.splitEngine.splitEveryPage(totalPages);
         break;
-      case 'every-n':
-        groups = this.splitEngine.splitEveryN(totalPages, request.everyN!);
+      case 'every-n': groups = this.splitEngine.splitEveryN(totalPages, request.everyN!);
         break;
-      case 'extract':
-        groups = this.splitEngine.extractPages(request.pages!);
+      case 'extract': groups = this.splitEngine.extractPages(request.pages!);
         break;
     }
 
@@ -843,10 +766,11 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.loader.setText('Splitting PDF...');
       //  this.loader.setText(`Generating PDF ${i + 1}/${groups.length}`);
 
-      const output = await this.splitExportService.export(this.workspace.files[0], groups, (p) => {
-        this.loader.setProgress?.(p);
-        this.loader.setText(`Generating PDFs ${p}%`);
-      });
+      const output = await this.splitExportService.export(this.workspace.files[0], groups,
+        p => {
+          this.loader.setProgress?.(p);
+          this.loader.setText(`Generating PDFs ${p}%`);
+        });
 
       this.loader.setText('Creating ZIP...');
 
@@ -871,21 +795,21 @@ export class ToolComponent implements OnInit, OnDestroy {
         this.showSplitResult = true;
         this.cd.markForCheck();
         this.cd.detectChanges();
-        await new Promise((r) => requestAnimationFrame(r));
+        await new Promise(r => requestAnimationFrame(r));
       });
 
       window.scrollTo({
-        top: 0,
+        top: 0
       });
 
-      await new Promise((r) => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 150));
       this.splitZipService.downloadZip(zipBlob, `${baseName}_split.zip`);
       this.loader.hide();
 
       requestAnimationFrame(() => {
         window.scrollTo({
           top: 0,
-          behavior: 'smooth',
+          behavior: 'smooth'
         });
       });
 
@@ -897,6 +821,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     } finally {
       this.loader.hide();
     }
+
   }
 
   downloadZipAgain() {
@@ -908,14 +833,11 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   handleContinueTool(tool: string) {
     switch (tool) {
-      case 'compress':
-        this.goToTool('compress-pdf');
+      case 'compress': this.goToTool('compress-pdf');
         break;
-      case 'merge':
-        this.goToTool('merge-pdf');
+      case 'merge': this.goToTool('merge-pdf');
         break;
-      case 'protect':
-        this.goToTool('protect-pdf');
+      case 'protect': this.goToTool('protect-pdf');
         break;
     }
   }
@@ -939,59 +861,29 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   // =====================
-  // SUGGESTIONS
+  // SUGGESTIONS          
   // =====================
 
   get quickActions(): ActionPanelAction[] {
     const currentSlug = this.tool?.slug;
 
     const fallbackActions = [
-      {
-        id: 'merge-pdf',
-        icon: AppIcons.Files,
-        title: 'Merge PDFs',
-        desc: 'Combine multiple PDFs into one',
-      },
-      {
-        id: 'compress-pdf',
-        icon: AppIcons.Zap,
-        title: 'Compress PDF',
-        desc: 'Reduce PDF file size',
-      },
-      {
-        id: 'split-pdf',
-        icon: AppIcons.Scissors,
-        title: 'Split PDF',
-        desc: 'Extract pages from a PDF',
-      },
-      {
-        id: 'protect-pdf',
-        icon: AppIcons.Shield,
-        title: 'Protect PDF',
-        desc: 'Add password protection',
-      },
-      {
-        id: 'unlock-pdf',
-        icon: AppIcons.Lock,
-        title: 'Unlock PDF',
-        desc: 'Remove password protection',
-      },
-      {
-        id: 'watermark-pdf',
-        icon: AppIcons.FileText,
-        title: 'Watermark PDF',
-        desc: 'Add text or image watermark',
-      },
+      { id: 'merge-pdf', icon: AppIcons.Files, title: 'Merge PDFs', desc: 'Combine multiple PDFs into one' },
+      { id: 'compress-pdf', icon: AppIcons.Zap, title: 'Compress PDF', desc: 'Reduce PDF file size' },
+      { id: 'split-pdf', icon: AppIcons.Scissors, title: 'Split PDF', desc: 'Extract pages from a PDF' },
+      { id: 'protect-pdf', icon: AppIcons.Shield, title: 'Protect PDF', desc: 'Add password protection' },
+      { id: 'unlock-pdf', icon: AppIcons.Lock, title: 'Unlock PDF', desc: 'Remove password protection' },
+      { id: 'watermark-pdf', icon: AppIcons.FileText, title: 'Watermark PDF', desc: 'Add text or image watermark' }
     ];
 
     const preferredSlugs = this.tool?.nextTools ?? [];
     const preferred = preferredSlugs
-      .filter((slug) => slug !== currentSlug)
-      .map((slug) => fallbackActions.find((action) => action.id === slug))
-      .filter((action): action is (typeof fallbackActions)[number] => !!action);
+      .filter(slug => slug !== currentSlug)
+      .map(slug => fallbackActions.find(action => action.id === slug))
+      .filter((action): action is typeof fallbackActions[number] => !!action);
 
-    const remaining = fallbackActions.filter(
-      (action) => action.id !== currentSlug && !preferred.some((item) => item.id === action.id),
+    const remaining = fallbackActions.filter(action =>
+      action.id !== currentSlug && !preferred.some(item => item.id === action.id)
     );
 
     return [...preferred, ...remaining].slice(0, 4);
@@ -1000,7 +892,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   trustItems: ActionPanelTrustItem[] = [
     { icon: 'local', title: 'Local processing' },
     { icon: 'speed', title: 'Fast processing' },
-    { icon: 'device', title: 'No server upload' },
+    { icon: 'device', title: 'No server upload' }
   ];
 
   handleQuickAction(actionSlug: string) {
@@ -1025,20 +917,22 @@ export class ToolComponent implements OnInit, OnDestroy {
   // =====================
   private async generatePreview(file: File, id: string) {
     if (this.isCompressTool && file.size > LARGE_COMPRESSION_THRESHOLD) return;
-    const item = this.workspace.workspaceFiles.find((x) => x.id === id);
+    const item = this.workspace.workspaceFiles.find(x => x.id === id);
     if (!item) return;
     if (!this.isBrowser) return;
     try {
       item.previewLoading = true;
       item.previewError = false;
       item.previewProgress = 0;
-      await new Promise((r) => requestAnimationFrame(r));
-      const result = await this.previewService.generatePreview(file, (p) => {
-        item.previewProgress = p;
-        if (p === 100 || p % 25 === 0) {
-          requestAnimationFrame(() => this.cd.markForCheck());
+      await new Promise(r => requestAnimationFrame(r));
+      const result = await this.previewService.generatePreview(file,
+        (p) => {
+          item.previewProgress = p;
+          if (p === 100 || p % 25 === 0) {
+            requestAnimationFrame(() => this.cd.markForCheck());
+          }
         }
-      });
+      );
 
       // cleanup old blob
       if (item.preview) {
@@ -1136,7 +1030,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   // =====================
   // REMOVE FILE
-  // =====================
+  // =====================  
   removeFile(i: number) {
     const removedFile = this.workspace.workspaceFiles[i];
     if (removedFile?.preview) {
@@ -1146,22 +1040,13 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.workspaceOps.removeFile(i);
     this.refreshWorkloadAssessment();
     this.toast.show('File removed', 'info', 4000, {
-      actions: [
-        {
-          label: 'Undo',
-          action: () => {
-            this.workspaceOps.restoreFile(i, removedFile);
-          },
-        },
-      ],
+      actions: [{ label: 'Undo', action: () => { this.workspaceOps.restoreFile(i, removedFile); } }]
     });
   }
 
   private capturePositions() {
     this.lastPositions.clear();
-    document
-      .querySelectorAll('.file-card')
-      .forEach((el, i) => this.lastPositions.set(i, el.getBoundingClientRect()));
+    document.querySelectorAll('.file-card').forEach((el, i) => this.lastPositions.set(i, el.getBoundingClientRect()));
   }
 
   private animateReorder() {
@@ -1208,7 +1093,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
       // 🔥 STEP 3: smooth replace (delay = visual polish)
       setTimeout(() => {
-        const oldPages = this.viewerPages.filter((p) => !this.workspace.previews.includes(p));
+        const oldPages = this.viewerPages.filter(p => !this.workspace.previews.includes(p));
         this.viewerLoading = false;
         this.viewerPages = pages;
         requestIdleCallback(() => {
@@ -1217,6 +1102,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
         this.cd.markForCheck();
       }, 300);
+
     } catch (e) {
       console.error(e);
       this.viewerLoading = false;
@@ -1233,7 +1119,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   closeViewer() {
-    const oldPages = this.viewerPages.filter((p) => !this.workspace.previews.includes(p));
+    const oldPages = this.viewerPages.filter(p => !this.workspace.previews.includes(p));
     this.showViewer = false;
     this.viewerLoading = false;
     this.viewerFile = null;
@@ -1248,12 +1134,8 @@ export class ToolComponent implements OnInit, OnDestroy {
     }, 0);
   }
 
-  zoomIn() {
-    this.zoom += 0.2;
-  }
-  zoomOut() {
-    if (this.zoom > 0.4) this.zoom -= 0.2;
-  }
+  zoomIn() { this.zoom += 0.2; }
+  zoomOut() { if (this.zoom > 0.4) this.zoom -= 0.2; }
 
   openFullPdf() {
     if (!this.viewerFile) return;
@@ -1292,9 +1174,6 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.toast.show(this.workloadMessage, 'error');
       return;
     }
-    this.mergeResultFile = null;
-    this.mergeDurationMs = 0;
-    const mergeStartedAt = performance.now();
     this.workspace.loading = true;
     this.toast.show('Merging started...', 'info');
     this.loader.show();
@@ -1313,13 +1192,11 @@ export class ToolComponent implements OnInit, OnDestroy {
         (p) => this.loader.setProgress?.(p),
         this.workspace.pageCounts,
         {
-          onStage: (_stage, message) => this.loader.setText(message),
-        },
+          onStage: (_stage, message) => this.loader.setText(message)
+        }
       );
-      this.mergeResultFile = result;
-      this.mergeDurationMs = performance.now() - mergeStartedAt;
-      this.workspace.hasMerged = true;
-      this.cd.markForCheck();
+      this.downloadFile(result);
+      await this.workspaceOutput.showResult({ file: result, previewGenerator: this.generatePreview.bind(this) });
       console.log('Merged Result Size:', result.size);
 
       this.loader.setText('Done ✨');
@@ -1329,10 +1206,9 @@ export class ToolComponent implements OnInit, OnDestroy {
       }, 400);
     } catch (e) {
       console.error(e);
-      const message =
-        e instanceof Error && e.message
-          ? e.message
-          : 'Merge failed. Please try again with a smaller workload.';
+      const message = e instanceof Error && e.message
+        ? e.message
+        : 'Merge failed. Please try again with a smaller workload.';
       this.loader.setText('Merge could not be completed');
       setTimeout(() => this.loader.hide(), 500);
       this.toast.show(message, 'error');
@@ -1371,45 +1247,45 @@ export class ToolComponent implements OnInit, OnDestroy {
     });
 
     try {
-      const result =
-        request.mode === 'protect'
-          ? await this.pdfSecurity.protect(
-              file,
-              {
-                userPassword: request.password,
-                permissions: request.permissions ?? {
-                  allowPrinting: true,
-                  allowCopying: true,
-                  allowModifying: false,
-                  allowAnnotations: true,
-                  allowForms: true,
-                  allowAssembly: false,
-                },
-                bits: 256,
+      const result = request.mode === 'protect'
+        ? await this.pdfSecurity.protect(
+            file,
+            {
+              userPassword: request.password,
+              permissions: request.permissions ?? {
+                allowPrinting: true,
+                allowCopying: true,
+                allowModifying: false,
+                allowAnnotations: true,
+                allowForms: true,
+                allowAssembly: false
               },
-              (progress) => {
-                this.securityProgress = progress;
-                this.loader.setProgress?.(progress);
-                this.loader.setText('Encrypting PDF locally...');
-              },
-            )
-          : await this.pdfSecurity.removePassword(
-              file,
-              request.password,
-              (progress) => {
-                this.securityProgress = progress;
-                this.loader.setProgress?.(progress);
-                this.loader.setText('Removing PDF password locally...');
-              },
-              request.mode,
-            );
+              bits: 256
+            },
+            progress => {
+              this.securityProgress = progress;
+              this.loader.setProgress?.(progress);
+              this.loader.setText('Encrypting PDF locally...');
+            }
+          )
+        : await this.pdfSecurity.removePassword(
+            file,
+            request.password,
+            progress => {
+              this.securityProgress = progress;
+              this.loader.setProgress?.(progress);
+              this.loader.setText('Removing PDF password locally...');
+            },
+            request.mode
+          );
 
       this.securityResult = result;
       this.loader.setText('Done ✨');
       this.toast.show('PDF security operation completed.', 'success');
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'PDF security operation failed. Please try again.';
+      const message = error instanceof Error
+        ? error.message
+        : 'PDF security operation failed. Please try again.';
       this.securityErrorMessage = message;
       this.loader.setText('PDF security operation could not be completed');
       this.toast.show(message, 'error');
@@ -1439,6 +1315,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     setTimeout(() => this.triggerUpload());
   }
 
+
   async runWatermarkOperation(request: PdfWatermarkRequest): Promise<void> {
     if (this.workspace.loading || !this.workspace.files.length || !this.isWatermarkTool) return;
 
@@ -1464,12 +1341,10 @@ export class ToolComponent implements OnInit, OnDestroy {
     });
 
     try {
-      const result = await this.pdfWatermark.apply(file, request, (progress) => {
+      const result = await this.pdfWatermark.apply(file, request, progress => {
         this.watermarkProgress = progress;
         this.loader.setProgress?.(progress);
-        this.loader.setText(
-          progress >= 95 ? 'Finalizing watermarked PDF...' : `Applying watermark... ${progress}%`,
-        );
+        this.loader.setText(progress >= 95 ? 'Finalizing watermarked PDF...' : `Applying watermark... ${progress}%`);
         this.cd.markForCheck();
       });
 
@@ -1477,8 +1352,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.loader.setText('Done ✨');
       this.toast.show('PDF watermarked successfully.', 'success');
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'PDF watermarking failed. Please try again.';
+      const message = error instanceof Error ? error.message : 'PDF watermarking failed. Please try again.';
       this.watermarkErrorMessage = message;
       this.loader.setText('Watermark operation could not be completed');
       this.toast.show(message, 'error');
@@ -1518,9 +1392,6 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   resetAfterMerge() {
-    this.mergeResultFile = null;
-    this.mergeDurationMs = 0;
-    if (this.workspace.lastMergedUrl) URL.revokeObjectURL(this.workspace.lastMergedUrl);
     this.workspaceOps.replaceAll([]);
     this.workspace.activeIndex = -1;
     this.workspace.hasMerged = false;
@@ -1528,27 +1399,8 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
   }
 
-  downloadMergeResult(): void {
-    if (!this.mergeResultFile || this.workspace.loading) return;
-    this.downloadFile(this.mergeResultFile, 300_000);
-  }
-
-  showMergeInputs(): void {
-    if (this.workspace.loading) return;
-    this.mergeResultFile = null;
-    this.workspace.hasMerged = false;
-    this.cd.markForCheck();
-  }
-
-  processAnotherMerge(): void {
-    if (this.workspace.loading) return;
-    this.resetAfterMerge();
-    this.cd.markForCheck();
-    setTimeout(() => this.triggerUpload());
-  }
-
   // =====================
-  // COMPRESS WORKSPACE
+  // COMPRESS WORKSPACE                   
   // =====================
 
   get isCompressTool(): boolean {
@@ -1568,17 +1420,17 @@ export class ToolComponent implements OnInit, OnDestroy {
       if (this.compressionFacade.isCancellation(error)) return;
       throw error;
     }
+    
 
     if (requestId !== this.analysisRequestId) {
       return;
     }
     this.cd.markForCheck();
+
   }
 
   getTotalSize(): string {
-    return (
-      (this.workspace.files.reduce((a, f) => a + f.size, 0) / (1024 * 1024)).toFixed(2) + ' MB'
-    );
+    return (this.workspace.files.reduce((a, f) => a + f.size, 0) / (1024 * 1024)).toFixed(2) + ' MB';
   }
 
   // SMART SUGGESTIONS BASED ON FILES
@@ -1596,7 +1448,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       suggestions.push({
         label: 'Split large document',
         action: () => this.goToTool('split-pdf'),
-        priority: 0,
+        priority: 0
       });
     }
 
@@ -1605,7 +1457,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       suggestions.push({
         label: 'Compress to reduce size',
         action: () => this.goToTool('compress-pdf', 'compress', true),
-        priority: 1,
+        priority: 1
       });
     }
 
@@ -1613,12 +1465,14 @@ export class ToolComponent implements OnInit, OnDestroy {
       suggestions.push({
         label: 'Merge all files',
         action: () => this.mergePdf(),
-        priority: 2,
+        priority: 2
       });
     }
 
     // ✅ SORT + LIMIT (VERY IMPORTANT)
-    this.suggestions = suggestions.sort((a, b) => a.priority - b.priority).slice(0, 3);
+    this.suggestions = suggestions
+      .sort((a, b) => a.priority - b.priority)
+      .slice(0, 3);
   }
 
   async compressPdf() {
@@ -1642,7 +1496,8 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.toast.show('Optimization completed', 'success');
       this.compressionState.showResult = true;
       this.compressionState.showCompressResult = true;
-    } catch (e) {
+    }
+    catch (e) {
       if (this.compressionFacade.isCancellation(e)) {
         this.loader.setText('Optimization cancelled');
         this.toast.show('Optimization cancelled', 'info');
@@ -1651,7 +1506,8 @@ export class ToolComponent implements OnInit, OnDestroy {
         this.loader.setText('Optimization failed');
         this.toast.show(e instanceof Error ? e.message : 'Optimization failed', 'error');
       }
-    } finally {
+    }
+    finally {
       this.unregisterLoaderCancellation?.();
       this.unregisterLoaderCancellation = null;
       this.loader.hide();
@@ -1669,15 +1525,9 @@ export class ToolComponent implements OnInit, OnDestroy {
       this.downloadFile(file, 300_000);
     } catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
-        this.toast.show(
-          'The PDF could not be saved. Check free disk space and try again.',
-          'error',
-        );
+        this.toast.show('The PDF could not be saved. Check free disk space and try again.', 'error');
       }
-    } finally {
-      this.workspace.loading = false;
-      this.cd.markForCheck();
-    }
+    } finally { this.workspace.loading = false; this.cd.markForCheck(); }
   }
 
   editCompressionAgain(): void {
@@ -1718,16 +1568,19 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   confirmClearAll() {
-    this.workspace.previews.forEach((p) => p && URL.revokeObjectURL(p));
+    this.workspace.previews.forEach(p => p && URL.revokeObjectURL(p));
     this.workspaceOps.clear();
     this.workloadAssessment = this.pdfWorkloadAnalyzer.assess([], []);
     this.showClearDialog = false;
-    this.toast.show('All files removed', 'info');
+    this.toast.show(
+      'All files removed',
+      'info'
+    );
   }
 
   //====================================
   // BOTTOM SHEET FILE ACTIONS (mobile)
-  // =====================================
+  // =====================================  
 
   openFileActions(i: number) {
     this.selectedFileIndex = i;
@@ -1740,24 +1593,24 @@ export class ToolComponent implements OnInit, OnDestroy {
       {
         label: 'Preview',
         icon: AppIcons.Eye,
-        action: () => this.preview(this.workspace.files[i], i),
+        action: () => this.preview(this.workspace.files[i], i)
       },
       {
         label: 'Compress',
         icon: AppIcons.Zap,
-        action: () => this.goToTool('compress-pdf', 'compress', true),
+        action: () => this.goToTool('compress-pdf', 'compress', true)
       },
       {
         label: 'Split',
         icon: AppIcons.Scissors,
-        action: () => this.goToTool('split-pdf'),
+        action: () => this.goToTool('split-pdf')
       },
       {
         label: 'Remove',
         icon: AppIcons.Trash2,
         danger: true,
-        action: () => this.removeFile(i),
-      },
+        action: () => this.removeFile(i)
+      }
     ];
   }
 
@@ -1779,8 +1632,9 @@ export class ToolComponent implements OnInit, OnDestroy {
     if (this.workspace.lastMergedUrl) {
       URL.revokeObjectURL(this.workspace.lastMergedUrl);
     }
-    this.workspace.previews.forEach((p) => {
+    this.workspace.previews.forEach(p => {
       if (p) URL.revokeObjectURL(p);
     });
   }
+
 }

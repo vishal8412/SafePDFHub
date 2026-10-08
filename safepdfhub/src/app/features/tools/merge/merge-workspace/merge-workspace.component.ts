@@ -7,64 +7,34 @@ import {
   ElementRef,
   ViewChildren,
   QueryList,
-  AfterViewInit,
+  AfterViewInit
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
-import { OperationResultComponent } from '../../../../shared/components/operation-result/operation-result.component';
 
 @Component({
   selector: 'app-merge-workspace',
   standalone: true,
-  imports: [CommonModule, OperationResultComponent],
+  imports: [CommonModule],
   templateUrl: './merge-workspace.component.html',
-  styleUrls: ['./merge-workspace.component.scss'],
+  styleUrls: ['./merge-workspace.component.scss']
 })
-export class MergeWorkspaceComponent implements AfterViewInit {
-  @ViewChild('scrollContainer') scrollContainer!: ElementRef;
-  @ViewChildren('previewCard') previewCards!: QueryList<ElementRef>;
+export class MergeWorkspaceComponent implements AfterViewInit{
 
-  private longPressTimer: any;
-  private dragStarted = false;
-  dragTranslateX = 0;
-  touchStartX = 0;
-  touchCurrentX = 0;
-
+@ViewChild('scrollContainer') scrollContainer!: ElementRef;
+@ViewChildren('previewCard') previewCards!: QueryList<ElementRef>;
+  
+private longPressTimer: any;
+private dragStarted = false;
+dragTranslateX = 0;
+touchStartX = 0;
+touchCurrentX = 0;
+  
   // =====================
   // INPUTS
   // =====================
 
   @Input() files: File[] = [];
-
-  @Input() resultFile: File | null = null;
-
-  @Input() resultDurationMs = 0;
-
-  @Output() downloadResult = new EventEmitter<void>();
-
-  @Output() processAnother = new EventEmitter<void>();
-
-  @Output() editAgain = new EventEmitter<void>();
-
-  get resultDescription(): string {
-    if (!this.resultFile) return '';
-    const sourceBytes = this.files.reduce((sum, file) => sum + file.size, 0);
-    const sourcePages = this.pageCounts.reduce((sum, pages) => sum + pages, 0);
-    const allPageCountsKnown = this.pageCounts.length === this.files.length &&
-      this.pageCounts.every((pages) => Number.isInteger(pages) && pages > 0);
-    const pagesDescription = allPageCountsKnown ? ` across ${sourcePages.toLocaleString()} pages` : '';
-    return `Combined ${this.files.length} PDFs (${this.formatBytes(sourceBytes)})${pagesDescription}. Merged download: ${this.formatBytes(this.resultFile.size)}.`;
-  }
-
-  get sourceSummary(): string {
-    return `${this.files.length} source PDFs`;
-  }
-
-  private formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} bytes`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  }
 
   @Input() previews: string[] = [];
 
@@ -112,7 +82,7 @@ export class MergeWorkspaceComponent implements AfterViewInit {
 
   @Output() dragOver = new EventEmitter<number>();
 
-  @Output() dropReorder = new EventEmitter<{ from: number; to: number }>();
+  @Output() dropReorder = new EventEmitter<{from: number; to: number;}>();
 
   @Output() dragReset = new EventEmitter<void>();
 
@@ -126,45 +96,66 @@ export class MergeWorkspaceComponent implements AfterViewInit {
     this.previewCards.changes.subscribe(() => {
       this.setupLazyPreviewObserver();
     });
-  }
+ }
 
-  setupLazyPreviewObserver() {
-    this.observer?.disconnect();
-    this.observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const index = Number((entry.target as HTMLElement).dataset['index']);
+ setupLazyPreviewObserver() {
+  this.observer?.disconnect();
+  this.observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const index =
+            Number(
+              (entry.target as HTMLElement)
+              .dataset['index']
+            );
 
-            this.visiblePreview.emit(index);
-            this.observer?.unobserve(entry.target);
-          }
-        });
-      },
-      {
-        root: this.scrollContainer?.nativeElement,
-        threshold: 0.2,
-      },
-    );
+          this.visiblePreview.emit(index);
+          this.observer?.unobserve(
+            entry.target
+          );
+        }
+      });
+    },
+    {
+      root: this.scrollContainer?.nativeElement,
+      threshold: 0.2
+    }
+  );
 
-    this.previewCards.forEach((card, index) => {
+  this.previewCards.forEach(
+    (card, index) => {
       const el = card.nativeElement;
       el.dataset['index'] = String(index);
       this.observer?.observe(el);
-    });
-  }
-
-  ngOnChanges() {
-    const hasNewFiles = this.files.length > this.previousLength;
-
-    if (hasNewFiles && this.activeIndex >= 0) {
-      requestAnimationFrame(() => {
-        this.scrollToIndex(this.activeIndex);
-      });
     }
+  );
+}
 
-    this.previousLength = this.files.length;
+ngOnChanges() {
+
+  const hasNewFiles =
+    this.files.length >
+    this.previousLength;
+
+  if (
+    hasNewFiles &&
+    this.activeIndex >= 0
+  ) {
+
+    requestAnimationFrame(() => {
+
+      this.scrollToIndex(
+        this.activeIndex
+      );
+
+    });
+
   }
+
+  this.previousLength =
+    this.files.length;
+}
 
   // =====================
   // UI ACTIONS
@@ -195,14 +186,15 @@ export class MergeWorkspaceComponent implements AfterViewInit {
     this.dragOver.emit(index);
   }
 
-  onDrop(index: number) {
-    if (this.dragIndex === null) return;
+ onDrop(index: number) {
 
-    this.dropReorder.emit({
-      from: this.dragIndex,
-      to: index,
-    });
-  }
+  if (this.dragIndex === null) return;
+
+  this.dropReorder.emit({
+    from: this.dragIndex,
+    to: index
+  });
+}
 
   onResetDrag() {
     this.dragReset.emit();
@@ -217,127 +209,160 @@ export class MergeWorkspaceComponent implements AfterViewInit {
   }
 
   trackByFile(index: number) {
-    return this.fileIds?.[index] ?? index;
+   return this.fileIds?.[index] ?? index;
   }
 
   scrollToIndex(index: number) {
-    requestAnimationFrame(() => {
-      if (!this.scrollContainer) return;
 
-      const container = this.scrollContainer.nativeElement;
+  requestAnimationFrame(() => {
 
-      const card = container.children[index] as HTMLElement;
+    if (!this.scrollContainer) return;
 
-      if (!card) return;
+    const container =
+      this.scrollContainer.nativeElement;
 
-      const offset = card.offsetLeft - container.offsetWidth / 2 + card.offsetWidth / 2;
+    const card =
+      container.children[index] as HTMLElement;
 
-      container.scrollTo({
-        left: offset,
-        behavior: 'smooth',
-      });
-    });
-  }
+    if (!card) return;
 
-  // =====================
-  // MOBILE DRAG
-  // =====================
-  onTouchStart(event: TouchEvent, index: number) {
-    this.touchStartX = event.touches[0].clientX;
+    const offset =
+      card.offsetLeft
+      - container.offsetWidth / 2
+      + card.offsetWidth / 2;
 
-    this.longPressTimer = setTimeout(() => {
-      this.dragIndex = index;
-      this.isDragging = true;
-      this.dragStarted = true;
-
-      navigator.vibrate?.(10);
-    }, 180);
-  }
-
-  onTouchMove(event: TouchEvent) {
-    if (!this.dragStarted || this.dragIndex === null) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const touchX = event.touches[0].clientX;
-    let diff = touchX - this.touchStartX;
-
-    const limit = 110;
-
-    if (Math.abs(diff) > limit) {
-      const extra = Math.abs(diff) - limit;
-
-      diff = Math.sign(diff) * (limit + extra * 0.25);
-    }
-
-    this.dragTranslateX = diff;
-
-    const container = this.scrollContainer.nativeElement;
-
-    const cards = container.querySelectorAll('.file-card');
-
-    const draggedCard = cards[this.dragIndex] as HTMLElement;
-
-    if (draggedCard) {
-      draggedCard.style.transform = `translate3d(${diff * 0.92}px,0,0) scale(1.04)`;
-    }
-
-    // detect hovered index
-    cards.forEach((card: HTMLElement, i: number) => {
-      if (i === this.dragIndex) return;
-
-      const rect = card.getBoundingClientRect();
-
-      if (touchX > rect.left && touchX < rect.right) {
-        this.hoverIndex = i;
-      }
+    container.scrollTo({
+      left: offset,
+      behavior: 'smooth'
     });
 
-    // auto scroll
-    const bounds = container.getBoundingClientRect();
+  });
 
-    if (touchX > bounds.right - 60) {
-      container.scrollLeft += 8;
-    }
+}
+  
+// =====================
+// MOBILE DRAG
+// =====================
+onTouchStart(event: TouchEvent, index: number) {
 
-    if (touchX < bounds.left + 60) {
-      container.scrollLeft -= 8;
-    }
+  this.touchStartX = event.touches[0].clientX;
+
+  this.longPressTimer = setTimeout(() => {
+
+    this.dragIndex = index;
+    this.isDragging = true;
+    this.dragStarted = true;
+
+    navigator.vibrate?.(10);
+
+  }, 180);
+
+}
+
+onTouchMove(event: TouchEvent) {
+
+  if (!this.dragStarted || this.dragIndex === null) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const touchX = event.touches[0].clientX;
+  let diff = touchX - this.touchStartX;
+
+const limit = 110;
+
+if (Math.abs(diff) > limit) {
+
+  const extra =
+    Math.abs(diff) - limit;
+
+  diff =
+    Math.sign(diff) *
+    (limit + extra * 0.25);
+}
+
+  this.dragTranslateX = diff;
+
+  const container =
+    this.scrollContainer.nativeElement;
+
+  const cards =
+    container.querySelectorAll('.file-card');
+
+  const draggedCard =
+    cards[this.dragIndex] as HTMLElement;
+
+  if (draggedCard) {
+    draggedCard.style.transform =
+      `translate3d(${diff * 0.92}px,0,0) scale(1.04)`;
   }
 
-  onTouchEnd() {
-    clearTimeout(this.longPressTimer);
+  // detect hovered index
+  cards.forEach((card: HTMLElement, i: number) => {
+
+    if (i === this.dragIndex) return;
+
+    const rect = card.getBoundingClientRect();
 
     if (
-      this.dragStarted &&
-      this.dragIndex !== null &&
-      this.hoverIndex !== null &&
-      this.dragIndex !== this.hoverIndex
+      touchX > rect.left &&
+      touchX < rect.right
     ) {
-      this.dropReorder.emit({
-        from: this.dragIndex,
-        to: this.hoverIndex,
-      });
+      this.hoverIndex = i;
     }
 
-    requestAnimationFrame(() => {
-      const cards = document.querySelectorAll('.file-card');
+  });
 
-      cards.forEach((c: any) => {
-        c.style.transform = '';
-      });
+  // auto scroll
+  const bounds = container.getBoundingClientRect();
+
+  if (touchX > bounds.right - 60) {
+    container.scrollLeft += 8;
+  }
+
+  if (touchX < bounds.left + 60) {
+    container.scrollLeft -= 8;
+  }
+}
+
+onTouchEnd() {
+
+  clearTimeout(this.longPressTimer);
+
+  if (
+    this.dragStarted &&
+    this.dragIndex !== null &&
+    this.hoverIndex !== null &&
+    this.dragIndex !== this.hoverIndex
+  ) {
+
+    this.dropReorder.emit({
+      from: this.dragIndex,
+      to: this.hoverIndex
+    });
+  }
+
+  requestAnimationFrame(() => {
+
+    const cards =
+      document.querySelectorAll('.file-card');
+
+    cards.forEach((c: any) => {
+      c.style.transform = '';
     });
 
-    this.dragTranslateX = 0;
-    this.dragStarted = false;
+  });
 
-    this.resetDrag();
-  }
+  this.dragTranslateX = 0;
+  this.dragStarted = false;
 
-  resetDrag() {
-    this.dragIndex = null;
-    this.isDragging = false;
-    this.hoverIndex = null;
-  }
+  this.resetDrag();
+}
+
+resetDrag() {
+  this.dragIndex = null;
+  this.isDragging = false;
+  this.hoverIndex = null;
+}
+
 }

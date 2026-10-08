@@ -342,9 +342,9 @@
 
               <label class="properties__field signing-range-field signing-opacity-field"><span>Opacity <b>{{ percent(selectedSignatureOpacity()) }}%</b></span><input class="signing-range-input" type="range" min="5" max="100" step="1" [value]="selectedSignatureOpacity() * 100" (input)="updateSignatureOpacity($any($event.target).value)"></label>
               <div class="properties__signing-actions">
-                <button type="button" (click)="openSigningPagesDialog('apply')">Apply to pages…</button>
+                <button type="button" (click)="openSigningPagesDialog('apply')">Copy to other pages…</button>
                 @if (selectedSignatureObject()?.signing?.bulkGroupId) {
-                  <button type="button" class="is-danger" (click)="openSigningPagesDialog('remove')">Remove from pages…</button>
+                  <button type="button" class="is-danger" (click)="openSigningPagesDialog('remove')">Remove linked copies…</button>
                 }
               </div>
               <div class="properties__image-summary"><span>Flattened on export</span><span>Electronic signing</span></div>
@@ -508,19 +508,20 @@
 </aside>
 
 @if (signingPagesDialogOpen() && selectedSignatureObject(); as signingObject) {
-  <div class="properties-signing-modal" role="dialog" aria-modal="true" [attr.aria-label]="signingBulkMode === 'remove' ? 'Remove field from pages' : 'Apply field to pages'" (click)="closeSigningPagesDialog()">
-    <section class="properties-signing-modal__panel" (click)="$event.stopPropagation()">
+  <div class="properties-signing-modal" role="dialog" aria-modal="true" [attr.aria-label]="signingBulkMode === 'remove' ? 'Remove field from pages' : 'Copy signing field to pages'" (click)="closeSigningPagesDialog()">
+    <section studioDialogFocus (dialogEscape)="closeSigningPagesDialog()" class="properties-signing-modal__panel" (click)="$event.stopPropagation()">
       <header>
         <div>
-          <span>PAGE PLACEMENT</span>
+          <span>{{ signingBulkMode === 'remove' ? 'REMOVE LINKED COPIES' : 'COPY TO OTHER PAGES' }}</span>
           <h3>{{ signingObject.signing.kind === 'checkbox' ? 'Checkbox' : signingObject.signing.kind === 'date' ? 'Date' : signingObject.signing.kind === 'text' ? 'Text' : signingObject.signing.kind === 'initials' ? 'Initials' : 'Signature' }}</h3>
         </div>
         <button type="button" class="properties-signing-modal__close" (click)="closeSigningPagesDialog()" aria-label="Close">×</button>
       </header>
 
+      <p>{{ signingBulkMode === 'apply' ? 'Copy this mark from page ' + signingObject.pageNumber + ' to the pages you choose. Existing linked copies will be updated.' : 'Remove only linked copies of this mark from the pages you choose.' }}</p>
       <div class="properties-signing-modal__scope">
-        <button type="button" [class.is-active]="signingBulkScope === 'current'" (click)="signingBulkScope='current'">Current page</button>
-        <button type="button" [class.is-active]="signingBulkScope === 'all'" (click)="signingBulkScope='all'">All pages</button>
+        <button type="button" [class.is-active]="signingBulkScope === 'current'" (click)="signingBulkScope='current'">Source page ({{ signingObject.pageNumber }})</button>
+        <button type="button" [class.is-active]="signingBulkScope === 'all'" (click)="signingBulkScope='all'">All {{ facade.pageCount() }} pages</button>
         <button type="button" [class.is-active]="signingBulkScope === 'range'" (click)="signingBulkScope='range'">Page range</button>
         <button type="button" [class.is-active]="signingBulkScope === 'specific'" (click)="signingBulkScope='specific'">Specific pages</button>
       </div>
@@ -537,17 +538,18 @@
       }
 
       @if (signingBulkMode === 'apply') {
-        <label><span>Position</span><select [(ngModel)]="signingBulkPosition"><option value="same">Use current position</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="center">Center</option></select></label>
+        <label><span>Position</span><select [(ngModel)]="signingBulkPosition"><option value="same">Same relative position on each page</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="center">Center</option></select></label>
       }
 
-      <p>Choose any pages. The current page keeps its position when “Use current position” is selected.</p>
+      @if (signingTargets.error) { <p class="properties-signing-error" role="status">{{ signingTargets.error }}</p> }
+      @else { <p role="status">{{ signingTargets.pages.length }} {{ signingTargets.pages.length === 1 ? 'page' : 'pages' }} selected. You can undo this change.</p> }
 
       <footer>
         <button type="button" class="ghost" (click)="closeSigningPagesDialog()">Cancel</button>
         @if (signingBulkMode === 'remove') {
-          <button type="button" class="danger" (click)="removeSigningPages()">Remove from pages</button>
+          <button type="button" class="danger" [disabled]="!!signingTargets.error || signingPagesBusy" (click)="removeSigningPages()">Remove linked copies</button>
         } @else {
-          <button type="button" class="primary" (click)="applySigningPages()">Apply to pages</button>
+          <button type="button" class="primary" [disabled]="!!signingTargets.error || signingPagesBusy" (click)="applySigningPages()">{{ signingPagesBusy ? 'Copying…' : 'Copy to ' + signingTargets.pages.length + (signingTargets.pages.length === 1 ? ' page' : ' pages') }}</button>
         }
       </footer>
     </section>

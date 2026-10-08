@@ -91,6 +91,34 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
   private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   readonly signingState = inject(SigningStateService);
 
+  readonly signingPointer = signal<{ x:number; y:number } | null>(null);
+  get signingPlacementReady(): boolean {
+    if (this.facade.activeTool() !== 'sign' || !this.facade.hasDocument()) return false;
+    const kind = this.signingState.activeKind();
+    return kind === 'text' || kind === 'date' || kind === 'checkbox' || this.signingState.activeAsset()?.kind === kind;
+  }
+  get signingPlacementLabel(): string {
+    return this.signingState.activeKind() === 'initials' ? 'initials' : this.signingState.activeKind() === 'signature' ? 'signature' : this.signingState.activeKind() + ' field';
+  }
+  get signingGhostBounds(): {x:number;y:number;width:number;height:number} | null {
+    const point = this.signingPointer();
+    if (!point || !this.signingPlacementReady) return null;
+    const asset = this.signingState.activeAsset(), kind = this.signingState.activeKind();
+    const width = kind === 'initials' ? .15 : kind === 'checkbox' ? .04 : .23;
+    const height = asset && (kind === 'signature' || kind === 'initials')
+      ? Math.max(.045,Math.min(.14,width * asset.naturalHeight / Math.max(1,asset.naturalWidth))) : .045;
+    return {x:Math.max(0,Math.min(1-width,point.x-width/2)),y:Math.max(0,Math.min(1-height,point.y-height/2)),width,height};
+  }
+  cancelSigningPlacement(): void { this.signingPointer.set(null); this.facade.setActiveTool('select'); }
+  private updateSigningPointer(event: PointerEvent): void {
+    const rect = this.pageRef?.nativeElement.getBoundingClientRect();
+    if (!this.signingPlacementReady || !rect || event.pointerType === 'touch' || this.spacePressed
+      || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      this.signingPointer.set(null); return;
+    }
+    this.signingPointer.set({x:(event.clientX-rect.left)/rect.width,y:(event.clientY-rect.top)/rect.height});
+  }
+
   getSigningAsset(object: StudioObject): SigningAsset | null {
     if (object.type !== 'signature' || !object.signing) return null;
     return object.signing.asset ?? null;
@@ -2676,11 +2704,9 @@ private async render(
       return;
     }
 
-    const point = this.clientToPagePoint(
-      event.clientX,
-      event.clientY,
-      rect
-    );
+    // Do not clamp clicks in the gray workspace into a PDF corner.
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+    const point = this.clientToPagePoint(event.clientX, event.clientY, rect);
 
     // Existing signing objects should behave like normal editable objects.
     // Clicking one while the Sign tool is active selects it instead of
@@ -2698,12 +2724,14 @@ private async render(
       event.preventDefault();
       event.stopPropagation();
       this.facade.createSignatureObject(point.x, point.y, asset);
+      this.cancelSigningPlacement();
       return;
     }
     if (kind === 'text' || kind === 'date' || kind === 'checkbox') {
       event.preventDefault();
       event.stopPropagation();
       this.facade.createSigningFieldObject(point.x, point.y, kind);
+      this.cancelSigningPlacement();
       return;
     }
   }
@@ -4045,6 +4073,7 @@ setTextAlign(
   onPointerMove(
     event: PointerEvent
   ): void {
+    this.updateSigningPointer(event);
 
     if (
       this.objectInteraction &&

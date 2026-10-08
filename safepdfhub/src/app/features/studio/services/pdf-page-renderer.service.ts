@@ -314,8 +314,9 @@ export class PdfPageRendererService {
 
     await previousQueue;
 
+    this.throwIfRequestIsStale(state, requestVersion);
+
     try {
-      this.throwIfRequestIsStale(state, requestVersion);
 
       if (state.task) {
         try {

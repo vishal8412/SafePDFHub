@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, EventEmitter, Input, Output, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, OnDestroy, ChangeDetectionStrategy, Component, ElementRef, EventEmitter, Input, Output, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SignatureAssetService, type TypedSignatureOptions } from '../../../core/signing/services/signature-asset.service';
@@ -17,7 +17,7 @@ interface Stroke { points: Point[]; tool: DrawTool; color: string; size: number;
   styleUrl: './signature-builder.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class SignatureBuilderComponent implements AfterViewInit {
+export class SignatureBuilderComponent implements AfterViewInit, OnDestroy {
   @Input() kind: SigningAssetKind = 'signature';
   @Output() readonly closed = new EventEmitter<void>();
   @Output() readonly created = new EventEmitter<SigningAsset>();
@@ -25,6 +25,17 @@ export class SignatureBuilderComponent implements AfterViewInit {
   @ViewChild('builder') builder?: ElementRef<HTMLElement>;
 
   private readonly assets = inject(SignatureAssetService);
+
+  private readonly cdr = inject(ChangeDetectorRef);
+  private destroyed = false;
+  private importVersion = 0;
+  private activePointer: number | null = null;
+  importedAsset: SigningAsset | null = null;
+  ngOnDestroy(): void { this.destroyed = true; ++this.importVersion; }
+  get canUseSignature(): boolean {
+    return this.mode === 'draw' ? this.strokes.some(stroke => stroke.tool !== 'eraser')
+      : this.mode === 'type' ? !!this.typedValue.trim() : !!this.importedAsset;
+  }
 
   mode: BuilderMode = 'draw';
   drawTool: DrawTool = 'pen';
@@ -51,11 +62,11 @@ export class SignatureBuilderComponent implements AfterViewInit {
   pointerPreviewSize = 12;
 
   readonly colors = ['#111827', '#0f766e', '#2563eb', '#7c3aed', '#be185d', '#b45309', '#000000'];
-  readonly drawTools: readonly { id: DrawTool; label: string; icon: string }[] = [
-    { id: 'pen', label: 'Pen', icon: '✒' },
-    { id: 'pencil', label: 'Pencil', icon: '✏' },
-    { id: 'brush', label: 'Brush', icon: '🖌' },
-    { id: 'eraser', label: 'Eraser', icon: '▱' },
+  readonly drawTools = [
+    { id: 'pen' as const, label: 'Pen', path: 'M12 3 4 8l-2 14 14-2 5-8-9-9Zm-2 9a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM3 21l8-8M16 4l4 4' },
+    { id: 'pencil' as const, label: 'Pencil', path: 'm16 3 5 5-13 13-6 1 1-6L16 3ZM13 6l5 5M3 16l5 5M5 17 16 6' },
+    { id: 'brush' as const, label: 'Brush', path: 'M14 12 21 3c1-1 2 0 1 1l-6 11-3-3ZM13 14c-6-2-3 7-10 6 4 4 12 1 12-3l-2-3Z' },
+    { id: 'eraser' as const, label: 'Eraser', path: 'm14 3 7 7a2 2 0 0 1 0 3l-8 8H7l-5-5a2 2 0 0 1 0-3L12 3a2 2 0 0 1 2 0ZM7 9l9 9M13 21h9' },
   ];
   readonly typeStyles: readonly { label: string; font: string; category: string }[] = [
     { label: 'Elegant', font: '"Segoe Script", "Brush Script MT", cursive', category: 'Elegant' },
@@ -71,6 +82,15 @@ export class SignatureBuilderComponent implements AfterViewInit {
   }
 
   onDialogKeyDown(event: KeyboardEvent): void {
+    event.stopPropagation();
+    if ((event.target as HTMLElement)?.getAttribute('role') === 'tab' && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+      event.preventDefault();
+      const modes: BuilderMode[]=['draw','type','upload','scan'];
+      const index=event.key==='Home'?0:event.key==='End'?3:(modes.indexOf(this.mode)+(event.key==='ArrowRight'?1:3))%4;
+      this.setMode(modes[index]);
+      this.builder?.nativeElement.querySelectorAll<HTMLElement>('[role="tab"]')[index]?.focus();
+      return;
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
       this.closed.emit();
@@ -120,7 +140,7 @@ export class SignatureBuilderComponent implements AfterViewInit {
     this.updatePointerPreviewSize();
   }
 
-  get activeDrawTool(): { id: DrawTool; label: string; icon: string } {
+  get activeDrawTool() {
     return this.drawTools.find(tool => tool.id === this.drawTool) ?? this.drawTools[0];
   }
   setColor(color: string): void { this.color = color; }
@@ -149,7 +169,8 @@ export class SignatureBuilderComponent implements AfterViewInit {
 
   onPointerDown(event: PointerEvent): void {
     const canvas = this.pad?.nativeElement;
-    if (!canvas) return;
+    if (!canvas || event.button !== 0 || this.activePointer !== null) return;
+    this.activePointer = event.pointerId;
     this.updatePointerPreview(event, canvas);
     const point = this.pointFromEvent(event, canvas);
     this.drawing = true;
@@ -164,7 +185,7 @@ export class SignatureBuilderComponent implements AfterViewInit {
     const canvas = this.pad?.nativeElement;
     if (!canvas) return;
     this.updatePointerPreview(event, canvas);
-    if (!this.drawing || !this.lastPoint) return;
+    if (!this.drawing || !this.lastPoint || this.activePointer !== event.pointerId) return;
     const point = this.pointFromEvent(event, canvas);
     const stroke = this.strokes[this.strokes.length - 1];
     if (!stroke) return;
@@ -175,7 +196,9 @@ export class SignatureBuilderComponent implements AfterViewInit {
     this.redraw();
   }
 
-  onPointerUp(): void {
+  onPointerUp(event?: PointerEvent): void {
+    if (event && this.activePointer !== event.pointerId) return;
+    this.activePointer = null;
     this.drawing = false;
     this.lastPoint = null;
   }
@@ -185,19 +208,20 @@ export class SignatureBuilderComponent implements AfterViewInit {
   }
 
   async useSignature(): Promise<void> {
-    if (this.mode === 'upload' || this.mode === 'scan') return;
+    if (this.creating || !this.canUseSignature) return;
     this.error = '';
     this.creating = true;
     try {
       const kind = this.kind;
-      const asset = this.mode === 'draw'
+      const asset = this.mode === 'upload' || this.mode === 'scan' ? this.importedAsset! : this.mode === 'draw'
         ? await this.assets.createDrawnAsset(this.pad?.nativeElement as HTMLCanvasElement, kind)
         : await this.assets.createTypedAsset(this.typedValue, kind, this.typedOptions());
-      this.created.emit(asset);
+      if (!this.destroyed) this.created.emit(asset);
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not create the signature.';
     } finally {
       this.creating = false;
+      if (!this.destroyed) this.cdr.markForCheck();
     }
   }
 
@@ -205,16 +229,18 @@ export class SignatureBuilderComponent implements AfterViewInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
     input.value = '';
-    if (!file) return;
+    if (!file || this.creating) return;
     this.error = '';
     this.creating = true;
+    const version = ++this.importVersion;
     try {
       const asset = await this.assets.createUploadedAsset(file, this.kind, { cleanupBackground: true });
-      this.created.emit(asset);
+      if (!this.destroyed && version === this.importVersion) this.importedAsset = asset;
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Could not import the signature image.';
     } finally {
       this.creating = false;
+      if (!this.destroyed) this.cdr.markForCheck();
     }
   }
 

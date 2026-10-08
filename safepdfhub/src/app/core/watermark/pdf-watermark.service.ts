@@ -655,6 +655,14 @@ export class PdfWatermarkService {
     }
   }
 
+  private formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+    const MB = 1024 * 1024;
+    const GB = 1024 * MB;
+    if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
+    return `${(bytes / MB).toFixed(bytes >= 100 * MB ? 0 : 1)} MB`;
+  }
+
   private hexToRgb(value: string): { r: number; g: number; b: number } {
     const parsed = Number.parseInt(value.slice(1), 16);
     return {
@@ -677,7 +685,7 @@ export class PdfWatermarkService {
       throw new PdfWatermarkError('The generated watermark PDF is missing its EOF marker.', 'OUTPUT_INVALID');
     }
     try {
-      const reopened = await PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false, parseSpeed: file.size > 100 * 1024 * 1024 ? 500 : 10000 });
+      const reopened = await PDFDocument.load(new Uint8Array(await file.arrayBuffer()), { updateMetadata: false });
       if (reopened.getPageCount() !== expectedPageCount) {
         throw new PdfWatermarkError('Watermarking changed the PDF page count.', 'OUTPUT_INVALID');
       }

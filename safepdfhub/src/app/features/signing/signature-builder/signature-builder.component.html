@@ -1,14 +1,15 @@
 <div class="builder-backdrop" role="presentation" (click)="closed.emit()">
-  <section #builder class="builder" role="dialog" tabindex="-1" (keydown)="onDialogKeyDown($event)" aria-modal="true" aria-label="Create signature" (click)="$event.stopPropagation()">
+  <section #builder class="builder" role="dialog" tabindex="-1" (keydown)="onDialogKeyDown($event)" aria-modal="true" [attr.aria-label]="kind === 'initials' ? 'Create initials' : 'Create signature'" (click)="$event.stopPropagation()">
     <header class="builder__header">
       <div>
         <span class="eyebrow">SIGNATURE BUILDER</span>
         <h2>Create {{ kind === 'initials' ? 'your initials' : 'your signature' }}</h2>
-        <p>Create a reusable signature asset once, then place it wherever you need it.</p>
+        <p>Draw, type or upload your mark. Next, click or tap the PDF to place it.</p>
       </div>
       <button type="button" class="close" (click)="closed.emit()" aria-label="Close">×</button>
     </header>
 
+    <div class="builder__body">
     <div class="builder__tabs" role="tablist" aria-label="Signature creation method">
       <button type="button" role="tab" [attr.aria-selected]="mode === 'draw'" [attr.tabindex]="mode === 'draw' ? 0 : -1" [class.active]="mode === 'draw'" (click)="setMode('draw')">Draw</button>
       <button type="button" role="tab" [attr.aria-selected]="mode === 'type'" [attr.tabindex]="mode === 'type' ? 0 : -1" [class.active]="mode === 'type'" (click)="setMode('type')">Type</button>
@@ -20,7 +21,7 @@
       <div class="draw-toolbar">
         <div class="tool-group">
           @for (tool of drawTools; track tool.id) {
-            <button type="button" class="draw-tool-button" [class.active]="drawTool === tool.id" (click)="setDrawTool(tool.id)"><span class="draw-tool-button__icon" [attr.data-tool]="tool.id" aria-hidden="true"></span><span>{{ tool.label }}</span></button>
+            <button type="button" class="draw-tool-button" [class.active]="drawTool === tool.id" [attr.aria-pressed]="drawTool === tool.id" (click)="setDrawTool(tool.id)"><svg class="sign-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="tool.path" /></svg><span>{{ tool.label }}</span></button>
           }
         </div>
         <div class="tool-group history-group">
@@ -36,30 +37,30 @@
       </div>
       <div class="canvas-wrap" [class.canvas-wrap--pen]="drawTool === 'pen'" [class.canvas-wrap--pencil]="drawTool === 'pencil'" [class.canvas-wrap--brush]="drawTool === 'brush'" [class.canvas-wrap--eraser]="drawTool === 'eraser'">
         <div class="active-draw-tool" [attr.data-tool]="drawTool">
-          <span class="active-draw-tool__icon" [attr.data-tool]="drawTool" aria-hidden="true"></span>
+          <svg class="sign-tool-icon" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="activeDrawTool.path" /></svg>
           <span>{{ activeDrawTool.label }}</span>
         </div>
-        <canvas #pad width="1200" height="430" [class.canvas--pen]="drawTool === 'pen'" [class.canvas--pencil]="drawTool === 'pencil'" [class.canvas--brush]="drawTool === 'brush'" [class.canvas--eraser]="drawTool === 'eraser'" (pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp()" (pointercancel)="onPointerUp()" (pointerleave)="onPointerLeave()"></canvas>
+        <canvas #pad width="1200" height="430" [class.canvas--pen]="drawTool === 'pen'" [class.canvas--pencil]="drawTool === 'pencil'" [class.canvas--brush]="drawTool === 'brush'" [class.canvas--eraser]="drawTool === 'eraser'" (pointerdown)="onPointerDown($event)" (pointermove)="onPointerMove($event)" (pointerup)="onPointerUp($event)" (pointercancel)="onPointerUp($event)" (pointerleave)="onPointerLeave()"></canvas>
         @if (pointerPreviewVisible) {
           <span class="pointer-size-preview" [class.pointer-size-preview--eraser]="drawTool === 'eraser'" [style.left.px]="pointerPreviewX" [style.top.px]="pointerPreviewY" [style.width.px]="pointerPreviewSize" [style.height.px]="pointerPreviewSize" aria-hidden="true"></span>
         }
         <span>Draw naturally · stylus, mouse and touch supported · transparent background</span>
       </div>
-      <p class="micro-hint">Tip: Pen is precise, Pencil is faint, Brush is expressive, and Eraser removes individual strokes.</p>
+      <p class="micro-hint">Tip: Pen is precise, Pencil is faint, Brush is expressive, and Eraser removes ink under the pointer.</p>
     }
 
     @if (mode === 'type') {
       <div class="type-layout">
         <div class="type-controls">
-          <label><span>Your text</span><input [(ngModel)]="typedValue" placeholder="Type your name" autocomplete="off"></label>
+          <label><span>Your text</span><input [(ngModel)]="typedValue" [placeholder]="kind === 'initials' ? 'e.g. AB' : 'Type your name'" autocomplete="off"></label>
           <div class="style-grid"><button type="button" *ngFor="let style of typeStyles" [class.active]="typedFont === style.font" (click)="setTypeStyle(style.font)">{{ style.label }}</button></div>
           <label class="select-field"><span>Font</span><select [(ngModel)]="typedFont"><option *ngFor="let style of typeStyles" [value]="style.font">{{ style.label }}</option></select></label>
           <label class="range-control"><span>Size <b>{{ typedFontSize }} px</b></span><input type="range" min="80" max="240" step="2" [(ngModel)]="typedFontSize"></label>
-          <div class="color-row"><span>Color</span><div class="swatches">@for (item of colors; track item) {<button type="button" [style.background]="item" [class.active]="typedColor === item" (click)="typedColor = item"></button>}</div></div>
+          <div class="color-row"><span>Color</span><div class="swatches">@for (item of colors; track item) {<button type="button" [attr.aria-label]="'Use ' + item" [style.background]="item" [class.active]="typedColor === item" (click)="typedColor = item"></button>}</div></div>
           <label class="range-control"><span>Opacity <b>{{ (typedOpacity * 100).toFixed(0) }}%</b></span><input type="range" min="0.25" max="1" step="0.05" [(ngModel)]="typedOpacity"></label>
           <label class="toggle"><input type="checkbox" [(ngModel)]="typedItalic"><span>Italic signature style</span></label>
         </div>
-        <div class="typed-preview" [style.font-family]="typedFont" [style.font-size.px]="typedFontSize * .55" [style.color]="typedColor" [style.opacity]="typedOpacity" [style.font-style]="typedItalic ? 'italic' : 'normal'">{{ typedValue || 'Your Signature' }}</div>
+        <div class="typed-preview" [style.font-family]="typedFont" [style.font-size.px]="typedFontSize * .55" [style.color]="typedColor" [style.opacity]="typedOpacity" [style.font-style]="typedItalic ? 'italic' : 'normal'">{{ typedValue || (kind === 'initials' ? 'AB' : 'Your signature') }}</div>
       </div>
     }
 
@@ -73,11 +74,15 @@
       </label>
     }
 
+    @if ((mode === 'upload' || mode === 'scan') && importedAsset) {
+      <div class="imported-preview"><img [src]="importedAsset.dataUrl" alt="Your imported signing mark" /><p>Preview your mark, then choose {{ kind === 'initials' ? 'Use initials' : 'Use signature' }}.</p></div>
+    }
     @if (error) { <p class="error" role="alert">{{ error }}</p> }
 
+    </div>
     <footer class="builder__footer">
       <button type="button" class="secondary" (click)="closed.emit()">Cancel</button>
-      <button type="button" class="primary" [disabled]="creating || mode === 'upload' || mode === 'scan'" (click)="useSignature()">{{ creating ? 'Creating…' : 'Use signature' }}</button>
+      <button type="button" class="primary" [disabled]="creating || !canUseSignature" (click)="useSignature()">{{ creating ? 'Preparing…' : kind === 'initials' ? 'Use initials' : 'Use signature' }}</button>
     </footer>
   </section>
 </div>

@@ -99,17 +99,18 @@ describe('Studio PDF export regressions', () => {
       const reader = new FileReader(); reader.onload = () => resolve(reader.result as ArrayBuffer);
       reader.onerror = reject; reader.readAsArrayBuffer(blob);
     });
-    const readPage = vi.spyOn(studioSourcePages, 'read').mockImplementation(async (_, number) => {
+    const sourceRead = vi.spyOn(studioSourcePages, 'read').mockImplementation(async (_, number) => {
       const isolated = await PDFDocument.create();
-      const [page] = await isolated.copyPages(pdf, [number - 1]); isolated.addPage(page);
+      const [page] = await isolated.copyPages(pdf, [number - 1]);
+      isolated.addPage(page);
       return isolated.save();
     });
     const first = await service.createPreviewFile(file, {id:'one',kind:'source',sourcePageNumber:1,rotation:90});
     const second = await service.createPreviewFile(file, {id:'two',kind:'source',sourcePageNumber:2,rotation:0});
     const again = await service.createPreviewFile(file, {id:'one',kind:'source',sourcePageNumber:1,rotation:0});
     expect(arrayBuffer).not.toHaveBeenCalled();
-    expect(readPage.mock.calls.map(call => call[1])).toEqual([1,2,1]);
-    readPage.mockRestore();
+    expect(sourceRead.mock.calls.map(call => call[1])).toEqual([1, 2, 1]);
+    sourceRead.mockRestore();
     expect((await PDFDocument.load(await read(first))).getPage(0).getRotation().angle).toBe(90);
     expect((await PDFDocument.load(await read(second))).getPage(0).getWidth()).toBe(300);
     expect((await PDFDocument.load(await read(again))).getPage(0).getRotation().angle).toBe(0);
@@ -186,16 +187,18 @@ describe('Studio PDF export regressions', () => {
     const pdf=await PDFDocument.create();pdf.addPage([600,800]);pdf.addPage([400,500]);
     const bytes=await pdf.save();
     const file={arrayBuffer:async()=>bytes.slice().buffer} as File;
-    const isolated=await PDFDocument.create();const [selected]=await isolated.copyPages(pdf,[1]);isolated.addPage(selected);
-    const prepared=vi.spyOn(studioSourcePages,'read').mockResolvedValue(await isolated.save());
+    const isolated=await PDFDocument.create();
+    const [page]=await isolated.copyPages(pdf,[1]);isolated.addPage(page);
+    const sourceRead=vi.spyOn(studioSourcePages,'read').mockResolvedValue(await isolated.save());
     const preview=await service.createPreviewFile(file,{id:'two',kind:'source',sourcePageNumber:2,rotation:90});
+    expect(sourceRead).toHaveBeenCalledWith(file,2);
+    sourceRead.mockRestore();
     const output=await new Promise<ArrayBuffer>((resolve,reject)=>{
       const reader=new FileReader();reader.onload=()=>resolve(reader.result as ArrayBuffer);reader.onerror=reject;reader.readAsArrayBuffer(preview);
     });
     const result=await PDFDocument.load(output);
     expect(result.getPageCount()).toBe(1);
     expect(result.getPage(0).getWidth()).toBe(400);
-    expect(prepared).toHaveBeenCalledWith(file,2);prepared.mockRestore();
     expect(result.getPage(0).getRotation().angle).toBe(90);
   });
 });

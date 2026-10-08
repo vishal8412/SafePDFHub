@@ -1,8 +1,8 @@
 {
   "checked_on": "2026-10-07",
   "unit_tests": {
-    "suites_passed": 18,
-    "tests_passed": 106
+    "suites_passed": 13,
+    "tests_passed": 73
   },
   "application_typecheck": "passed",
   "production_build": "passed",
@@ -29,7 +29,7 @@
   "pending_replacement_layer_visible_and_wrapped": "passed",
   "unified_edit_pdf_text_and_image": "passed",
   "native_table_cells_tab_shift_tab_export": "passed on synthetic 4 by 4 native-text fixture",
-  "source_parse_reuse_and_rotation_isolation": "passed with shared background source-page preparation",
+  "source_parse_reuse_and_rotation_isolation": "passed",
   "sample_table_content": "page 2 values are raster images; OCR not implemented",
   "indexed_text_open_without_render_wait": "passed; unresolved render promise does not block editor opening",
   "text_box_numeric_and_pointer_resize": "passed in Edit PDF mode",
@@ -149,100 +149,34 @@
     "dual_edit_completion_icon_verified": true,
     "styled_scrollbar_verified": true
   },
-  "large_document_regression": {
-    "passed": true,
-    "synthetic": true,
-    "initial": {
-      "pages": 18639,
-      "bytes": 393369640,
-      "analyzed": 0,
-      "sidebarNodes": 8
+  "signing_update": {
+    "checked_on": "2026-10-08",
+    "unit_tests": {
+      "suites_passed": 20,
+      "tests_passed": 99
     },
-    "openMs": 1396,
-    "nav": [
-      {
-        "page": 1000,
-        "ms": 132
-      },
-      {
-        "page": 18639,
-        "ms": 134
-      },
-      {
-        "page": 1,
-        "ms": 129
-      }
+    "production_build": "passed",
+    "browser_regression": "scripts/studio-signing-regression.cjs",
+    "export_copied_signature_image_pages": [
+      2,
+      3
     ],
-    "modes": [
-      {
-        "mode": "compact",
-        "nodes": 9
-      },
-      {
-        "mode": "grid",
-        "nodes": 18
-      },
-      {
-        "mode": "comfortable",
-        "nodes": 8
-      }
-    ],
-    "firstEditReadyMs": 917,
-    "editPreviewMs": 418,
-    "longTasks": [],
-    "watermark": {
-      "bytes": 394020903,
-      "pages": 18639,
-      "marked": 18639,
-      "ms": 8451.099999999977
-    },
-    "combined": {
-      "bytes": 394023230,
-      "pages": 18639,
-      "ms": 10850.099999999977
-    },
-    "outputCheck": {
-      "pageCount": 18639,
-      "rotation": 90,
-      "edited": true,
-      "firstMarked": true,
-      "lastMarked": true
-    },
-    "browserErrors": []
-  },
-  "latest_842_page_export_regression": {
-    "passed": true,
-    "unchanged": {
-      "size": 15513995,
-      "duration": 9,
-      "name": "15-MB(1)_edited.pdf",
-      "pages": 842
-    },
-    "edited": {
-      "size": 10998815,
-      "duration": 5123.399999999965,
-      "name": "15-MB(1)_edited.pdf",
-      "pages": 842
-    },
-    "cached": {
-      "size": 10998815,
-      "duration": 14.399999999965075,
-      "name": "15-MB(1)_edited.pdf",
-      "pages": 842
-    },
-    "mixed": {
-      "size": 11067443,
-      "duration": 4424.200000000012,
-      "name": "15-MB(1)_edited.pdf",
-      "pages": 842
-    },
-    "replaced": {
-      "size": 1264,
-      "duration": 13.799999999988358,
-      "name": "text-table_edited.pdf",
-      "pages": 1
-    },
-    "downloads": 6,
-    "browserErrors": []
+    "export_deleted_original_page": 1,
+    "prior_sections": "Historical validation results; not all re-run during the signing update",
+    "browser_results": {
+      "passed": true,
+      "browserErrors": [],
+      "footerViewports": [
+        "1366x768",
+        "390x844",
+        "1024x600"
+      ],
+      "bulkCopiesRetainArtwork": true,
+      "invalidPagesRejected": true,
+      "repeatCopyNoDuplicates": true,
+      "placementPreview": true,
+      "cancelPlacement": true,
+      "uploadRequiresConfirmation": true
+    }
   }
 }

@@ -4,6 +4,12 @@
   (dblclick)="onDoubleClick($event)"
 >
 
+  @if (signingPlacementReady) {
+    <div class="studio-sign-placement-hint" role="status">
+      <span>Click or tap the PDF to place your {{ signingPlacementLabel }}. Esc to cancel.</span>
+      <button type="button" (click)="cancelSigningPlacement()">Cancel</button>
+    </div>
+  }
   <div
     #pdfViewport
     class="studio-canvas__viewport"
@@ -32,6 +38,7 @@
       (wheel)="onWheel($event)"
       (pointerdown)="onPointerDown($event)"
       (pointermove)="onPointerMove($event)"
+      (pointerleave)="signingPointer.set(null)"
       (pointerup)="onPointerUp($event)"
       (pointercancel)="onPointerCancel($event)"
     >
@@ -52,6 +59,13 @@
         ></canvas>
 
 
+        @if (signingGhostBounds; as ghost) {
+          <div class="studio-sign-ghost" aria-hidden="true" [style.left.%]="ghost.x*100" [style.top.%]="ghost.y*100" [style.width.%]="ghost.width*100" [style.height.%]="ghost.height*100">
+            @if ((signingState.activeKind() === 'signature' || signingState.activeKind() === 'initials') && signingState.activeAsset(); as asset) {
+              <img [src]="asset.dataUrl" alt="" />
+            } @else { <span>{{ signingState.activeKind() === 'checkbox' ? '☑' : signingState.activeKind() === 'date' ? 'Date' : 'Text' }}</span> }
+          </div>
+        }
         @if (committedPreview(); as preview) {
           <img class="studio-committed-preview" [src]="preview" alt="Committed PDF edits preview" draggable="false" />
         }

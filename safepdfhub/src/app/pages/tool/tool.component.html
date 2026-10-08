@@ -1,4 +1,5 @@
 <section class="tool-page" [class.workspace-mode]="isWorkspaceMode">
+
   <nav class="tool-breadcrumbs" aria-label="Breadcrumb" *ngIf="tool">
     <ol>
       <li>
@@ -34,7 +35,7 @@
     (change)="onFileSelect($event)"
     hidden
   />
-
+ 
   <div class="hero" *ngIf="!isWorkspaceMode">
     <div class="privacy-signal" aria-label="Private browser processing">
       <span class="privacy-signal__mark" aria-hidden="true"></span>
@@ -46,20 +47,14 @@
     <p class="hero-sub">
       {{ behavior.heroDescription }}
     </p>
-  </div>
 
+  </div>
+ 
   <!-- =====================
        UPLOAD AREA
   ===================== -->
 
-  <div
-    *ngIf="
-      (!isSignTool || !isWorkspaceMode) &&
-      !(isMergeTool && mergeResultFile) &&
-      !(isCompressTool && isWorkspaceMode) &&
-      !(isSecurityTool && isWorkspaceMode) &&
-      !(isWatermarkTool && isWorkspaceMode)
-    "
+  <div *ngIf="(!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode) && !(isWatermarkTool && isWorkspaceMode)"
     #uploadDropZone
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
@@ -68,358 +63,284 @@
     (drop)="onDropFiles($event)"
     (dragenter)="onDragEnter($event)"
     (dragleave)="onDragLeave($event)"
-    (dragover)="allowDrop($event)"
-  >
-    <ng-container *ngIf="!isWorkspaceMode">
-      <div class="upload-icon" aria-hidden="true">
-        <svg viewBox="0 0 48 48" role="presentation">
-          <path class="upload-icon-arrow" d="M24 31V11" />
-          <path class="upload-icon-arrow" d="M17 18l7-7 7 7" />
-          <path class="upload-icon-tray" d="M11 29v8a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4v-8" />
-          <path class="upload-icon-tray" d="M17 29h14" />
+    (dragover)="allowDrop($event)">
+
+  <ng-container *ngIf="!isWorkspaceMode">
+    <div class="upload-icon" aria-hidden="true">
+      <svg viewBox="0 0 48 48" role="presentation">
+        <path class="upload-icon-arrow" d="M24 31V11" />
+        <path class="upload-icon-arrow" d="M17 18l7-7 7 7" />
+        <path class="upload-icon-tray" d="M11 29v8a4 4 0 0 0 4 4h18a4 4 0 0 0 4-4v-8" />
+        <path class="upload-icon-tray" d="M17 29h14" />
+      </svg>
+    </div>
+
+    <p class="upload-text">
+      <span *ngIf="!isDragOver">Drop your PDF here</span>
+      <span *ngIf="isDragOver">Release PDF here</span>
+    </p>
+
+    <p class="upload-drag-hint" [class.active]="isDragOver">
+      <span *ngIf="!isDragOver">or choose a file from your device</span>
+      <span *ngIf="isDragOver">Your file stays on your device</span>
+    </p>
+
+    <label class="upload-btn">
+      <span class="upload-btn-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20" role="presentation">
+          <path d="M10 13V4" />
+          <path d="M6.5 7.5 10 4l3.5 3.5" />
+          <path d="M4 12.5v2A1.5 1.5 0 0 0 5.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-2" />
         </svg>
-      </div>
+      </span>
+      <span>{{ behavior.uploadButtonText }}</span>
+      <input
+       type="file"
+       [accept]="behavior.acceptedTypes"
+       [attr.multiple]="behavior.allowMultiple ? '' : null"
+       (change)="onFileSelect($event)"
+       hidden
+      />
+    </label>
 
-      <p class="upload-text">
-        <span *ngIf="!isDragOver">Drop your PDF here</span>
-        <span *ngIf="isDragOver">Release PDF here</span>
-      </p>
+    <div class="limits">
+      {{ capacitySummary }}
+      <span class="capacity-device"> • {{ capacityTierLabel }}</span>
+    </div>
+  </ng-container>
 
-      <p class="upload-drag-hint" [class.active]="isDragOver">
-        <span *ngIf="!isDragOver">or choose a file from your device</span>
-        <span *ngIf="isDragOver">Your file stays on your device</span>
-      </p>
+  <!-- 🔥 COMPACT MODE -->
+  <ng-container *ngIf="isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool && !isWatermarkTool">
+    <div class="upload-compact" (click)="addMoreFiles()">
+      <span>+ Add more files</span>
+    </div>
+  </ng-container>
 
-      <label class="upload-btn">
-        <span class="upload-btn-icon" aria-hidden="true">
-          <svg viewBox="0 0 20 20" role="presentation">
-            <path d="M10 13V4" />
-            <path d="M6.5 7.5 10 4l3.5 3.5" />
-            <path d="M4 12.5v2A1.5 1.5 0 0 0 5.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-2" />
-          </svg>
-        </span>
-        <span>{{ behavior.uploadButtonText }}</span>
-        <input
-          type="file"
-          [accept]="behavior.acceptedTypes"
-          [attr.multiple]="behavior.allowMultiple ? '' : null"
-          (change)="onFileSelect($event)"
-          hidden
-        />
-      </label>
+ </div>
 
-      <div class="limits">
-        {{ capacitySummary }}
-        <span class="capacity-device"> • {{ capacityTierLabel }}</span>
-      </div>
-    </ng-container>
-
-    <!-- 🔥 COMPACT MODE -->
-    <ng-container
-      *ngIf="
-        isWorkspaceMode && !(isMergeTool && mergeResultFile) && !isCompressTool && !isSplitTool && !isSecurityTool && !isWatermarkTool
-      "
-    >
-      <button type="button" class="upload-compact" (click)="addMoreFiles()">
-        <span>+ Add more files</span>
-      </button>
-    </ng-container>
-  </div>
-
-  <section
-    class="tool-guide"
-    *ngIf="!isWorkspaceMode && !isMergeTool && !isSplitTool && guide as help"
-    aria-labelledby="tool-guide-title"
-  >
+  <section class="tool-guide" *ngIf="!isWorkspaceMode && guide as help" aria-labelledby="tool-guide-title">
     <h2 id="tool-guide-title">How to {{ tool.label.toLowerCase() }}</h2>
-    <ol>
-      <li *ngFor="let step of help.steps">{{ step }}</li>
-    </ol>
+    <ol><li *ngFor="let step of help.steps">{{ step }}</li></ol>
     <h2>Questions about {{ tool.label.toLowerCase() }}</h2>
     <article *ngFor="let item of help.questions">
-      <h3>{{ item.question }}</h3>
-      <p>{{ item.answer }}</p>
+      <h3>{{ item.question }}</h3><p>{{ item.answer }}</p>
     </article>
-    <p>
-      Documents are processed in your browser. Read our
-      <a routerLink="/privacy">privacy policy</a> or
-      <a routerLink="/contact">contact support</a> for help.
-    </p>
-  </section>
-
-  <section class="merge-guide" *ngIf="!isWorkspaceMode && isMergeTool && guide as help" aria-labelledby="merge-guide-title">
-    <div class="merge-guide-heading">
-      <span class="merge-guide-eyebrow">ONE DOCUMENT, IN YOUR ORDER</span>
-      <h2 id="merge-guide-title">How to merge PDF files</h2>
-      <p>Combine reports, forms, or scanned documents into one PDF. Choose your files, set the order, and download the result.</p>
-    </div>
-    <ol class="merge-guide-steps">
-      <li *ngFor="let step of help.steps; let i = index">
-        <span class="merge-step-number" aria-hidden="true">{{ i + 1 }}</span>
-        <h3>{{ ['Choose your PDFs', 'Set the reading order', 'Merge and download'][i] }}</h3>
-        <p>{{ step }}</p>
-      </li>
-    </ol>
-    <div class="merge-guide-note">
-      <span class="merge-note-icon" aria-hidden="true">✓</span>
-      <div><h3>Your documents stay on your device</h3><p>Merging runs in your browser. Your PDFs are not uploaded to SafePDFHub. For large files, check the device limit shown above and keep this tab open until merging finishes.</p></div>
-    </div>
-    <div class="merge-faq">
-      <div class="merge-faq-heading"><span class="merge-guide-eyebrow">BEFORE YOU BEGIN</span><h2>Questions about merging PDFs</h2><p>A few useful details to help you get the result you want.</p></div>
-      <div class="merge-faq-list">
-        <details *ngFor="let item of help.questions"><summary>{{ item.question }}</summary><p>{{ item.answer }}</p></details>
-      </div>
-    </div>
-    <p class="merge-guide-support">Need a hand? <a routerLink="/contact">Contact support</a><span aria-hidden="true"> · </span><a routerLink="/privacy">Read our privacy policy</a></p>
-  </section>
-
-  <section class="merge-guide split-guide" *ngIf="!isWorkspaceMode && isSplitTool && guide as help" aria-labelledby="split-guide-title">
-    <div class="merge-guide-heading">
-      <span class="merge-guide-eyebrow">KEEP THE PAGES YOU NEED</span>
-      <h2 id="split-guide-title">How to split a PDF</h2>
-      <p>Turn a long document into separate PDFs or save selected pages in one file. Choose the option that fits your task.</p>
-    </div>
-    <ol class="merge-guide-steps">
-      <li *ngFor="let step of help.steps; let i = index">
-        <span class="merge-step-number" aria-hidden="true">{{ i + 1 }}</span>
-        <h3>{{ ['Choose your PDF', 'Choose how to split', 'Create and save your files'][i] }}</h3>
-        <p>{{ step }}</p>
-      </li>
-    </ol>
-    <section class="split-mode-guide" aria-labelledby="split-mode-guide-title">
-      <div class="merge-guide-heading"><span class="merge-guide-eyebrow">FOUR WAYS TO SPLIT</span><h2 id="split-mode-guide-title">Which option should I choose?</h2><p>These examples use a 10-page PDF. Page numbers refer to positions in the document, starting at 1.</p></div>
-      <div class="split-mode-grid">
-        <article><span class="split-mode-label">Range</span><h3>Separate chapters or sections</h3><p>Enter <code>1-3,4-10</code> to create two PDFs: pages 1–3 and pages 4–10.</p><span class="split-mode-output">Example result: 2 PDFs</span></article>
-        <article><span class="split-mode-label">Every Page</span><h3>One PDF for each page</h3><p>Save every page as its own PDF. Useful when each page is a separate form, receipt, or document.</p><span class="split-mode-output">Example result: 10 PDFs</span></article>
-        <article><span class="split-mode-label">Every N</span><h3>Split into equal groups</h3><p>Set 3 pages per file to get pages 1–3, 4–6, 7–9, and 10. The last file keeps the remaining pages.</p><span class="split-mode-output">Example result: 4 PDFs</span></article>
-        <article><span class="split-mode-label">Extract</span><h3>Keep only selected pages</h3><p>Enter <code>1,5,8</code> to save those three pages together in one PDF.</p><span class="split-mode-output">Example result: 1 PDF</span></article>
-      </div>
-    </section>
-    <div class="merge-guide-note">
-      <span class="merge-note-icon" aria-hidden="true">✓</span>
-      <div><h3>Your original PDF stays unchanged</h3><p>Splitting creates new files in your browser. Your PDF is not uploaded to SafePDFHub. Check the device limit above and keep this tab open until processing finishes.</p></div>
-    </div>
-    <div class="merge-faq">
-      <div class="merge-faq-heading"><span class="merge-guide-eyebrow">BEFORE YOU BEGIN</span><h2>Questions about splitting PDFs</h2><p>Practical answers about page selection and your downloaded files.</p></div>
-      <div class="merge-faq-list"><details *ngFor="let item of help.questions"><summary>{{ item.question }}</summary><p>{{ item.answer }}</p></details></div>
-    </div>
-    <p class="merge-guide-support">Need a hand? <a routerLink="/contact">Contact support</a><span aria-hidden="true"> · </span><a routerLink="/privacy">Read our privacy policy</a></p>
+    <p>Documents are processed in your browser. Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> for help.</p>
   </section>
 
   <!-- =====================
        FILE LIST (HORIZONTAL)
   ===================== -->
 
-  <app-sign-pdf-workspace
-    *ngIf="isWorkspaceMode && isSignTool"
-    [file]="signWorkspaceFile"
-    (replaceFile)="triggerUpload()"
-  ></app-sign-pdf-workspace>
+<app-sign-pdf-workspace
+  *ngIf="isWorkspaceMode && isSignTool"
+  [file]="signWorkspaceFile"
+  (replaceFile)="triggerUpload()"
+></app-sign-pdf-workspace>
 
-  <app-watermark-workspace
-    *ngIf="isWorkspaceMode && isWatermarkTool"
-    [file]="workspace.files[0] || null"
-    [fileName]="workspace.files[0]?.name || ''"
-    [pageCount]="workspace.pageCounts[0] || 0"
-    [fileSize]="getTotalSize()"
-    [busy]="workspace.loading"
-    [progress]="watermarkProgress"
-    [errorMessage]="watermarkErrorMessage"
-    [result]="watermarkResult"
-    (replaceFile)="triggerUpload()"
-    (applyWatermark)="runWatermarkOperation($event)"
-    (downloadResult)="downloadWatermarkResult()"
-    (processAnother)="processAnotherWatermarkPdf()"
-    (editAgain)="editWatermarkAgain()"
-  ></app-watermark-workspace>
+<app-watermark-workspace
+  *ngIf="isWorkspaceMode && isWatermarkTool"
+  [file]="workspace.files[0] || null"
+  [fileName]="workspace.files[0]?.name || ''"
+  [pageCount]="workspace.pageCounts[0] || 0"
+  [fileSize]="getTotalSize()"
+  [busy]="workspace.loading"
+  [progress]="watermarkProgress"
+  [errorMessage]="watermarkErrorMessage"
+  [result]="watermarkResult"
+  (replaceFile)="triggerUpload()"
+  (applyWatermark)="runWatermarkOperation($event)"
+  (downloadResult)="downloadWatermarkResult()"
+  (processAnother)="processAnotherWatermarkPdf()"
+  (editAgain)="editWatermarkAgain()"
+></app-watermark-workspace>
 
-  <div class="workspace" *ngIf="isWorkspaceMode && !isSignTool && !isWatermarkTool">
-    <!-- =========================
+<div class="workspace" *ngIf="isWorkspaceMode && !isSignTool && !isWatermarkTool">
+
+  <!-- =========================
      PDF SECURITY WORKSPACE
   ========================= -->
-    <app-security-workspace
-      *ngIf="isWorkspaceMode && isSecurityTool"
-      [mode]="securityMode"
-      [file]="workspace.files[0] || null"
-      [busy]="workspace.loading"
-      [progress]="securityProgress"
-      [errorMessage]="securityErrorMessage"
-      [result]="securityResult"
-      (replaceFile)="triggerUpload()"
-      (submit)="runSecurityOperation($event)"
-      (downloadResult)="downloadSecurityResult()"
-      (processAnother)="processAnotherSecurityPdf()"
-    />
+  <app-security-workspace
+    *ngIf="isWorkspaceMode && isSecurityTool"
+    [mode]="securityMode"
+    [file]="workspace.files[0] || null"
+    [busy]="workspace.loading"
+    [progress]="securityProgress"
+    [errorMessage]="securityErrorMessage"
+    [result]="securityResult"
+    (replaceFile)="triggerUpload()"
+    (submit)="runSecurityOperation($event)"
+    (downloadResult)="downloadSecurityResult()"
+    (processAnother)="processAnotherSecurityPdf()"
+  />
 
-    <!-- =========================
+  <!-- =========================
      MERGE WORKSPACE
 ========================= -->
 
-    <app-merge-workspace
-      *ngIf="isWorkspaceMode && isMergeTool"
-      [files]="workspace.files"
-      [resultFile]="mergeResultFile"
-      [resultDurationMs]="mergeDurationMs"
-      [previews]="workspace.previews"
-      [fileIds]="workspace.workspaceFiles.map((f) => f.id)"
-      [validationStates]="workspace.workspaceFiles.map((f) => f.validationState)"
-      [validationMessages]="workspace.workspaceFiles.map((f) => f.validationMessage)"
-      [pageCounts]="workspace.pageCounts"
-      [previewLoading]="workspace.previewLoading"
-      [previewProgress]="workspace.previewProgress"
-      [previewError]="workspace.previewError"
-      [totalSize]="getTotalSize()"
-      [activeIndex]="workspace.activeIndex"
-      [dragIndex]="workspace.dragIndex"
-      [hoverIndex]="workspace.hoverIndex"
-      [isDragging]="workspace.isDragging"
-      (visiblePreview)="onVisiblePreview($event)"
-      (merge)="mergePdf()"
-      (downloadResult)="downloadMergeResult()"
-      (processAnother)="processAnotherMerge()"
-      (editAgain)="showMergeInputs()"
-      (removeFile)="removeFile($event)"
-      (clearAll)="confirmClearAll()"
-      (preview)="preview(workspace.files[$event], $event)"
-      (retryPreview)="retryPreview($event)"
-      (openActions)="openFileActions($event)"
-      (dragStart)="onDragStart($event)"
-      (dragOver)="onWorkspaceHover($event)"
-      (dropReorder)="onDropReorder($event.from, $event.to)"
-      (dragReset)="resetDrag()"
-    ></app-merge-workspace>
+<app-merge-workspace
+  *ngIf="isWorkspaceMode && isMergeTool"
+  [files]="workspace.files"
+  [previews]="workspace.previews"
+  [fileIds]="workspace.workspaceFiles.map(f => f.id)"
+  [validationStates]="workspace.workspaceFiles.map(f => f.validationState)"
+  [validationMessages]="workspace.workspaceFiles.map(f => f.validationMessage)"
+  [pageCounts]="workspace.pageCounts"
+  [previewLoading]="workspace.previewLoading"
+  [previewProgress]="workspace.previewProgress"
+  [previewError]="workspace.previewError"
+  [totalSize]="getTotalSize()"
+  [activeIndex]="workspace.activeIndex"
+  [dragIndex]="workspace.dragIndex"
+  [hoverIndex]="workspace.hoverIndex"
+  [isDragging]="workspace.isDragging"
+  (visiblePreview)="onVisiblePreview($event)"
+  (merge)="mergePdf()"
+  (removeFile)="removeFile($event)"
+  (clearAll)="confirmClearAll()"
+  (preview)="preview(workspace.files[$event],$event)"
+  (retryPreview)="retryPreview($event)"
+  (openActions)="openFileActions($event)"
+  (dragStart)="onDragStart($event)"
+  (dragOver)="onWorkspaceHover($event)"
+  (dropReorder)="onDropReorder($event.from,$event.to)"
+  (dragReset)="resetDrag()"
+></app-merge-workspace>
 
-    <!-- ========================
+<!-- ========================
     SPLIT WORKSPACE
 ========================= -->
-    <app-split-workspace
-      *ngIf="isWorkspaceMode && isSplitTool"
-      [file]="workspace.files[0] || null"
-      [fileName]="workspace.files[0]?.name || ''"
-      [pageCount]="workspace.pageCounts[0] || 0"
-      [fileSize]="getTotalSize()"
-      [resultFiles]="splitResultFiles"
-      [resultMode]="splitResultMode"
-      [resultDuration]="splitResultDuration"
-      [showResult]="showSplitResult"
-      [generatedFiles]="generatedSplitFiles"
-      (changePdf)="splitPdfUpload()"
-      (downloadZip)="downloadZipAgain()"
-      (continueTool)="handleContinueTool($event)"
-      (split)="splitPdf($event)"
-    >
-    </app-split-workspace>
+<app-split-workspace
+  *ngIf="isWorkspaceMode && isSplitTool"
+  [file]="workspace.files[0] || null"
+  [fileName]="workspace.files[0]?.name || ''"
+  [pageCount]="workspace.pageCounts[0] || 0"
+  [fileSize]="getTotalSize()"
 
-    <!-- =========================
+  [resultFiles]="splitResultFiles"
+  [resultMode]="splitResultMode"
+  [resultDuration]="splitResultDuration"
+  [showResult]="showSplitResult"
+
+  [generatedFiles]="generatedSplitFiles"
+
+  (changePdf)="splitPdfUpload()"
+  (downloadZip)="downloadZipAgain()"
+  (continueTool)="handleContinueTool($event)"
+  (split)="splitPdf($event)">
+</app-split-workspace>
+
+
+  <!-- =========================
      MERGE WORKSPACE
 ========================= -->
-    <app-compress-workspace
-      *ngIf="isWorkspaceMode && isCompressTool"
-      [files]="workspace.files"
-      [previews]="workspace.previews"
-      [pageCounts]="workspace.pageCounts"
-      [compressing]="compressionState.compressing"
-      [progress]="compressionState.progress"
-      [estimatedReduction]="compressionState.estimatedReduction"
-      [estimatedFinalSize]="compressionState.estimatedFinalSize"
-      [compressionLevel]="compressionState.compressionLevel"
-      [targetSizeMB]="compressionState.targetSizeMB"
-      [compressionResult]="compressionState.compressionResult"
-      (targetSizeMBChange)="compressionState.targetSizeMB = $event"
-      [loading]="workspace.loading"
-      [pdfInsights]="compressionState.pdfInsights"
-      [resultFile]="compressionState.compressedFile"
-      [originalFileName]="workspace.files[0]?.name || ''"
-      [durationMs]="compressionState.durationMs"
-      (compressionLevelChange)="compressionState.compressionLevel = $event; analyzeCompression()"
-      (compress)="compressPdf()"
-      (replaceFile)="triggerUpload()"
-      (smartTool)="goToTool($event)"
-      (downloadResult)="downloadCompressionResult()"
-      (processAnother)="processAnotherCompressionPdf()"
-      (editAgain)="editCompressionAgain()"
-    />
+  <app-compress-workspace *ngIf="isWorkspaceMode && isCompressTool"
+  [files]="workspace.files"
+  [previews]="workspace.previews"
+  [pageCounts]="workspace.pageCounts"
+  
+  [compressing]="compressionState.compressing"
+  [progress]="compressionState.progress"
 
-    <!-- =====================
-       ACTION BAR
-  ===================== -->
-    <div
-      class="action-bar"
-      *ngIf="(isMergeTool ? workspace.files.length > 0 : workspace.files.length > 1) && !workspace.hasMerged && !isCompressTool"
-    >
-      <div class="cta-container">
-        <div class="merge-next-step" *ngIf="isMergeTool">
-          <h2>{{ workspace.files.length === 1 ? 'One PDF selected' : 'Ready to combine your PDFs?' }}</h2>
-          <p id="merge-selection-help" aria-live="polite">{{ workspace.files.length === 1 ? 'Add at least one more PDF to create a combined document.' : 'Check the file order above, then merge into one document.' }}</p>
-          <button type="button" class="merge-add-file" *ngIf="workspace.files.length === 1" (click)="addMoreFiles()">+ Add another PDF</button>
-        </div>
-        <button
-          type="button"
-          class="merge-btn"
-          [attr.aria-describedby]="isMergeTool ? 'merge-selection-help' : null"
-          (click)="mergePdf()"
-          [disabled]="workspace.loading || workspace.files.length < 2 || hasBlockedWorkload"
-        >
-          {{ workspace.loading ? 'Merging...' : workspace.files.length === 1 ? 'Merge PDF' : 'Merge ' + workspace.files.length + ' PDFs' }}
-        </button>
+  [estimatedReduction]="compressionState.estimatedReduction"
+  [estimatedFinalSize]="compressionState.estimatedFinalSize"
 
-        <div class="trust-inline">🔒 Private • ⚡ Fast • No Upload</div>
-      </div>
-    </div>
-  </div>
+  [compressionLevel]="compressionState.compressionLevel"
+  [targetSizeMB]="compressionState.targetSizeMB"
+  [compressionResult]="compressionState.compressionResult"
+  (targetSizeMBChange)="compressionState.targetSizeMB = $event"
+  [loading]="workspace.loading"
+  [pdfInsights]="compressionState.pdfInsights"
+  [resultFile]="compressionState.compressedFile"
+  [originalFileName]="workspace.files[0]?.name || ''"
+  [durationMs]="compressionState.durationMs"
+
+  (compressionLevelChange)="compressionState.compressionLevel = $event; analyzeCompression();"
+  (compress)="compressPdf()"
+  (replaceFile)="triggerUpload()"
+  (smartTool)="goToTool($event)"
+  (downloadResult)="downloadCompressionResult()"
+  (processAnother)="processAnotherCompressionPdf()"
+  (editAgain)="editCompressionAgain()"
+/>
 
   <!-- =====================
+       ACTION BAR
+  ===================== -->
+  <div class="action-bar" *ngIf="workspace.files.length > 1 && !workspace.hasMerged && !isCompressTool">
+
+  <div class="cta-container">
+
+    <button
+      class="merge-btn"
+      (click)="mergePdf()"
+      [disabled]="workspace.loading || workspace.files.length < 2 || hasBlockedWorkload"
+    >
+      {{ workspace.loading ? 'Merging...' : 'Merge ' + workspace.files.length + ' PDFs' }}
+    </button>
+
+    <div class="trust-inline">
+      🔒 Private • ⚡ Fast • No Upload
+    </div>
+
+  </div>
+ </div>
+</div>
+  
+<!-- =====================
       SMART SUGGESTIONS
   ===================== -->
-  <div
-    class="smart-suggestions"
-    *ngIf="
-      !isSignTool &&
-      !isMergeTool &&
-      suggestions.length &&
-      isWorkspaceMode &&
-      !isCompressTool &&
-      !isSplitTool &&
-      !isSecurityTool
-    "
-  >
-    <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
-      <button class="workflow-btn" (click)="runWorkflow()">⚡ Optimize Automatically</button>
-    </div>
+<div class="smart-suggestions" *ngIf="!isSignTool && suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
+ 
+  <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
 
-    <h3>⚡ {{ suggestionTitle }}</h3>
+  <button class="workflow-btn" (click)="runWorkflow()">
 
-    <div class="suggestion-list">
-      <button
-        *ngFor="let s of suggestions; let i = index"
-        [class.primary]="i === 0"
-        (click)="s.action()"
-        class="suggestion-chip"
-      >
-        {{ s.label }}
-      </button>
-    </div>
+    ⚡ Optimize Automatically
+
+  </button>
+
+</div>
+
+  <h3>⚡ {{ suggestionTitle }}</h3>
+
+  <div class="suggestion-list">
+    <button
+  *ngFor="let s of suggestions; let i = index"
+  [class.primary]="i === 0"
+  (click)="s.action()"
+  class="suggestion-chip"
+>
+  {{ s.label }}
+</button>
   </div>
+
+
+</div>
 
   <!-- =====================
       SMART PANEL
   ===================== -->
 
-  <app-action-panel
-    *ngIf="
-      (!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode
-    "
-    [title]="'More ways to work with PDFs'"
-    [subtitle]="'Explore tools for your next PDF task'"
-    [actions]="quickActions"
-    [trustItems]="trustItems"
-  >
-  </app-action-panel>
+<app-action-panel
+  *ngIf="(!workspace.files.length && !workspace.loading && !workspace.hasMerged) || !isWorkspaceMode"
 
+  [title]="'More ways to work with PDFs'"
+
+  [subtitle]="'Explore tools for your next PDF task'"
+
+  [actions]="quickActions"
+
+  [trustItems]="trustItems"
+
+>
+</app-action-panel>
+
+  
   <!-- =====================
      SUCCESS PANEL
 ===================== -->
-  <!-- <div class="success-panel" *ngIf="workspace.hasMerged && isWorkspaceMode">
+<!-- <div class="success-panel" *ngIf="workspace.hasMerged && isWorkspaceMode">
 
   <h2>🎉 Your PDF is ready</h2>
 
@@ -463,77 +384,113 @@
        VIEWER MODAL
   ===================== -->
   <div class="viewer-overlay" *ngIf="showViewer">
+
     <!-- HEADER -->
     <div class="viewer-header">
+
       <div class="viewer-controls">
         <button (click)="zoomOut()">➖</button>
         <button (click)="zoomIn()">➕</button>
       </div>
 
       <button class="close-btn" (click)="closeViewer()">✕</button>
+
     </div>
 
+
     <!-- BODY -->
-    <div class="viewer-body">
-      <div *ngIf="viewerLoading" class="viewer-loading">
-        <div class="preview-loader">
-          <div class="loader-spinner"></div>
-          <!-- shimmer text -->
-          <div class="loading-text">Rendering preview...</div>
-          <!-- progress illusion -->
-          <div class="loading-bar">
-            <div class="loading-bar-fill"></div>
-          </div>
-        </div>
+<div class="viewer-body">
+
+  <div *ngIf="viewerLoading" class="viewer-loading">
+    <div class="preview-loader">
+      <div class="loader-spinner"></div>
+    <!-- shimmer text -->
+      <div class="loading-text">
+        Rendering preview...
       </div>
-
-      <div class="viewer-content">
-        <div class="viewer-pages" [class.loading]="viewerLoading" [style.zoom]="zoom">
-          <img *ngFor="let page of viewerPages" [src]="page" class="viewer-page" />
-        </div>
-
-        <!-- END CTA -->
-        <div class="viewer-end-cta" *ngIf="viewerPages.length >= 20">
-          <div class="viewer-end-content">
-            <div class="viewer-end-badge">⚡ Fast Preview</div>
-
-            <div class="viewer-end-title">Preview optimized for speed</div>
-
-            <div class="viewer-end-subtitle">
-              Open full document in browser viewer for smooth navigation and faster performance.
-            </div>
-
-            <button class="viewer-open-btn" (click)="openFullPdf()">
-              Open Full PDF
-              <span>↗</span>
-            </button>
-          </div>
-        </div>
+    <!-- progress illusion -->
+      <div class="loading-bar">
+        <div class="loading-bar-fill"></div>
       </div>
     </div>
   </div>
 
-  <!-- =====================
+  <div class="viewer-content">
+
+    <div
+      class="viewer-pages"
+      [class.loading]="viewerLoading"
+      [style.zoom]="zoom"
+    >
+
+      <img
+        *ngFor="let page of viewerPages"
+        [src]="page"
+        class="viewer-page"
+      />
+
+    </div>
+
+    <!-- END CTA -->
+    <div
+      class="viewer-end-cta"
+      *ngIf="viewerPages.length >= 20"
+    >
+
+      <div class="viewer-end-content">
+
+        <div class="viewer-end-badge">
+          ⚡ Fast Preview
+        </div>
+
+        <div class="viewer-end-title">
+          Preview optimized for speed
+        </div>
+
+        <div class="viewer-end-subtitle">
+          Open full document in browser viewer for smooth navigation and faster performance.
+        </div>
+
+        <button
+          class="viewer-open-btn"
+          (click)="openFullPdf()"
+        >
+          Open Full PDF
+          <span>↗</span>
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+  </div>
+
+   <!-- =====================
        DIALOGUE MODAL
   ===================== -->
   <app-dialog
-    [open]="showClearDialog"
-    title="Remove all files?"
-    message="This will remove all selected PDFs from your workspace."
-    confirmText="Remove all"
-    cancelText="Cancel"
-    [danger]="true"
-    (close)="showClearDialog = false"
-    (confirm)="confirmClearAll()"
-  ></app-dialog>
+  [open]="showClearDialog"
+  title="Remove all files?"
+  message="This will remove all selected PDFs from your workspace."
+  confirmText="Remove all"
+  cancelText="Cancel"
+  [danger]="true"
+  (close)="showClearDialog = false"
+  (confirm)="confirmClearAll()"
+></app-dialog>
 
-  <!-- =====================
+<!-- =====================
        BOTTOM SHEET
   ===================== -->
-  <app-bottom-sheet
-    [open]="showFileSheet"
-    title="File actions"
-    [actions]="fileActions"
-    (close)="showFileSheet = false"
-  ></app-bottom-sheet>
+<app-bottom-sheet
+  [open]="showFileSheet"
+  title="File actions"
+  [actions]="fileActions"
+  (close)="showFileSheet = false"
+></app-bottom-sheet>
+
 </section>

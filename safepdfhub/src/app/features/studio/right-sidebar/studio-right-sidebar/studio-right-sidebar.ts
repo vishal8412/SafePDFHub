@@ -1,3 +1,5 @@
+import { StudioDialogFocusDirective } from '../../signing/studio-dialog-focus.directive';
+import { parseStudioSigningPages } from '../../services/studio-signing-pages';
 import { pdfFontSize, textFontWeight, textFontStyle } from '../../services/studio-text-typography';
 import { readStudioImage } from '../../services/studio-image-import';
 import { FormsModule } from '@angular/forms';
@@ -42,7 +44,7 @@ type PdfImageFidelityValidation = {
 @Component({
   selector: 'app-studio-right-sidebar',
   standalone: true,
-  imports: [FormsModule, WatermarkControlsComponent],
+  imports: [FormsModule, WatermarkControlsComponent, StudioDialogFocusDirective],
   templateUrl: './studio-right-sidebar.html',
   styleUrl: './studio-right-sidebar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -223,6 +225,7 @@ export class StudioRightSidebar {
 
   readonly signingPagesDialogOpen = signal(false);
   signingPagesText = '';
+  signingPagesBusy = false;
   signingBulkScope: 'current' | 'all' | 'range' | 'specific' = 'current';
   signingBulkFrom = 1;
   signingBulkTo = 1;
@@ -770,8 +773,8 @@ export class StudioRightSidebar {
   openSigningPagesDialog(mode: 'apply' | 'remove' = 'apply'): void {
     const object = this.selectedSignatureObject();
     if (!object) return;
-    this.signingPagesText = String(object.pageNumber);
-    this.signingBulkScope = 'current';
+    this.signingPagesText = '';
+    this.signingBulkScope = mode === 'apply' ? 'specific' : 'current';
     this.signingBulkFrom = object.pageNumber;
     this.signingBulkTo = object.pageNumber;
     this.signingBulkPosition = 'same';
@@ -782,64 +785,34 @@ export class StudioRightSidebar {
   signingBulkMode: 'apply' | 'remove' = 'apply';
 
   closeSigningPagesDialog(): void {
+    if (this.signingPagesBusy) return;
     this.signingPagesDialogOpen.set(false);
   }
 
+  get signingTargets(): {pages:number[]; error:string} {
+    const max = this.facade.pages().length, source=this.selectedSignatureObject();
+    if (!source || max<1) return {pages:[],error:'Select a signing field first.'};
+    try {
+      const value=this.signingBulkScope === 'current' ? String(source.pageNumber)
+        : this.signingBulkScope === 'all' ? `1-${max}`
+        : this.signingBulkScope === 'range' ? `${this.signingBulkFrom}-${this.signingBulkTo}` : this.signingPagesText;
+      return {pages:parseStudioSigningPages(value,max),error:''};
+    } catch(error) {return {pages:[],error:error instanceof Error ? error.message : 'Invalid pages.'};}
+  }
   async applySigningPages(): Promise<void> {
-    const object = this.selectedSignatureObject();
-    if (!object) return;
-    const pages = this.resolveSigningPages(object.pageNumber);
-    if (!pages.length) return;
-    const applied = await this.facade.applySigningObjectToPages(object.id, pages, this.signingBulkPosition);
-    if (applied) this.signingPagesDialogOpen.set(false);
+    const object = this.selectedSignatureObject(), target=this.signingTargets;
+    if (!object || target.error || !target.pages.length || this.signingPagesBusy) return;
+    this.signingPagesBusy = true;
+    try {
+      const applied = await this.facade.applySigningObjectToPages(object.id,target.pages,this.signingBulkPosition);
+      if (applied) this.signingPagesDialogOpen.set(false);
+    } finally {this.signingPagesBusy=false;}
   }
-
   removeSigningPages(): void {
-    const object = this.selectedSignatureObject();
-    if (!object?.signing.bulkGroupId) return;
-    const pages = this.resolveSigningPages(object.pageNumber);
-    if (!pages.length) return;
-    this.facade.removeSigningObjectFromPages(object.id, pages);
+    const object=this.selectedSignatureObject(),target=this.signingTargets;
+    if (!object?.signing.bulkGroupId || target.error || this.signingPagesBusy) return;
+    this.facade.removeSigningObjectFromPages(object.id,target.pages);
     this.signingPagesDialogOpen.set(false);
-  }
-
-  private resolveSigningPages(currentPage: number): number[] {
-    const max = this.facade.pages().length;
-    if (max < 1) return [];
-
-    if (this.signingBulkScope === 'current') {
-      return [Math.max(1, Math.min(max, currentPage))];
-    }
-
-    if (this.signingBulkScope === 'all') {
-      return Array.from({ length: max }, (_, index) => index + 1);
-    }
-
-    if (this.signingBulkScope === 'range') {
-      const from = Math.max(1, Math.min(max, Math.floor(Number(this.signingBulkFrom) || 1)));
-      const to = Math.max(from, Math.min(max, Math.floor(Number(this.signingBulkTo) || from)));
-      return Array.from({ length: to - from + 1 }, (_, index) => from + index);
-    }
-
-    return this.parseSigningPages(this.signingPagesText);
-  }
-
-  private parseSigningPages(value: string): number[] {
-    const max = this.facade.pages().length;
-    const result = new Set<number>();
-    for (const part of value.split(',')) {
-      const trimmed = part.trim();
-      const range = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
-      if (range) {
-        const from = Math.max(1, Math.min(max, Number(range[1])));
-        const to = Math.max(from, Math.min(max, Number(range[2])));
-        for (let page = from; page <= to; page += 1) result.add(page);
-      } else if (/^\d+$/.test(trimmed)) {
-        const page = Number(trimmed);
-        if (page >= 1 && page <= max) result.add(page);
-      }
-    }
-    return [...result].sort((a, b) => a - b);
   }
 
   updateSigningValue(value: string): void {

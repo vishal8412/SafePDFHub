@@ -1,130 +1,146 @@
-<ng-container *ngIf="resultFile; else mergeInputs">
-  <app-operation-result
-    [file]="resultFile!"
-    [originalFileName]="sourceSummary"
-    [durationMs]="resultDurationMs"
-    sizeUnitSystem="binary"
-    eyebrow="MERGE COMPLETE"
-    title="Your merged PDF is ready"
-    [description]="resultDescription"
-    operationLabel="Merged PDF"
-    icon="merge"
-    actionLabel="Download merged PDF"
-    actionDescription="Save the combined PDF to your device"
-    privacyHeading="Your PDFs stayed on this device."
-    privacyDescription="SafePDFHub did not upload or receive your documents."
-    editAgainLabel="Review selected PDFs"
-    processAnotherLabel="Merge more PDFs"
-    (download)="downloadResult.emit()"
-    (editAgain)="editAgain.emit()"
-    (processAnother)="processAnother.emit()"
-  />
-</ng-container>
+<div class="workspace-shell">
+  <div class="workspace-header">
+  <div class="file-info">
+    {{ files.length }} files • {{ totalSize  }}
+  </div>
 
-<ng-template #mergeInputs>
-  <div class="workspace-shell">
-    <div class="workspace-header">
-      <div class="file-info">{{ files.length }} {{ files.length === 1 ? 'file' : 'files' }} • {{ totalSize }}</div>
+  <button class="clear-all" (click)="clearWorkspace()">
+    ✕ Clear all
+  </button>
+</div>
 
-      <button class="clear-all" (click)="clearWorkspace()">✕ Clear all</button>
-    </div>
+<div class="workspace-order-hint" *ngIf="files.length > 1">
+  Drag files to change their merge order.
+</div>
 
-    <div class="workspace-order-hint" *ngIf="files.length > 1">
-      Drag files to change their merge order.
-    </div>
+  <div class="file-row" #scrollContainer *ngIf="files.length > 0">
+    <div #previewCard
+      class="file-card"
+      *ngFor="let file of files; let i = index; trackBy: trackByFile"
+      draggable="true"
+      [class.dragging]="dragIndex === i"
+      [class.hovered]="hoverIndex === i && dragIndex !== i"
+      [class.dimmed]="isDragging && dragIndex !== i"
+      [class.active]="activeIndex === i && activeIndex !== -1"
+      [class.capacity-blocked]="validationStates[i] === 'blocked'"
+      [class.capacity-large]="validationStates[i] === 'large'"
+      (click)="onPreview(i)"
+      (touchstart)="onTouchStart($event, i)"
+      (touchmove)="onTouchMove($event)"
+      (touchend)="onTouchEnd()"
+      (dragstart)="onDragStart(i)"
+      (dragover)="onDragOver($event, i)"
+      (dragend)="onResetDrag()"
+      (drop)="onDrop(i)"
+    >
 
-    <div class="file-row" #scrollContainer *ngIf="files.length > 0">
-      <div
-        #previewCard
-        class="file-card"
-        *ngFor="let file of files; let i = index; trackBy: trackByFile"
-        draggable="true"
-        [class.dragging]="dragIndex === i"
-        [class.hovered]="hoverIndex === i && dragIndex !== i"
-        [class.dimmed]="isDragging && dragIndex !== i"
-        [class.active]="activeIndex === i && activeIndex !== -1"
-        [class.capacity-blocked]="validationStates[i] === 'blocked'"
-        [class.capacity-large]="validationStates[i] === 'large'"
-        (click)="onPreview(i)"
-        (touchstart)="onTouchStart($event, i)"
-        (touchmove)="onTouchMove($event)"
-        (touchend)="onTouchEnd()"
-        (dragstart)="onDragStart(i)"
-        (dragover)="onDragOver($event, i)"
-        (dragend)="onResetDrag()"
-        (drop)="onDrop(i)"
+      <!-- DROP INDICATOR -->
+      <div class="drop-indicator" *ngIf="hoverIndex === i"></div>
+
+      <!-- ORDER BADGE -->
+      <div class="order">{{ i + 1 }}</div>
+
+      <!-- REMOVE BUTTON -->
+      <button
+        class="remove"
+        (click)="onRemove(i); $event.stopPropagation()"
       >
-        <!-- DROP INDICATOR -->
-        <div class="drop-indicator" *ngIf="hoverIndex === i"></div>
-
-        <!-- ORDER BADGE -->
-        <div class="order">{{ i + 1 }}</div>
-
-        <!-- REMOVE BUTTON -->
-        <button class="remove" (click)="onRemove(i); $event.stopPropagation()">✕</button>
-
-        <!-- <div class="drag-handle">⋮⋮</div> -->
-        <div class="drag-handle">
-          <button class="card-menu" (click)="onOpenActions(i); $event.stopPropagation()">⋮</button>
-        </div>
-        <!-- =====================
+        ✕
+      </button>
+      
+      <!-- <div class="drag-handle">⋮⋮</div> -->
+      <div class="drag-handle">
+        <button
+  class="card-menu"
+  (click)="onOpenActions(i);
+           $event.stopPropagation()"
+>
+  ⋮
+</button>
+</div>
+  <!-- =====================
       PREVIEW AREA
   ===================== -->
-        <div class="preview-wrapper">
-          <!-- 🟡 SKELETON -->
-          <div *ngIf="previewLoading[i]" class="skeleton shimmer"></div>
+  <div class="preview-wrapper">
 
-          <!-- 🟢 IMAGE -->
-          <img *ngIf="!previewLoading[i] && previews[i]" [src]="previews[i]" class="preview-img" />
+  <!-- 🟡 SKELETON -->
+  <div *ngIf="previewLoading[i]" class="skeleton shimmer"></div>
 
-          <!-- 🔴 ERROR -->
-          <div *ngIf="previewError[i]" class="error-state">
-            <div class="error-icon">⚠️</div>
+  <!-- 🟢 IMAGE -->
+  <img
+    *ngIf="!previewLoading[i] && previews[i]"
+    [src]="previews[i]"
+    class="preview-img"
+  />
 
-            <div class="error-title">Preview Failed</div>
+  <!-- 🔴 ERROR -->
+  <div *ngIf="previewError[i]" class="error-state">
 
-            <div class="error-sub">This file may be corrupted or protected</div>
+  <div class="error-icon">⚠️</div>
 
-            <button class="retry-btn" (click)="onRetry(i); $event.stopPropagation()">Retry</button>
-          </div>
+  <div class="error-title">
+    Preview Failed
+  </div>
 
-          <!-- 📊 PROGRESS -->
-          <div *ngIf="previewLoading[i]" class="progress-bar">
-            <div class="progress-fill" [style.width.%]="previewProgress[i]"></div>
-          </div>
+  <div class="error-sub">
+    This file may be corrupted or protected
+  </div>
 
-          <!-- MOBILE REORDER -->
-          <!-- <div class="mobile-reorder" *ngIf="activeIndex === i">
+  <button
+    class="retry-btn"
+    (click)="onRetry(i); $event.stopPropagation()"
+  >
+    Retry
+  </button>
+
+</div>
+
+  <!-- 📊 PROGRESS -->
+  <div *ngIf="previewLoading[i]" class="progress-bar">
+    <div
+      class="progress-fill"
+      [style.width.%]="previewProgress[i]"
+    ></div>
+  </div>
+
+  <!-- MOBILE REORDER -->
+   <!-- <div class="mobile-reorder" *ngIf="activeIndex === i">
       <button (click)="moveLeft(i); $event.stopPropagation()">←</button>
       <button (click)="moveRight(i); $event.stopPropagation()">→</button>
     </div> -->
-        </div>
 
-        <!-- =====================
+</div>
+
+
+      <!-- =====================
            FILE META
       ===================== -->
-        <div class="meta">
-          <div class="file-name" title="{{ file.name }}">
-            {{ file.name }}
-          </div>
+      <div class="meta">
 
-          <div class="file-size">{{ (file.size / (1024 * 1024)).toFixed(2) }} MB</div>
-
-          <div class="file-extra">
-            <span *ngIf="pageCounts[i]">{{ pageCounts[i] }} pages</span>
-          </div>
+        <div class="file-name" title="{{ file.name }}">
+          {{ file.name }}
         </div>
 
-        <div
-          class="capacity-file-status"
-          *ngIf="validationStates[i] === 'blocked' || validationStates[i] === 'large'"
-        >
-          <span>{{
-            validationStates[i] === 'blocked' ? '⚠ Cannot process locally' : '◐ Large workload'
-          }}</span>
-          <small *ngIf="validationMessages[i]">{{ validationMessages[i] }}</small>
+        <div class="file-size">
+          {{ (file.size / (1024 * 1024)).toFixed(2) }} MB
         </div>
+
+        <div class="file-extra">
+          <span *ngIf="pageCounts[i]">{{ pageCounts[i] }} pages</span>
+        </div>
+
       </div>
+
+      <div
+        class="capacity-file-status"
+        *ngIf="validationStates[i] === 'blocked' || validationStates[i] === 'large'"
+      >
+        <span>{{ validationStates[i] === 'blocked' ? '⚠ Cannot process locally' : '◐ Large workload' }}</span>
+        <small *ngIf="validationMessages[i]">{{ validationMessages[i] }}</small>
+      </div>
+
+
     </div>
+
   </div>
-</ng-template>
+  </div>

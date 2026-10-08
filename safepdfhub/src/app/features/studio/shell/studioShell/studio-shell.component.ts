@@ -742,6 +742,7 @@ onToolSelected(
      */
     case 'sign':
       if (!this.facade.hasDocument()) return;
+      this.facade.setActiveTool('select');
       this.signingDialogOpen.set(true);
       return;
 
@@ -788,12 +789,14 @@ onSignatureCreated(asset: SigningAsset): void {
     this.signingDialogOpen.set(false);
     this.signingState.setActiveAsset(asset);
     this.signingState.setActiveKind(asset.kind);
+    this.facade.clearSelection();
     this.facade.setActiveTool('sign');
   }
 
   onSigningFieldSelected(kind: SigningFieldKind): void {
     this.signingDialogOpen.set(false);
     this.signingState.setActiveKind(kind);
+    this.facade.clearSelection();
     this.facade.setActiveTool('sign');
   }
 

@@ -59,18 +59,12 @@ export class StudioWorkspace
 
   @ViewChild('pagesList')
   set pageListElement(value: ElementRef<HTMLElement> | undefined) {
-    if (this.pagesList?.nativeElement === value?.nativeElement) return;
     this.listObserver?.disconnect();
     this.pagesList = value;
     if (!value || typeof ResizeObserver === 'undefined') return;
     this.listObserver = new ResizeObserver(() => {
-      const width = value.nativeElement.clientWidth, height = value.nativeElement.clientHeight;
-      if (width === this.listWidth() && height === this.listHeight()) return;
-      this.listWidth.set(width);
-      this.listHeight.set(height);
-      // Switching organizer/density can change column count after layout.
-      // Re-anchor with the new geometry, not the old sidebar width.
-      this.scheduleActivePageScroll();
+      this.listWidth.set(value.nativeElement.clientWidth);
+      this.listHeight.set(value.nativeElement.clientHeight);
     });
     this.listObserver.observe(value.nativeElement);
     this.scheduleActivePageScroll();

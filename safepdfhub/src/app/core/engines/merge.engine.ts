@@ -7,7 +7,7 @@ import {
   MergeWorkerInputFile,
   MergeWorkerMainMessage,
   MergeWorkerMessage,
-  MergeWorkerStage,
+  MergeWorkerStage
 } from '../workers/merge-worker.types';
 
 export interface MergeOptions {
@@ -17,28 +17,27 @@ export interface MergeOptions {
 }
 
 @Injectable({
-  providedIn: 'root',
+  providedIn: 'root'
 })
 export class MergeEngine {
   private worker: Worker | null = null;
   private activeReject: ((reason?: unknown) => void) | null = null;
   private activeSettled = false;
 
-  constructor(private readonly capabilityService: LocalProcessingCapabilityService) {}
+  constructor(
+    private readonly capabilityService: LocalProcessingCapabilityService
+  ) {}
 
   async merge(
     files: File[],
     onProgress?: (p: number) => void,
     knownPageCounts: readonly number[] = [],
-    options: MergeOptions = {},
+    options: MergeOptions = {}
   ): Promise<File> {
     const budget = this.capabilityService.budget;
     this.validateRequest(files, budget);
 
-    if (
-      options.executionMode === 'main' ||
-      (options.executionMode !== 'worker' && typeof Worker === 'undefined')
-    ) {
+    if (options.executionMode === 'main' || (options.executionMode !== 'worker' && typeof Worker === 'undefined')) {
       return this.mergeOnMainThread(files, onProgress, knownPageCounts, options);
     }
 
@@ -74,28 +73,25 @@ export class MergeEngine {
     }, 100);
   }
 
-  private validateRequest(files: File[], budget: ProcessingBudget): void {
+  private validateRequest(
+    files: File[],
+    budget: ProcessingBudget
+  ): void {
     if (files.length < 2) {
       throw new Error('Please add at least 2 PDFs to merge.');
     }
     if (files.length > budget.maxFiles) {
-      throw new Error(
-        `Too many PDFs for reliable local processing. Maximum ${budget.maxFiles} files.`,
-      );
+      throw new Error(`Too many PDFs for reliable local processing. Maximum ${budget.maxFiles} files.`);
     }
 
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
     const largestFile = files.reduce((max, file) => Math.max(max, file.size), 0);
 
     if (largestFile > budget.maxFileBytes) {
-      throw new Error(
-        `A selected PDF exceeds the ${this.formatBytes(budget.maxFileBytes)} local file limit.`,
-      );
+      throw new Error(`A selected PDF exceeds the ${this.formatBytes(budget.maxFileBytes)} local file limit.`);
     }
     if (totalBytes > budget.maxTotalBytes) {
-      throw new Error(
-        `The selected PDFs exceed the ${this.formatBytes(budget.maxTotalBytes)} local processing limit.`,
-      );
+      throw new Error(`The selected PDFs exceed the ${this.formatBytes(budget.maxTotalBytes)} local processing limit.`);
     }
   }
 
@@ -104,17 +100,16 @@ export class MergeEngine {
     budget: LocalProcessingCapabilityService['budget'],
     onProgress: ((p: number) => void) | undefined,
     knownPageCounts: readonly number[],
-    options: MergeOptions,
+    options: MergeOptions
   ): Promise<File> {
     this.terminateWorker();
     const worker = new Worker(new URL('../workers/merge.worker', import.meta.url));
     this.worker = worker;
     this.activeSettled = false;
 
-    const totalKnownPages =
-      knownPageCounts.length === files.length && knownPageCounts.every((p) => p > 0)
-        ? knownPageCounts.reduce((sum, pages) => sum + pages, 0)
-        : 0;
+    const totalKnownPages = knownPageCounts.length === files.length && knownPageCounts.every(p => p > 0)
+      ? knownPageCounts.reduce((sum, pages) => sum + pages, 0)
+      : 0;
 
     const inputFiles: MergeWorkerInputFile[] = [];
     const transferables: Transferable[] = [];
@@ -125,7 +120,7 @@ export class MergeEngine {
         inputFiles.push({
           name: file.name,
           type: file.type || 'application/pdf',
-          buffer,
+          buffer
         });
         transferables.push(buffer);
       }
@@ -138,7 +133,7 @@ export class MergeEngine {
       maxFileBytes: budget.maxFileBytes,
       maxTotalBytes: budget.maxTotalBytes,
       maxFiles: budget.maxFiles,
-      maxPages: budget.maxPages,
+      maxPages: budget.maxPages
     };
 
     return new Promise<File>((resolve, reject) => {
@@ -190,11 +185,7 @@ export class MergeEngine {
         settle(() => {
           this.worker = null;
           worker.terminate();
-          reject(
-            new Error(
-              event.message || 'Merge worker failed. Please try again with a smaller workload.',
-            ),
-          );
+          reject(new Error(event.message || 'Merge worker failed. Please try again with a smaller workload.'));
         });
       };
 
@@ -202,11 +193,7 @@ export class MergeEngine {
         settle(() => {
           this.worker = null;
           worker.terminate();
-          reject(
-            new Error(
-              'Merge worker communication failed. Please try again with a smaller workload.',
-            ),
-          );
+          reject(new Error('Merge worker communication failed. Please try again with a smaller workload.'));
         });
       };
 
@@ -214,7 +201,7 @@ export class MergeEngine {
         type: 'START',
         files: inputFiles,
         budget: workerBudget,
-        totalKnownPages,
+        totalKnownPages
       };
 
       try {
@@ -233,17 +220,16 @@ export class MergeEngine {
     files: File[],
     onProgress?: (p: number) => void,
     knownPageCounts: readonly number[] = [],
-    options: MergeOptions = {},
+    options: MergeOptions = {}
   ): Promise<File> {
     const budget = this.capabilityService.budget;
     const merged = await PDFDocument.create();
     let processedFiles = 0;
     let processedPages = 0;
     let knownPages = 0;
-    const totalKnownPages =
-      knownPageCounts.length === files.length && knownPageCounts.every((p) => p > 0)
-        ? knownPageCounts.reduce((sum, pages) => sum + pages, 0)
-        : 0;
+    const totalKnownPages = knownPageCounts.length === files.length && knownPageCounts.every(p => p > 0)
+      ? knownPageCounts.reduce((sum, pages) => sum + pages, 0)
+      : 0;
 
     for (const file of files) {
       options.onStage?.('reading', `Reading ${file.name}`);
@@ -258,33 +244,29 @@ export class MergeEngine {
       knownPages += filePages;
 
       if (filePages > budget.maxPages) {
-        throw new Error(
-          `${file.name} contains ${filePages.toLocaleString()} pages, which exceeds the ${budget.maxPages.toLocaleString()} page local limit.`,
-        );
+        throw new Error(`${file.name} contains ${filePages.toLocaleString()} pages, which exceeds the ${budget.maxPages.toLocaleString()} page local limit.`);
       }
       if (knownPages > budget.maxPages) {
-        throw new Error(
-          `The selected PDFs contain more than ${budget.maxPages.toLocaleString()} pages and are too large for reliable local processing.`,
-        );
+        throw new Error(`The selected PDFs contain more than ${budget.maxPages.toLocaleString()} pages and are too large for reliable local processing.`);
       }
 
       options.onStage?.('copying', `Copying pages from ${file.name}`);
-      // Keep one copyPages call per source so pdf-lib can reuse its copied
-      // resource map across every page. Repeated calls reset that cache and
-      // duplicate shared images/fonts once per chunk, inflating the result.
-      options.onStage?.('copying', `Copying pages from ${file.name}`);
-      const pages = await merged.copyPages(src, pageIndices);
-      pages.forEach((page) => merged.addPage(page));
-      processedPages += pages.length;
-      const denominator = totalKnownPages || knownPages || processedPages;
-      onProgress?.(Math.min(79, 20 + Math.round((processedPages / Math.max(denominator, 1)) * 60)));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      const chunkSize = 25;
+      for (let i = 0; i < pageIndices.length; i += chunkSize) {
+        const chunk = pageIndices.slice(i, i + chunkSize);
+        const pages = await merged.copyPages(src, chunk);
+        pages.forEach(page => merged.addPage(page));
+        processedPages += pages.length;
+        const denominator = totalKnownPages || knownPages || processedPages;
+        onProgress?.(Math.min(79, 20 + Math.round((processedPages / Math.max(denominator, 1)) * 60)));
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
 
       processedFiles += 1;
       if (processedPages === 0) onProgress?.(Math.round((processedFiles / files.length) * 100));
       // @ts-ignore pdf-lib exposes context internally but not in its public API.
       src.context = null;
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
 
     options.onStage?.('serializing', 'Serializing merged PDF');
@@ -292,7 +274,7 @@ export class MergeEngine {
     const bytes = await merged.save();
     onProgress?.(98);
     options.onStage?.('finalizing', 'Finalizing merged PDF');
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
     onProgress?.(100);
 
     return new File([new Uint8Array(bytes)], 'merged.pdf', { type: 'application/pdf' });
