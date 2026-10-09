@@ -3,4 +3,9 @@ Allow: /
 Disallow: /__dev/
 Disallow: /api/
 
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /__dev/
+Disallow: /api/
+
 Sitemap: https://safepdfhub.com/sitemap.xml

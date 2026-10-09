@@ -1,0 +1,27 @@
+# SafePDFHub
+
+> Privacy-first PDF tools that process documents locally in your browser.
+
+SafePDFHub is a browser-based PDF toolkit. Processing is local for tools that support local processing; see each tool page for its workflow and limits.
+
+## PDF tools
+- [PDF to Word](https://safepdfhub.com/tools/pdf-to-word): Convert PDFs to Word documents
+- [Compress PDF](https://safepdfhub.com/tools/compress-pdf): Reduce PDF file size
+- [Merge PDF](https://safepdfhub.com/tools/merge-pdf): Combine multiple PDFs
+- [Split PDF](https://safepdfhub.com/tools/split-pdf): Extract pages from a PDF
+- [Protect PDF](https://safepdfhub.com/tools/protect-pdf): Add password protection
+- [Unlock PDF](https://safepdfhub.com/tools/unlock-pdf): Remove password protection
+- [Sign PDF](https://safepdfhub.com/tools/sign-pdf): Add a signature and fill fields
+- [Watermark PDF](https://safepdfhub.com/tools/watermark-pdf): Add text or image watermark
+
+## Public pages
+- [Free PDF Tools Online — Private & Browser-Based | SafePDFHub](https://safepdfhub.com): Free PDF tools to merge, compress, split, protect, sign, and watermark PDFs in your browser. Privacy-first processing with no upload required for local tools.
+- [Support SafePDFHub — Help Keep PDFs Private](https://safepdfhub.com/support): Support SafePDFHub and help us keep building useful, privacy-first PDF tools.
+- [About SafePDFHub — Privacy-First PDF Tools](https://safepdfhub.com/about): Learn why SafePDFHub is building practical PDF tools around browser-based processing and document privacy.
+- [Contact SafePDFHub — PDF Tools & Privacy Questions](https://safepdfhub.com/contact): Contact SafePDFHub with questions, product feedback, support issues, privacy questions, or partnership enquiries.
+- [Privacy Policy — SafePDFHub](https://safepdfhub.com/privacy): Read the SafePDFHub privacy policy covering browser-based PDF processing, information handling, and third-party services.
+- [Terms of Service — SafePDFHub](https://safepdfhub.com/terms): Read the SafePDFHub Terms of Service for use of its PDF tools, browser editor, and related website services.
+
+## Sitemap
+
+- [XML sitemap](https://safepdfhub.com/sitemap.xml)
