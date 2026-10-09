@@ -1,0 +1,33 @@
+{
+  "ocr-vector-only.pdf": {
+    "pages": 1,
+    "ocrPages": [],
+    "reviewPages": [
+      1
+    ],
+    "imagePages": [
+      1
+    ],
+    "durationMs": 970.3999999999069,
+    "mode": "editable",
+    "bytes": 32367,
+    "ocrAssetRequests": 4,
+    "sections": 1
+  },
+  "ocr-mixed.pdf": {
+    "pages": 2,
+    "ocrPages": [
+      1,
+      2
+    ],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 1506.4000000001397,
+    "mode": "editable",
+    "bytes": 1723,
+    "ocrAssetRequests": 4,
+    "sections": 2
+  },
+  "mobileNoOverflow": true,
+  "errors": []
+}

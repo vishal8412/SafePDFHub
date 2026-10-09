@@ -1,0 +1,46 @@
+{
+  "ocr-hindi.pdf": {
+    "pages": 1,
+    "ocrPages": [
+      1
+    ],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 1098.5,
+    "mode": "editable",
+    "bytes": 1689,
+    "ocrAssetRequests": 4,
+    "sections": 1
+  },
+  "../../ocr-validation/large-images.pdf-appearance": {
+    "pages": 16,
+    "ocrPages": [],
+    "reviewPages": [],
+    "imagePages": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "durationMs": 2458.4000000001397,
+    "mode": "appearance",
+    "bytes": 22445499,
+    "ocrAssetRequests": 0,
+    "sections": 16
+  },
+  "largeInputBytes": 199699748,
+  "mobileNoOverflow": true,
+  "errors": []
+}

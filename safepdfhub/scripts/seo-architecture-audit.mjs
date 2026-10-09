@@ -50,9 +50,7 @@ for (const slug of toolSlugs) {
 for (const slug of behaviorSlugs) {
   assert(toolSlugs.includes(slug), `ToolBehavior '${slug}' has no Tool metadata entry.`);
 }
-assert(!toolSlugs.includes('pdf-to-word'), 'Unimplemented PDF-to-Word must not enter the public SEO tool inventory.');
-assert(!routesSource.includes("path: 'tools/pdf-to-word'"), 'Unimplemented PDF-to-Word must not have a public tool route.');
-assert(!toolTs.includes("goToTool('pdf-to-word')"), 'Unimplemented PDF-to-Word must not be suggested internally.');
+assert(toolSlugs.includes('pdf-to-word') && toolHtml.includes('app-word-workspace'), 'PDF to Word must have its public conversion workspace.');
 
 // P1.2 — metadata/canonical architecture.
 assert(seoSource.includes('setCanonical'), 'SEO service must own canonical link creation.');

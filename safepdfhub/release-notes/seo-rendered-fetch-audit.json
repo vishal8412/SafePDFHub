@@ -1,0 +1,170 @@
+{
+  "transport": "compiled Netlify fetch handler in Node (not Edge deployment)",
+  "pages": [
+    {
+      "path": "/",
+      "status": 200,
+      "title": "Free PDF Tools Online — Private & Browser-Based | SafePDFHub",
+      "description": "Free PDF tools to merge, compress, split, protect, sign, and watermark PDFs in your browser. Privacy-first processing with no upload required for local tools.",
+      "canonical": "https://safepdfhub.com",
+      "h1": "Your PDFs.Your device.Your control.",
+      "schemaTypes": [
+        "Organization",
+        "WebSite"
+      ]
+    },
+    {
+      "path": "/support",
+      "status": 200,
+      "title": "Support SafePDFHub — Help Keep PDFs Private",
+      "description": "Support SafePDFHub and help us keep building useful, privacy-first PDF tools.",
+      "canonical": "https://safepdfhub.com/support",
+      "h1": "Help us keepPDFs private.",
+      "schemaTypes": []
+    },
+    {
+      "path": "/about",
+      "status": 200,
+      "title": "About SafePDFHub — Privacy-First PDF Tools",
+      "description": "Learn why SafePDFHub is building practical PDF tools around browser-based processing and document privacy.",
+      "canonical": "https://safepdfhub.com/about",
+      "h1": "PDF tools built around privacy.",
+      "schemaTypes": [
+        "Organization",
+        "AboutPage"
+      ]
+    },
+    {
+      "path": "/contact",
+      "status": 200,
+      "title": "Contact SafePDFHub — PDF Tools & Privacy Questions",
+      "description": "Contact SafePDFHub with questions, product feedback, support issues, privacy questions, or partnership enquiries.",
+      "canonical": "https://safepdfhub.com/contact",
+      "h1": "Let's make PDF work better.",
+      "schemaTypes": [
+        "ContactPage"
+      ]
+    },
+    {
+      "path": "/privacy",
+      "status": 200,
+      "title": "Privacy Policy — SafePDFHub",
+      "description": "Read the SafePDFHub privacy policy covering browser-based PDF processing, information handling, and third-party services.",
+      "canonical": "https://safepdfhub.com/privacy",
+      "h1": "Privacy Policy",
+      "schemaTypes": []
+    },
+    {
+      "path": "/terms",
+      "status": 200,
+      "title": "Terms of Service — SafePDFHub",
+      "description": "Read the SafePDFHub Terms of Service for use of its PDF tools, browser editor, and related website services.",
+      "canonical": "https://safepdfhub.com/terms",
+      "h1": "Terms of Service",
+      "schemaTypes": []
+    },
+    {
+      "path": "/tools/pdf-to-word",
+      "status": 200,
+      "title": "PDF to Word Converter | Editable DOCX Online",
+      "description": "Convert PDFs to Word DOCX locally. Extract editable text or preserve pages as images. Scanned pages stay as images; OCR is not included.",
+      "canonical": "https://safepdfhub.com/tools/pdf-to-word",
+      "h1": "Convert PDF to Word",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    },
+    {
+      "path": "/tools/compress-pdf",
+      "status": 200,
+      "title": "Compress PDF Online Free | Reduce PDF Size",
+      "description": "Reduce PDF size locally with lossless or image compression, or try a target size in MB. Up to 500 MB on supported desktops; device limits apply.",
+      "canonical": "https://safepdfhub.com/tools/compress-pdf",
+      "h1": "Compress PDF files privately",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    },
+    {
+      "path": "/tools/merge-pdf",
+      "status": 200,
+      "title": "Merge PDF Files Online Free",
+      "description": "Combine multiple PDF files into one. Fast, secure, and works in your browser.",
+      "canonical": "https://safepdfhub.com/tools/merge-pdf",
+      "h1": "Merge PDF files privately",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    },
+    {
+      "path": "/tools/split-pdf",
+      "status": 200,
+      "title": "Split PDF Online Free",
+      "description": "Extract pages or split a PDF into separate files locally in your browser. No document upload required.",
+      "canonical": "https://safepdfhub.com/tools/split-pdf",
+      "h1": "Split and extract PDF pages",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    },
+    {
+      "path": "/tools/protect-pdf",
+      "status": 200,
+      "title": "Protect PDF with Password Online Free",
+      "description": "Password-protect a PDF locally in your browser with optional permissions.",
+      "canonical": "https://safepdfhub.com/tools/protect-pdf",
+      "h1": "Protect your PDF with a password",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    },
+    {
+      "path": "/tools/unlock-pdf",
+      "status": 200,
+      "title": "Unlock PDF Online Free",
+      "description": "Remove PDF password protection locally when you know the document password.",
+      "canonical": "https://safepdfhub.com/tools/unlock-pdf",
+      "h1": "Unlock a password-protected PDF",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    },
+    {
+      "path": "/tools/sign-pdf",
+      "status": 200,
+      "title": "Sign PDF Online Free",
+      "description": "Add a signature, initials, text, dates, and checkboxes to a PDF locally in your browser.",
+      "canonical": "https://safepdfhub.com/tools/sign-pdf",
+      "h1": "Sign your PDF locally",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    },
+    {
+      "path": "/tools/watermark-pdf",
+      "status": 200,
+      "title": "Watermark PDF Online Free",
+      "description": "Add text or image watermarks to PDF pages locally in your browser with adjustable opacity, rotation, position, and page range.",
+      "canonical": "https://safepdfhub.com/tools/watermark-pdf",
+      "h1": "Add a watermark to your PDF",
+      "schemaTypes": [
+        "WebApplication",
+        "BreadcrumbList"
+      ]
+    }
+  ],
+  "checks": [
+    "Sitemap and robots runtime responses match generated assets",
+    "21 legacy and trailing-slash redirects return 301 and preserve queries",
+    "Five missing URLs render helpful noindex pages with HTTP 404",
+    "Editor is noindex; OAI-SearchBot receives rendered guidance and clean canonical",
+    "Netlify preview context disables indexing and crawling"
+  ]
+}

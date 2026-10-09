@@ -119,7 +119,7 @@
         </div>
         <span class="tool-open">Open tool <lucide-icon [img]="icons.ArrowRight" size="13" aria-hidden="true"></lucide-icon></span>
       </a>
-      <div class="tool-card tool-card-coming" aria-label="More PDF tools are coming soon">
+      <div class="tool-card tool-card-coming" *ngIf="tools.length % 4 !== 0" aria-label="More PDF tools are coming soon">
         <div class="tool-top"><span class="tool-index">NEXT</span><span class="tool-symbol" aria-hidden="true"><lucide-icon [img]="icons.Plus" size="17"></lucide-icon></span></div>
         <h3>More tools are coming</h3>
         <span class="tool-open">Built with the same privacy-first approach</span>

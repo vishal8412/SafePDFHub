@@ -1,0 +1,79 @@
+{
+  "editable.pdf": {
+    "pages": 2,
+    "ocrPages": [],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 187.39999999990687,
+    "mode": "editable",
+    "bytes": 9291,
+    "ocrAssetRequests": 0,
+    "sections": 2
+  },
+  "ocr-english.pdf": {
+    "pages": 1,
+    "ocrPages": [
+      1
+    ],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 1208,
+    "mode": "editable",
+    "bytes": 1639,
+    "ocrAssetRequests": 4,
+    "sections": 1
+  },
+  "ocr-mixed.pdf": {
+    "pages": 2,
+    "ocrPages": [
+      2
+    ],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 1140.6999999999534,
+    "mode": "editable",
+    "bytes": 1728,
+    "ocrAssetRequests": 3,
+    "sections": 2
+  },
+  "ocr-english.pdf-appearance": {
+    "pages": 1,
+    "ocrPages": [],
+    "reviewPages": [],
+    "imagePages": [
+      1
+    ],
+    "durationMs": 150.70000000018626,
+    "mode": "appearance",
+    "bytes": 49492,
+    "ocrAssetRequests": 0,
+    "sections": 1
+  },
+  "ocr-english.pdf-off": {
+    "pages": 1,
+    "ocrPages": [],
+    "reviewPages": [],
+    "imagePages": [
+      1
+    ],
+    "durationMs": 172.30000000004657,
+    "mode": "editable",
+    "bytes": 49492,
+    "ocrAssetRequests": 0,
+    "sections": 1
+  },
+  "ocr-many-pages.pdf": {
+    "pages": 350,
+    "ocrPages": [],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 787.6999999999534,
+    "mode": "editable",
+    "bytes": 4428,
+    "ocrAssetRequests": 0,
+    "sections": 350
+  },
+  "cancel": true,
+  "mobileNoOverflow": true,
+  "errors": []
+}

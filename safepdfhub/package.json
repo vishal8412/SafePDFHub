@@ -9,7 +9,7 @@
     "test": "ng test",
     "serve:ssr:safepdfhub": "node dist/safepdfhub/server/server.mjs",
     "benchmark:large-pdf:browser": "python scripts/phase1.5-browser-benchmark.py --start-server",
-    "prebuild": "node scripts/generate-seo-assets.mjs",
+    "prebuild": "npm run ocr:assets && node scripts/generate-seo-assets.mjs",
     "seo:audit": "node scripts/seo-architecture-audit.mjs",
     "seo:generate": "node scripts/generate-seo-assets.mjs",
     "benchmark:sign-pdf:stress": "python scripts/phase2.5-sign-pdf-stress.py --start-server --profile quick",
@@ -74,7 +74,10 @@
     "compress:v2:production-reliability:r7.5.2:audit": "node scripts/compression-v2-production-reliability-r7.5.2-metadata-audit.mjs",
     "compress:v2:production-reliability:r7.5.3:audit": "node scripts/compression-v2-production-reliability-r7.5.3-metadata-roundtrip-audit.mjs",
     "package:production": "npm run build && node scripts/package-production.mjs",
-    "seo:audit:rendered": "node scripts/seo-rendered-audit.mjs"
+    "seo:audit:rendered": "node scripts/seo-rendered-audit.mjs",
+    "ocr:assets": "node scripts/prepare-ocr-assets.mjs",
+    "prestart": "npm run ocr:assets",
+    "prewatch": "npm run ocr:assets"
   },
   "private": true,
   "packageManager": "npm@10.9.7",
@@ -89,8 +92,12 @@
     "@angular/ssr": "^21.2.0",
     "@neslinesli93/qpdf-wasm": "0.3.0",
     "@pdf-lib/fontkit": "^1.1.1",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/hin": "1.0.0",
+    "@tesseract.js-data/mar": "1.0.0",
     "@types/file-saver": "^2.0.7",
     "express": "^5.1.0",
+    "fflate": "0.8.2",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
     "lucide-angular": "^1.0.0",
@@ -98,6 +105,7 @@
     "pdfjs-dist": "5.3.31",
     "qpdf-run": "0.2.1",
     "rxjs": "~7.8.0",
+    "tesseract.js": "6.0.1",
     "tslib": "^2.3.0"
   },
   "devDependencies": {

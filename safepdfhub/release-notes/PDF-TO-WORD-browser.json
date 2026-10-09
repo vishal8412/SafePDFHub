@@ -1,0 +1,32 @@
+{
+  "editable": {
+    "pages": 2,
+    "imagePages": [],
+    "bytes": 9604,
+    "durationMs": 156.60000000009313
+  },
+  "appearance": {
+    "pages": 2,
+    "imagePages": [
+      1,
+      2
+    ],
+    "bytes": 84108,
+    "durationMs": 112.60000000009313
+  },
+  "scanned": {
+    "pages": 1,
+    "imagePages": [
+      1
+    ],
+    "bytes": 77712,
+    "durationMs": 94.60000000009313
+  },
+  "status": "passed",
+  "downloads": 3,
+  "browserErrors": [],
+  "invalidFileRejected": true,
+  "pageLimitEnforced": true,
+  "cancelPassed": true,
+  "mobileOverflow": false
+}

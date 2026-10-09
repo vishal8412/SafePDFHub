@@ -33,6 +33,9 @@ export interface ToolBehavior {
 }
 
 export const TOOL_BEHAVIORS: ToolBehavior[] = [
+  { slug: 'pdf-to-word', allowMultiple: false, replaceOnUpload: true, acceptedTypes: '.pdf,application/pdf',
+    heroTitle: 'Convert PDF to Word', heroDescription: 'Create an editable DOCX from text-based PDFs, or preserve pages as images. Your files stay on your device.',
+    uploadTitle: 'Choose a PDF', uploadButtonText: 'Choose a PDF', uploadHint: 'Local PDF to DOCX conversion', showQuickActions: false, showWorkflowSuggestions: false, primaryActionText: 'Convert to Word' },
 
   // =========================
   // PDF SECURITY

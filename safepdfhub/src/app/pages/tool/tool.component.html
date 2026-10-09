@@ -54,7 +54,7 @@
        UPLOAD AREA
   ===================== -->
 
-  <div *ngIf="(!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode) && !(isWatermarkTool && isWorkspaceMode)"
+  <div *ngIf="(!isWordTool || !isWorkspaceMode) && (!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode) && !(isWatermarkTool && isWorkspaceMode)"
     #uploadDropZone
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
@@ -118,10 +118,10 @@
 
  </div>
 
-  <section class="tool-guide" *ngIf="!isWorkspaceMode && guide as help" aria-labelledby="tool-guide-title">
-    <h2 id="tool-guide-title">How to {{ tool.label.toLowerCase() }}</h2>
+  <section class="tool-guide" [class.word-guide]="isWordTool" *ngIf="!isWorkspaceMode && guide as help" aria-labelledby="tool-guide-title">
+    <h2 id="tool-guide-title">{{ isWordTool ? 'How to convert PDF to Word' : 'How to ' + tool.label.toLowerCase() }}</h2>
     <ol><li *ngFor="let step of help.steps">{{ step }}</li></ol>
-    <h2>Questions about {{ tool.label.toLowerCase() }}</h2>
+    <h2>Questions about {{ isWordTool ? 'PDF to Word' : tool.label.toLowerCase() }}</h2>
     <article *ngFor="let item of help.questions">
       <h3>{{ item.question }}</h3><p>{{ item.answer }}</p>
     </article>
@@ -131,6 +131,8 @@
   <!-- =====================
        FILE LIST (HORIZONTAL)
   ===================== -->
+
+<app-word-workspace *ngIf="isWorkspaceMode && isWordTool && wordWorkspaceFile" [file]="wordWorkspaceFile!" (replaceFile)="triggerUpload()"/>
 
 <app-sign-pdf-workspace
   *ngIf="isWorkspaceMode && isSignTool"
@@ -155,7 +157,7 @@
   (editAgain)="editWatermarkAgain()"
 ></app-watermark-workspace>
 
-<div class="workspace" *ngIf="isWorkspaceMode && !isSignTool && !isWatermarkTool">
+<div class="workspace" *ngIf="isWorkspaceMode && !isWordTool && !isSignTool && !isWatermarkTool">
 
   <!-- =========================
      PDF SECURITY WORKSPACE
@@ -290,7 +292,7 @@
 <!-- =====================
       SMART SUGGESTIONS
   ===================== -->
-<div class="smart-suggestions" *ngIf="!isSignTool && suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
+<div class="smart-suggestions" *ngIf="!isWordTool && !isSignTool && suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
  
   <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
 

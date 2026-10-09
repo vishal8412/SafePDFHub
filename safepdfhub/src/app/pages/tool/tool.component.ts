@@ -1,3 +1,5 @@
+import { WordWorkspaceComponent } from '../../features/tools/word/word-workspace.component';
+import { PdfToWordService } from '../../core/word/pdf-to-word.service';
 import { LargeCompressionCapabilityService } from '../../core/compression/large/large-compression-capability.service';
 import { LARGE_COMPRESSION_THRESHOLD, LOSSLESS_ONLY_THRESHOLD } from '../../core/compression/large/large-compression-policy';
 import { Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener } from '@angular/core';
@@ -51,7 +53,7 @@ type WorkflowStep = 'merge' | 'compress' | 'split';
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
+  imports: [WordWorkspaceComponent, CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
     DialogComponent, BottomSheetComponent, ActionPanelComponent, RouterModule],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
@@ -63,6 +65,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   @ViewChild('uploadDropZone') uploadDropZone!: ElementRef<HTMLElement>;
   @ViewChild(MergeWorkspaceComponent) mergeWorkspace!: MergeWorkspaceComponent;
 
+  wordWorkspaceFile: File | null = null;
+  get isWordTool(): boolean { return this.tool?.slug === 'pdf-to-word'; }
   tool!: Tool;
   behavior!: ToolBehavior;
   get guide() { return this.tool ? TOOL_GUIDES[this.tool.slug] : undefined; }
@@ -130,7 +134,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
   get isWorkspaceMode(): boolean { return this.workspace.files.length > 0; }
 
-  constructor(
+  constructor(private readonly pdfToWord: PdfToWordService, 
     private route: ActivatedRoute,
     private router: Router,
     private seo: SeoService,
@@ -241,6 +245,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       'compress-pdf': 'Compress PDF',
       'merge-pdf': 'Merge PDF',
       'split-pdf': 'Split PDF',
+      'pdf-to-word': 'PDF to Word',
       'protect-pdf': 'Protect PDF',
       'unlock-pdf': 'Unlock PDF',
       'sign-pdf': 'Sign PDF',
@@ -306,6 +311,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.viewerPages = [];
     this.viewerFile = null;
     this.signWorkspaceFile = null;
+    this.wordWorkspaceFile = null;
     this.showViewer = false;
   }
 
@@ -346,6 +352,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get capacitySummary(): string {
+    if (this.isWordTool) return `Up to ${this.pdfToWord.limits.bytes / 1_000_000} MB · No fixed page limit`;
     if (this.isCompressTool) return `Up to ${this.maxFileMB} MB on this device • up to 500 MB on supported desktops`;
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {
       return 'Up to 1 GB per file • processed locally';
@@ -564,6 +571,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     // The Sign PDF workspace is single-file. Set its input before mutating the
     // workspace collection so Angular sees one stable input during the same
     // change-detection turn.
+    if (this.isWordTool) this.wordWorkspaceFile = selected[0] ?? null;
     if (this.isSignTool) {
       this.signWorkspaceFile = selected[0] ?? null;
     }
@@ -572,7 +580,7 @@ export class ToolComponent implements OnInit, OnDestroy {
 
     this.handlePostUploadProcessing();
     this.refreshWorkloadAssessment();
-    if (!this.isSecurityTool && !this.isSignTool) {
+    if (!this.isSecurityTool && !this.isSignTool && !this.isWordTool) {
       this.queueInitialPreviews(startIndex);
     }
     this.updateActiveFileAfterUpload(startIndex);
@@ -698,6 +706,14 @@ export class ToolComponent implements OnInit, OnDestroy {
   //     VALIDATIONS
   // =====================
   private validateFiles(newFiles: File[]): File[] {
+    if (this.isWordTool) {
+      const file = newFiles[0];
+      if (!file) return [];
+      if ((!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') || !file.size || file.size > this.pdfToWord.limits.bytes) {
+        this.toast.show(`Choose a PDF up to ${this.pdfToWord.limits.bytes / 1_000_000} MB.`, 'error'); return [];
+      }
+      return [file];
+    }
     const valid: File[] = [];
     const existing = [...this.workspace.files];
 

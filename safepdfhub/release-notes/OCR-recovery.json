@@ -1,0 +1,34 @@
+{
+  "assetFailureRecovered": true,
+  "ocr-english.pdf": {
+    "pages": 1,
+    "ocrPages": [
+      1
+    ],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 908.6000000000931,
+    "mode": "editable",
+    "bytes": 1645,
+    "ocrAssetRequests": 3,
+    "sections": 1
+  },
+  "cancelDuringOcrMs": 842,
+  "ocr-many-pages.pdf": {
+    "pages": 350,
+    "ocrPages": [],
+    "reviewPages": [],
+    "imagePages": [],
+    "durationMs": 745.1999999999534,
+    "mode": "editable",
+    "bytes": 4428,
+    "ocrAssetRequests": 0,
+    "sections": 350
+  },
+  "boundaries": {
+    "exactAccepted": true,
+    "overRejected": true
+  },
+  "mobileNoOverflow": true,
+  "errors": []
+}

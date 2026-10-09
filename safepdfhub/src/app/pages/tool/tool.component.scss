@@ -1847,3 +1847,12 @@ border:
 .tool-guide p, .tool-guide li { line-height: 1.7; }
 .tool-guide li { margin: 8px 0; }
 .tool-guide a { text-decoration: underline; }
+
+.word-guide { max-width: 1120px; margin: 52px auto; padding: 0; }
+.word-guide ol { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; padding:0; list-style:none; counter-reset:word-step; }
+.word-guide li { margin:0; padding:24px; border:1px solid #29485d; border-radius:16px; background:#0c2639; color:#b7cddd; counter-increment:word-step; }
+.word-guide li::before { content:counter(word-step); display:block; color:#53e0cd; font-size:22px; font-weight:700; margin-bottom:14px; }
+.word-guide article { border-bottom:1px solid #284559; padding-bottom:20px; }
+.word-guide p { color:#afc6d6; }
+.word-guide a { color:#61e4d0; }
+@media(max-width:760px) { .word-guide ol { grid-template-columns:1fr; } }

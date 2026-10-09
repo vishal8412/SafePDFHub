@@ -1,0 +1,163 @@
+<ng-container *ngIf="result; else settings">
+  <app-operation-result
+    [file]="result.file"
+    [originalFileName]="file.name"
+    [durationMs]="result.durationMs"
+    eyebrow="CONVERSION COMPLETE"
+    title="Your Word document is ready"
+    [description]="resultDescription"
+    operationLabel="Word document · DOCX"
+    icon="edit"
+    actionLabel="Download Word document"
+    actionDescription="Save the DOCX file to your device"
+    [showEditAgain]="true"
+    editAgainLabel="Change conversion mode"
+    processAnotherLabel="Convert another PDF"
+    (download)="download()"
+    (editAgain)="editAgain()"
+    (processAnother)="replaceFile.emit()"
+  />
+  <div
+    class="word-notice"
+    role="status"
+    *ngIf="result.mode === 'editable' && result.imagePages.length"
+  >
+    <strong>Some pages are not editable</strong>
+    <p>{{ imageNotice }}</p>
+  </div>
+  <div class="word-notice" role="status" *ngIf="result.ocrPages.length">
+    <strong
+      >Text recognized on {{ result.ocrPages.length }}
+      {{ result.ocrPages.length === 1 ? 'page' : 'pages' }}</strong
+    >
+    <p>Review OCR text, numbers, and reading order in Word before using the document.</p>
+  </div>
+  <div class="word-notice" role="status" *ngIf="result.reviewPages.length">
+    <strong>Some pages need a closer review</strong>
+    <p>
+      Proofreading or visual preservation is required on {{ result.reviewPages.length }}
+      {{ result.reviewPages.length === 1 ? 'page' : 'pages' }}. Try a clearer scan or check the
+      selected language. Pages: {{ result.reviewPages.slice(0, 20).join(', ')
+      }}{{ result.reviewPages.length > 20 ? '…' : '' }}.
+    </p>
+  </div>
+  <details class="word-notice" *ngIf="result.preservedPages.length">
+    <summary>Why {{ result.preservedPages.length }} pages were preserved</summary>
+    <p *ngFor="let item of result.preservedPages.slice(0, 30)">
+      Page {{ item.page }}: {{ item.reason }}
+    </p>
+    <p *ngIf="result.preservedPages.length > 30">
+      Showing the first 30 pages. All preserved pages remain in your Word document.
+    </p>
+  </details>
+</ng-container>
+<ng-template #settings>
+  <section class="word-panel" aria-labelledby="word-heading">
+    <div class="word-heading">
+      <div>
+        <span class="eyebrow">PDF TO WORD</span>
+        <h1 id="word-heading">Make your PDF work in Word</h1>
+        <p>Choose editable content or keep the page appearance.</p>
+      </div>
+      <button class="secondary" type="button" (click)="replaceFile.emit()" [disabled]="busy">
+        Choose another PDF
+      </button>
+    </div>
+    <div class="source">
+      <span class="source-icon" aria-hidden="true">PDF</span>
+      <div>
+        <strong>{{ file.name }}</strong
+        ><span>{{ size }} · Original file stays unchanged</span>
+      </div>
+    </div>
+    <fieldset [disabled]="busy">
+      <legend>Conversion mode</legend>
+      <div class="modes">
+        <label [class.selected]="mode === 'editable'"
+          ><input
+            type="radio"
+            name="wordMode"
+            value="editable"
+            [checked]="mode === 'editable'"
+            (change)="mode = 'editable'"
+          />
+          <div>
+            <strong>Editable text</strong
+            ><span>Convert selectable text and scanned words into editable Word text.</span
+            ><small
+              >Automatic OCR reads scanned pages. Fonts, graphics, columns, and tables may
+              change.</small
+            >
+          </div></label
+        >
+        <label [class.selected]="mode === 'appearance'"
+          ><input
+            type="radio"
+            name="wordMode"
+            value="appearance"
+            [checked]="mode === 'appearance'"
+            (change)="mode = 'appearance'"
+          />
+          <div>
+            <strong>Keep page appearance</strong
+            ><span>Place each PDF page into Word as a high-resolution image.</span
+            ><small>Best for complex layouts. Text within page images is not editable.</small>
+          </div></label
+        >
+      </div>
+    </fieldset>
+    <fieldset *ngIf="mode === 'editable'" [disabled]="busy" class="ocr-settings">
+      <legend>Text recognition (OCR)</legend>
+      <label for="word-ocr-mode">Scanned pages</label>
+      <select id="word-ocr-mode" [value]="ocrMode" (change)="ocrMode = $any($event.target).value">
+        <option value="auto">Automatic — recognize scanned pages</option>
+        <option value="always">Every page — use for missing or garbled text</option>
+        <option value="off">Off — preserve scanned pages as images</option>
+      </select>
+      <ng-container *ngIf="ocrMode !== 'off'">
+        <label for="word-ocr-language">Document language</label>
+        <select
+          id="word-ocr-language"
+          [value]="ocrLanguage"
+          (change)="ocrLanguage = $any($event.target).value"
+        >
+          <option value="" disabled>Choose the document language</option>
+          <option value="mar">Marathi</option>
+          <option value="mar+eng">Marathi + English</option>
+          <option value="eng">English</option>
+          <option value="hin">Hindi</option>
+          <option value="eng+hin">English + Hindi</option>
+        </select>
+        <p>
+          Choose the language actually printed in your PDF. Marathi and Hindi use different OCR
+          models. OCR attempts to make clear scanned words editable; scans below 150 DPI, uncertain
+          pages and detected tables stay as images. Check the result for recognition errors. Scanned
+          graphics, tables, and complex layouts are not fully reconstructed. Choose Keep page
+          appearance to preserve them visually.
+        </p>
+      </ng-container>
+    </fieldset>
+    <div class="word-notice" *ngIf="mode === 'editable'">
+      <strong>Need the original content and layout preserved?</strong>
+      <p>
+        Choose Keep page appearance for scanned forms, tables, handwriting, signatures, or records
+        where every detail matters. OCR text can contain errors even with high confidence.
+      </p>
+    </div>
+    <p class="limits">
+      Up to {{ limits.bytes / 1000000 }} MB · No fixed page limit. Pages are processed one at a
+      time. Large scans take longer; completion depends on available device memory. Keep this tab
+      open while converting.
+    </p>
+    <div *ngIf="error" class="error" role="alert">
+      {{ error }}
+      <a *ngIf="error.includes('password')" routerLink="/tools/unlock-pdf">Open Unlock PDF</a>
+    </div>
+    <div class="actions">
+      <button type="button" class="primary" (click)="convert()" [disabled]="busy">
+        {{ busy ? 'Converting…' : 'Convert to Word' }}</button
+      ><button type="button" class="secondary" *ngIf="busy" (click)="cancel()">Cancel</button>
+    </div>
+    <p class="privacy">Private by design · Processed on your device · Download after conversion</p>
+  </section>
+</ng-template>

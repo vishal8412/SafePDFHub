@@ -1,0 +1,23 @@
+{
+  "editable": {
+    "xmlValid": true,
+    "sections": 2,
+    "renderedPages": 2,
+    "embeddedImages": 1,
+    "editableText": true
+  },
+  "appearance-editable": {
+    "xmlValid": true,
+    "sections": 2,
+    "renderedPages": 2,
+    "embeddedImages": 2,
+    "editableText": false
+  },
+  "image-only": {
+    "xmlValid": true,
+    "sections": 1,
+    "renderedPages": 1,
+    "embeddedImages": 1,
+    "editableText": false
+  }
+}

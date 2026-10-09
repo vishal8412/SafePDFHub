@@ -16,7 +16,7 @@ assert.match(xmlResponse.headers.get('content-type'), /xml/);
 const xml = await xmlResponse.text();
 assert.equal(xml.replace(/>\s+</g, '><').trim(), (await readFile(new URL('../src/seo/sitemap.xml', import.meta.url), 'utf8')).replace(/>\s+</g, '><').trim());
 const paths = [...xml.matchAll(/<loc>https:\/\/safepdfhub.com([^<]*)<\/loc>/g)].map(match => match[1] || '/');
-assert.equal(paths.length, 13);
+assert.equal(paths.length, 14);
 const titles = new Set(); const descriptions = new Set();
 for (const path of paths) {
   const response = await request(path);
@@ -57,7 +57,7 @@ for (const slug of ['compress-pdf', 'merge-pdf', 'split-pdf', 'protect-pdf', 'un
   }
 }
 report.checks.push('21 legacy and trailing-slash redirects return 301 and preserve queries');
-for (const path of ['/missing-page', '/tools/missing-tool', '/tool/missing-tool', '/unknown/nested', '/pdf-to-word']) {
+for (const path of ['/missing-page', '/tools/missing-tool', '/tool/missing-tool', '/unknown/nested', '/pdf-to-excel']) {
   const response = await request(path); assert.equal(response.status, 404, path);
   const dom = new JSDOM(await response.text());
   assert.match(dom.window.document.querySelector('meta[name="robots"]').content, /noindex/);

@@ -1,6 +1,16 @@
 /** User-facing guidance describing implemented workflows and their limitations. */
 export interface ToolGuide { steps: string[]; questions: { question: string; answer: string }[]; }
 export const TOOL_GUIDES: Record<string, ToolGuide> = {
+  'pdf-to-word': {
+    steps: ['Choose a PDF from your device.', 'Choose Editable text with automatic OCR and your document language, or Keep page appearance.', 'Convert, review the result and any image-only page notices, then download your Word document.'],
+    questions: [
+      { question: 'Will the Word text be editable?', answer: 'Editable mode extracts selectable text and offers OCR in English, Hindi or Marathi after you choose the language. Low-resolution scans, detected tables, and uncertain recognition are preserved as images. Review recognized words and numbers. Pages that cannot be recognized are preserved as images and identified in the result.' },
+      { question: 'Will the layout match exactly?', answer: 'Editable conversion can change fonts, spacing, columns and tables. Review your DOCX in Word. Keep page appearance mode preserves the page visually as an image, but text inside the image cannot be edited.' },
+      { question: 'Are my files uploaded?', answer: 'No. PDF reading, OCR and DOCX generation run locally in your browser. OCR software and selected language assets load from this website. Your original PDF stays unchanged.' },
+      { question: 'How large can my PDF be?', answer: 'PDF to Word accepts files up to 200 MB with no fixed page-count limit. Processing runs one page at a time. Large scans take longer, and available device memory still affects completion.' },
+      { question: 'Can I convert a password-protected PDF?', answer: 'First use Unlock PDF with the document password. Conversion also requires permission to copy content.' }
+    ]
+  },
   'compress-pdf': {
     steps: ['Choose a PDF from your device.', 'Select High Quality, Smart Compression, Maximum Reduction, or a target size in MB.', 'Compress, check the actual result size, and download your PDF.'],
     questions: [

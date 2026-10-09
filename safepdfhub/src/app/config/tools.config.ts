@@ -31,6 +31,10 @@ export interface Tool {
  * implemented. This prevents SEO/navigation from advertising an unfinished page.
  */
 export const TOOLS: Tool[] = [
+  { slug: 'pdf-to-word', title: 'PDF to Word Converter | Editable DOCX Online',
+    description: 'Convert PDFs to Word DOCX locally. Extract editable text or preserve pages as images. Recognize scanned English, Hindi or Marathi text with local OCR. Up to 200 MB with no fixed page limit.',
+    keywords: 'pdf to word, pdf to docx, convert pdf to word', category: 'convert', label: 'PDF to Word',
+    shortDescription: 'Convert PDFs to Word documents', icon: 'FileText', displayOrder: 8, nextTools: ['split-pdf', 'unlock-pdf'] },
   {
     slug: 'compress-pdf',
     title: 'Compress PDF Online Free | Reduce PDF Size',

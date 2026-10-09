@@ -1,0 +1,17 @@
+[
+  {
+    "file": "eng.traineddata.gz",
+    "bytes": 10923060,
+    "sha256": "ed350f3752f81ee8f38769edc14d92d997dababe23b565c59879372cc46a2468"
+  },
+  {
+    "file": "hin.traineddata.gz",
+    "bytes": 1401691,
+    "sha256": "1efb54e2f03bf8bebb695f4ce7d83d1b746f5c20d900792625da291472d14b22"
+  },
+  {
+    "file": "mar.traineddata.gz",
+    "bytes": 1978165,
+    "sha256": "76357bd278a87ad1764920814f6226d8dde195f78ca964ca3a4c51b54bfeed9e"
+  }
+]

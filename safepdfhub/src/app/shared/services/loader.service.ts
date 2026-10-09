@@ -2,145 +2,105 @@ import { Injectable, signal } from '@angular/core';
 
 @Injectable({ providedIn: 'root' })
 export class LoaderService {
-
   private _loading = signal(false);
   private _text = signal('Loading...');
   private _progress = signal(0);
-
+  private _page = signal<{ current: number; total: number } | null>(null);
+  private _determinate = signal(false);
   loading = this._loading.asReadonly();
   text = this._text.asReadonly();
   progress = this._progress.asReadonly();
-
+  page = this._page.asReadonly();
+  determinate = this._determinate.asReadonly();
   private activeTasks = 0;
   private startTime = 0;
-  private minDuration = 600; // prevents flicker
-
-  private progressInterval: any;
+  private generation = 0;
+  private progressInterval?: ReturnType<typeof setInterval>;
+  private messageInterval?: ReturnType<typeof setInterval>;
   private cancellationHandler: (() => void) | null = null;
   private cancellationRegistrationId = 0;
   private _cancellationAvailable = signal(false);
-
   cancellationAvailable = this._cancellationAvailable.asReadonly();
-
   private steps = [
     'Analyzing your PDF...',
     'Rendering preview...',
     'Optimizing pages...',
-    'Almost ready...'
+    'Almost ready...',
   ];
 
-  // 🔥 START LOADER
-  show(customText?: string) {
+  /** Existing tools retain their loader; determinate tools supply real progress and page data. */
+  show(customText?: string, options: { determinate?: boolean } = {}) {
     this.activeTasks++;
-
-    if (this.activeTasks === 1) {
-      this._loading.set(true);
-      this.startTime = Date.now();
-
-      setTimeout(() => {
-        this._progress.set(2);
-      });
-      
-      this._text.set(customText || this.steps[0]);
-
-      this.startFakeProgress();
-      this.startStepMessages();
+    if (this.activeTasks !== 1) return;
+    this.generation++;
+    this.stopProgress();
+    this.startTime = Date.now();
+    this._loading.set(true);
+    this._progress.set(0);
+    this._page.set(null);
+    this._determinate.set(!!options.determinate);
+    this._text.set(customText || this.steps[0]);
+    if (!options.determinate) {
+      this.progressInterval = setInterval(() => {
+        const current = this._progress();
+        if (current < 90)
+          this._progress.set(Math.min(90, current + Math.max((100 - current) * 0.05, 0.5)));
+      }, 300);
+      // Explicit operation messages must not be overwritten by generic stages.
+      if (!customText) {
+        let i = 0;
+        this.messageInterval = setInterval(
+          () => this._text.set(this.steps[++i % this.steps.length]),
+          1200,
+        );
+      }
     }
   }
-
-  // 🔥 END LOADER
   hide() {
-    if (this.activeTasks > 0) {
-      this.activeTasks--;
-    }
-
-    if (this.activeTasks === 0) {
-      const elapsed = Date.now() - this.startTime;
-      const delay = Math.max(this.minDuration - elapsed, 0);
-
-      setTimeout(() => {
-        this._progress.set(100);
-        this._text.set('Done ✓');
-
-        setTimeout(() => {
-          this._loading.set(false);
-          this._progress.set(0);
-        }, 300);
-
-        this.stopProgress();
-      }, delay);
-    }
+    if (!this.activeTasks) return;
+    if (--this.activeTasks) return;
+    this.stopProgress();
+    const generation = this.generation;
+    setTimeout(
+      () => {
+        if (generation !== this.generation || this.activeTasks) return;
+        this._loading.set(false);
+        this._progress.set(0);
+        this._page.set(null);
+      },
+      Math.max(600 - (Date.now() - this.startTime), 0),
+    );
   }
-
-  // 🔥 FAKE PROGRESS (feels real)
-  private startFakeProgress() {
-  this.progressInterval = setInterval(() => {
-    const current = this._progress();
-
-    if (current < 90) {
-      // 🔥 easing curve (feels natural)
-      const remaining = 100 - current;
-      const increment = Math.max(remaining * 0.05, 0.5);
-
-      this._progress.set(current + increment);
-    }
-  }, 300);
-}
-
   private stopProgress() {
     clearInterval(this.progressInterval);
+    clearInterval(this.messageInterval);
+    this.progressInterval = undefined;
+    this.messageInterval = undefined;
   }
-
-  // 🔥 SMART TEXT ROTATION
-  private startStepMessages() {
-  let i = 0;
-
-  const interval = setInterval(() => {
-    if (!this._loading()) {
-      clearInterval(interval);
-      return;
-    }
-
-    i = (i + 1) % this.steps.length;
-    this._text.set(this.steps[i]);
-
-  }, 1200);
-}
-
-
-  /**
-   * Registers the cancellation action for the currently visible global loader.
-   * Returns an unregister function so the owner can release it in finally/ngOnDestroy.
-   */
   registerCancellationHandler(handler: () => void): () => void {
-    const registrationId = ++this.cancellationRegistrationId;
+    const id = ++this.cancellationRegistrationId;
     this.cancellationHandler = handler;
     this._cancellationAvailable.set(true);
-
     return () => {
-      if (registrationId !== this.cancellationRegistrationId) return;
+      if (id !== this.cancellationRegistrationId) return;
       this.cancellationHandler = null;
       this._cancellationAvailable.set(false);
     };
   }
-
-  /** Requests cancellation of the active operation, when one is registered. */
-  cancelActiveTask(): void {
+  cancelActiveTask() {
     this.cancellationHandler?.();
   }
-
   setText(value: string) {
+    clearInterval(this.messageInterval);
+    this.messageInterval = undefined;
     this._text.set(value);
-}
-
-
-setProgress(value: number) {
-  this._progress.set(Math.min(100, Math.max(0, value)));
-
-  // 🔥 stop fake progress when real progress comes
-  if (this.progressInterval) {
-    clearInterval(this.progressInterval);
   }
-}
-
+  setProgress(value: number) {
+    this.stopProgress();
+    this._determinate.set(true);
+    this._progress.set(Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0);
+  }
+  setPage(current?: number, total?: number) {
+    this._page.set(current && total ? { current, total } : null);
+  }
 }

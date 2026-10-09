@@ -101,6 +101,7 @@ export const routes: Routes = [
     redirectTo: 'tools/unlock-pdf',
     pathMatch: 'full'
   },
+  { path: 'pdf-to-word', redirectTo: 'tools/pdf-to-word', pathMatch: 'full' },
   { path: 'watermark-pdf', redirectTo: 'tools/watermark-pdf', pathMatch: 'full' },
   {
     path: '**',
