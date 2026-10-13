@@ -20,7 +20,7 @@
         aria-valuemax="100"
         [attr.aria-valuenow]="loader.determinate() ? loader.progress() : null"
       >
-        <div class="progress-fill" [style.width.%]="loader.progress()"></div>
+        <div class="progress-fill" [class.indeterminate]="!loader.determinate()" [style.width.%]="loader.progress()"></div>
       </div>
     </div>
 

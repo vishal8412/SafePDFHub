@@ -321,6 +321,7 @@ export class SeoService {
       'merge-pdf': 'Merge PDF',
       'split-pdf': 'Split PDF',
       'pdf-to-word': 'PDF to Word',
+      'word-to-pdf': 'Word to PDF',
       'protect-pdf': 'Protect PDF',
       'unlock-pdf': 'Unlock PDF'
     };

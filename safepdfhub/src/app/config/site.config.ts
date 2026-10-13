@@ -3,7 +3,7 @@ export const SITE_CONFIG = {
   url: 'https://safepdfhub.com',
   logoUrl: 'https://safepdfhub.com/assets/brand/safepdfhub-logo-primary.svg',
   contactEmail: 'hello@safepdfhub.com',
-  description: 'Privacy-first PDF tools that process documents locally in your browser.',
+  description: 'PDF tools and Word document previews processed locally in your browser.',
   staticIndexablePaths: [
     '/',
     '/support',

@@ -74,6 +74,8 @@ export const routes: Routes = [
     pathMatch: 'full'
   },
 
+  { path: 'word-to-pdf', redirectTo: 'tools/word-to-pdf', pathMatch: 'full' },
+
   // Legacy public tool URLs. The SSR server also returns HTTP 301 for these.
   {
     path: 'compress-pdf',

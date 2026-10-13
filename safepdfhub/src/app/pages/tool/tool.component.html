@@ -37,11 +37,11 @@
   />
  
   <div class="hero" *ngIf="!isWorkspaceMode">
-    <div class="privacy-signal" aria-label="Private browser processing">
+    <div class="privacy-signal" [attr.aria-label]="isWordToPdfTool ? 'Private browser processing' : 'Private browser processing'">
       <span class="privacy-signal__mark" aria-hidden="true"></span>
-      <span class="privacy-signal__eyebrow">Private by design</span>
+      <span class="privacy-signal__eyebrow">{{ isWordToPdfTool ? 'Local document preview' : 'Private by design' }}</span>
       <span class="privacy-signal__divider" aria-hidden="true"></span>
-      <span class="privacy-signal__detail">Your PDF stays on your device</span>
+      <span class="privacy-signal__detail">{{ isWordToPdfTool ? 'Your document stays on your device' : 'Your PDF stays on your device' }}</span>
     </div>
     <h1>{{ behavior.heroTitle }}</h1>
     <p class="hero-sub">
@@ -54,7 +54,7 @@
        UPLOAD AREA
   ===================== -->
 
-  <div *ngIf="(!isWordTool || !isWorkspaceMode) && (!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode) && !(isWatermarkTool && isWorkspaceMode)"
+  <div *ngIf="(!isWordToPdfTool || !isWorkspaceMode) && (!isWordTool || !isWorkspaceMode) && (!isSignTool || !isWorkspaceMode) && !(isCompressTool && isWorkspaceMode) && !(isSecurityTool && isWorkspaceMode) && !(isWatermarkTool && isWorkspaceMode)"
     #uploadDropZone
     class="upload-box"
     [class.compact]="isWorkspaceMode && !isCompressTool"
@@ -82,7 +82,7 @@
 
     <p class="upload-drag-hint" [class.active]="isDragOver">
       <span *ngIf="!isDragOver">or choose a file from your device</span>
-      <span *ngIf="isDragOver">Your file stays on your device</span>
+      <span *ngIf="isDragOver">{{ isWordToPdfTool ? 'File selection does not upload your document' : 'Your file stays on your device' }}</span>
     </p>
 
     <label class="upload-btn">
@@ -105,7 +105,7 @@
 
     <div class="limits">
       {{ capacitySummary }}
-      <span class="capacity-device"> • {{ capacityTierLabel }}</span>
+      <span class="capacity-device"> • {{ isWordToPdfTool ? 'Office document conversion' : capacityTierLabel }}</span>
     </div>
   </ng-container>
 
@@ -118,19 +118,23 @@
 
  </div>
 
-  <section class="tool-guide" [class.word-guide]="isWordTool" *ngIf="!isWorkspaceMode && guide as help" aria-labelledby="tool-guide-title">
-    <h2 id="tool-guide-title">{{ isWordTool ? 'How to convert PDF to Word' : 'How to ' + tool.label.toLowerCase() }}</h2>
+  <app-word-guide *ngIf="!isWorkspaceMode && isWordTool && guide" [guide]="guide!" />
+
+  <section class="tool-guide" [class.word-pdf-guide]="isWordToPdfTool" *ngIf="!isWorkspaceMode && !isWordTool && guide as help" aria-labelledby="tool-guide-title">
+    <h2 id="tool-guide-title">{{ isWordToPdfTool ? 'How to convert Word to PDF' : isWordTool ? 'How to convert PDF to Word' : 'How to ' + tool.label.toLowerCase() }}</h2>
     <ol><li *ngFor="let step of help.steps">{{ step }}</li></ol>
     <h2>Questions about {{ isWordTool ? 'PDF to Word' : tool.label.toLowerCase() }}</h2>
     <article *ngFor="let item of help.questions">
       <h3>{{ item.question }}</h3><p>{{ item.answer }}</p>
     </article>
-    <p>Documents are processed in your browser. Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> for help.</p>
+    <p>{{ isWordToPdfTool ? 'Word documents are processed in your browser.' : 'Documents are processed in your browser.' }} Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> for help.</p>
   </section>
 
   <!-- =====================
        FILE LIST (HORIZONTAL)
   ===================== -->
+
+<app-word-to-pdf-workspace *ngIf="isWorkspaceMode && isWordToPdfTool && wordToPdfFile" [file]="wordToPdfFile!" (replaceFile)="triggerUpload()" />
 
 <app-word-workspace *ngIf="isWorkspaceMode && isWordTool && wordWorkspaceFile" [file]="wordWorkspaceFile!" (replaceFile)="triggerUpload()"/>
 
@@ -157,7 +161,7 @@
   (editAgain)="editWatermarkAgain()"
 ></app-watermark-workspace>
 
-<div class="workspace" *ngIf="isWorkspaceMode && !isWordTool && !isSignTool && !isWatermarkTool">
+<div class="workspace" *ngIf="isWorkspaceMode && !isWordToPdfTool && !isWordTool && !isSignTool && !isWatermarkTool">
 
   <!-- =========================
      PDF SECURITY WORKSPACE
@@ -292,7 +296,7 @@
 <!-- =====================
       SMART SUGGESTIONS
   ===================== -->
-<div class="smart-suggestions" *ngIf="!isWordTool && !isSignTool && suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
+<div class="smart-suggestions" *ngIf="!isWordToPdfTool && !isWordTool && !isSignTool && suggestions.length && isWorkspaceMode && !isCompressTool && !isSplitTool && !isSecurityTool">
  
   <div class="workflow-cta" *ngIf="workspace.files.length && !isCompressTool">
 

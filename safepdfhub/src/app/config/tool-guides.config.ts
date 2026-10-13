@@ -1,10 +1,20 @@
 /** User-facing guidance describing implemented workflows and their limitations. */
 export interface ToolGuide { steps: string[]; questions: { question: string; answer: string }[]; }
 export const TOOL_GUIDES: Record<string, ToolGuide> = {
+  'word-to-pdf': {
+    steps: ['Choose an unencrypted DOCX from your device.', 'Prepare a private preview and review fonts, tables, images and layout.', 'Choose Save as PDF. In the browser print dialog, review the final pages and save your document.'],
+    questions: [
+      { question: 'Does my Word file leave my device?', answer: 'No. Document checks and rendering run in your browser. No Docker or conversion server is required.' },
+      { question: 'Will the layout match Microsoft Word?', answer: 'Not always. Missing fonts, floating objects, automatic pagination and repeated headers can differ. Review both the document preview and final print preview. Unsupported content is rejected when detected; checks cannot identify every layout difference.' },
+      { question: 'Why does Save as PDF open a print dialog?', answer: 'The browser print engine creates the PDF. Select Save as PDF and review paper size, margins and scale. Disable browser headers and footers. The website cannot silently save the PDF or confirm that you saved it.' },
+      { question: 'How large can my DOCX be?', answer: 'The input limit is 200 MB, with no fixed page-count limit. Expanded archive size, document complexity and image pixels are checked separately. Large files can exceed browser resources even below 200 MB. Devices reporting limited memory use a smaller expanded-content budget.' },
+      { question: 'Which files are supported?', answer: 'Use an unencrypted DOCX with ordinary text and embedded PNG or JPEG images. Old DOC files must be saved as DOCX first. Macros, embedded objects and external linked images are rejected. Some image formats and advanced Word features are unsupported.' }
+    ]
+  },
   'pdf-to-word': {
     steps: ['Choose a PDF from your device.', 'Choose Editable text with automatic OCR and your document language, or Keep page appearance.', 'Convert, review the result and any image-only page notices, then download your Word document.'],
     questions: [
-      { question: 'Will the Word text be editable?', answer: 'Editable mode extracts selectable text and offers OCR in English, Hindi or Marathi after you choose the language. Low-resolution scans, detected tables, and uncertain recognition are preserved as images. Review recognized words and numbers. Pages that cannot be recognized are preserved as images and identified in the result.' },
+      { question: 'Will the Word text be editable?', answer: 'Choose Editable text to extract selectable text or attempt OCR on scans in English, Hindi or Marathi. Low-resolution scans, detected tables and uncertain recognition stay as images; the result identifies those pages. Proofread recognized words and numbers. Keep page appearance produces page images with no editable text inside them.' },
       { question: 'Will the layout match exactly?', answer: 'Editable conversion can change fonts, spacing, columns and tables. Review your DOCX in Word. Keep page appearance mode preserves the page visually as an image, but text inside the image cannot be edited.' },
       { question: 'Are my files uploaded?', answer: 'No. PDF reading, OCR and DOCX generation run locally in your browser. OCR software and selected language assets load from this website. Your original PDF stays unchanged.' },
       { question: 'How large can my PDF be?', answer: 'PDF to Word accepts files up to 200 MB with no fixed page-count limit. Processing runs one page at a time. Large scans take longer, and available device memory still affects completion.' },

@@ -100,6 +100,11 @@ export class LoaderService {
     this._determinate.set(true);
     this._progress.set(Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0);
   }
+  setIndeterminate() {
+    this.stopProgress();
+    this._determinate.set(false);
+    this._progress.set(35);
+  }
   setPage(current?: number, total?: number) {
     this._page.set(current && total ? { current, total } : null);
   }

@@ -16,7 +16,7 @@ assert.match(xmlResponse.headers.get('content-type'), /xml/);
 const xml = await xmlResponse.text();
 assert.equal(xml.replace(/>\s+</g, '><').trim(), (await readFile(new URL('../src/seo/sitemap.xml', import.meta.url), 'utf8')).replace(/>\s+</g, '><').trim());
 const paths = [...xml.matchAll(/<loc>https:\/\/safepdfhub.com([^<]*)<\/loc>/g)].map(match => match[1] || '/');
-assert.equal(paths.length, 14);
+assert.equal(paths.length, 15);
 const titles = new Set(); const descriptions = new Set();
 for (const path of paths) {
   const response = await request(path);

@@ -1,3 +1,6 @@
+import { WordToPdfWorkspaceComponent } from '../../features/tools/word-to-pdf/word-to-pdf-workspace.component';
+import { validateWordSelection } from '../../core/word-to-pdf/word-to-pdf.service';
+import { WordGuideComponent } from '../../features/tools/word/word-guide/word-guide.component';
 import { WordWorkspaceComponent } from '../../features/tools/word/word-workspace.component';
 import { PdfToWordService } from '../../core/word/pdf-to-word.service';
 import { LargeCompressionCapabilityService } from '../../core/compression/large/large-compression-capability.service';
@@ -53,7 +56,7 @@ type WorkflowStep = 'merge' | 'compress' | 'split';
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [WordWorkspaceComponent, CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
+  imports: [WordToPdfWorkspaceComponent, WordGuideComponent, WordWorkspaceComponent, CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
     DialogComponent, BottomSheetComponent, ActionPanelComponent, RouterModule],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']
@@ -65,6 +68,8 @@ export class ToolComponent implements OnInit, OnDestroy {
   @ViewChild('uploadDropZone') uploadDropZone!: ElementRef<HTMLElement>;
   @ViewChild(MergeWorkspaceComponent) mergeWorkspace!: MergeWorkspaceComponent;
 
+  wordToPdfFile: File | null = null;
+  get isWordToPdfTool(): boolean { return this.tool?.slug === 'word-to-pdf'; }
   wordWorkspaceFile: File | null = null;
   get isWordTool(): boolean { return this.tool?.slug === 'pdf-to-word'; }
   tool!: Tool;
@@ -246,6 +251,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       'merge-pdf': 'Merge PDF',
       'split-pdf': 'Split PDF',
       'pdf-to-word': 'PDF to Word',
+      'word-to-pdf': 'Word to PDF',
       'protect-pdf': 'Protect PDF',
       'unlock-pdf': 'Unlock PDF',
       'sign-pdf': 'Sign PDF',
@@ -312,6 +318,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     this.viewerFile = null;
     this.signWorkspaceFile = null;
     this.wordWorkspaceFile = null;
+    this.wordToPdfFile = null;
     this.showViewer = false;
   }
 
@@ -352,6 +359,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get capacitySummary(): string {
+    if (this.isWordToPdfTool) return 'DOCX up to 200 MB · Local preview · Memory checks apply';
     if (this.isWordTool) return `Up to ${this.pdfToWord.limits.bytes / 1_000_000} MB · No fixed page limit`;
     if (this.isCompressTool) return `Up to ${this.maxFileMB} MB on this device • up to 500 MB on supported desktops`;
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {
@@ -566,6 +574,12 @@ export class ToolComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.isWordToPdfTool) {
+      this.wordToPdfFile = selected[0];
+      this.workspaceUpload.addFiles(selected, true);
+      this.workspace.activeIndex = 0;
+      return;
+    }
     this.toast.show(`${selected.length} files added`,'success');
 
     // The Sign PDF workspace is single-file. Set its input before mutating the
@@ -706,6 +720,12 @@ export class ToolComponent implements OnInit, OnDestroy {
   //     VALIDATIONS
   // =====================
   private validateFiles(newFiles: File[]): File[] {
+    if (this.isWordToPdfTool) {
+      const file = newFiles[0]; if (!file) return [];
+      const error = validateWordSelection(file);
+      if (error) { this.toast.show(error, 'error'); return []; }
+      return [file];
+    }
     if (this.isWordTool) {
       const file = newFiles[0];
       if (!file) return [];

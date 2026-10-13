@@ -1,0 +1,29 @@
+{
+  "rendererVersion": "2026.10.13.2",
+  "productionBuild": "passed",
+  "focusedTestsPassed": 34,
+  "sourceFixture": {
+    "pages": 3,
+    "allA4": true,
+    "normalizedTextMatches": true,
+    "selectableText": true,
+    "browserHeadersEnabledNoAddedText": true
+  },
+  "savedPdfCheck": {
+    "acceptsCorrectedExport": true,
+    "flagsProvidedLetterRasterExport": true,
+    "scope": "size/orientation and presence of selectable text only"
+  },
+  "continuationFixture": {
+    "pages": 4,
+    "lines": 130,
+    "allLinesInOrder": true,
+    "sourceMarginsOnEveryPage": true
+  },
+  "limitations": [
+    "Windows Microsoft Print to PDF was not automated",
+    "Native print settings cannot be forced by window.print",
+    "Does not certify every DOCX layout"
+  ],
+  "desktopAndSlowMobilePixelIdentical": true
+}

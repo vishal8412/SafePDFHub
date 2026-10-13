@@ -1,0 +1,44 @@
+<section class="word-guide tool-guide" aria-labelledby="word-guide-title">
+  <header class="guide-heading">
+    <span class="eyebrow"><span aria-hidden="true"></span> A little guidance. A better result.</span>
+    <h2 id="word-guide-title">Your PDF. Your next move.</h2>
+    <p>Need to rewrite the words or keep the page looking familiar? Choose the route that fits your document.</p>
+  </header>
+  <section class="path-map" aria-labelledby="word-path-title">
+    <div class="map-heading"><h3 id="word-path-title">Two ways to convert PDF to Word</h3><span>Follow your goal</span></div>
+    <div class="source-node"><span class="file-icon" aria-hidden="true">PDF</span><div><strong>Start with your PDF</strong><span>A document, a scan, or a mix of both</span></div></div>
+    <div class="branches">
+      <article class="path-card editable">
+        <div class="path-intent"><span class="path-symbol" aria-hidden="true">Aa</span><span>I want to change the words</span></div>
+        <h4>Editable text</h4>
+        <p>Bring selectable PDF text into Word. For scanned pages, choose the document language so OCR can attempt to read the words.</p>
+        <div class="path-example" aria-hidden="true"><span class="example-label">IN WORD</span><span class="editable-preview">Make it your own<span class="cursor"></span></span><span class="example-line long"></span><span class="example-line short"></span></div>
+        <ul class="path-facts"><li>Good for revising clear text</li><li>OCR: English, Hindi and Marathi</li></ul>
+        <div class="path-note"><strong>Check before you share</strong><p>Fonts and layout may change. Uncertain scans and detected tables stay as images. Proofread recognized text.</p></div>
+      </article>
+      <article class="path-card appearance">
+        <div class="path-intent"><span class="path-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h4"/></svg></span><span>I want to keep the page look</span></div>
+        <h4>Keep page appearance</h4>
+        <p>Place each PDF page in Word as an image, keeping the original content and layout visible together.</p>
+        <div class="path-example page-example" aria-hidden="true"><span class="example-label">IN WORD</span><div class="mini-page"><span></span><span></span><div class="mini-table"></div><span></span></div><span class="page-caption">The whole page, together</span></div>
+        <ul class="path-facts"><li>Good for forms and complex layouts</li><li>Keeps tables, stamps and handwriting visible</li></ul>
+        <div class="path-note"><strong>Know what you’ll get</strong><p>Text within page images is not editable. Image-based Word files can be larger than the original PDF.</p></div>
+      </article>
+    </div>
+    <div class="destination-node"><span class="download-icon" aria-hidden="true">↓</span><div><strong>Your Word document (.docx)</strong><span>Review the result, then download when you’re ready.</span></div></div>
+  </section>
+  <section class="steps-section" aria-labelledby="word-steps-title">
+    <span class="eyebrow">FROM PDF TO DOCX</span><h3 id="word-steps-title">How to convert PDF to Word</h3>
+    <ol class="steps"><li *ngFor="let step of guide.steps; let i = index"><span class="step-number" aria-hidden="true">0{{ i + 1 }}</span><div><h4>{{ i === 0 ? 'Choose your PDF' : i === 1 ? 'Pick your route' : 'Review & download' }}</h4><p>{{ step }}</p></div></li></ol>
+  </section>
+  <aside class="privacy-strip" aria-label="File privacy and capacity">
+    <div class="privacy-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3z"/><path d="M8 12l3 3 5-6"/></svg></div>
+    <div><strong>Your file stays with you</strong><p>Conversion runs in your browser. Your PDF is not uploaded.</p></div>
+    <div class="capacity-tag"><strong>Up to 200 MB</strong><span>No fixed page-count limit</span></div>
+  </aside>
+  <section class="faq-section" aria-labelledby="word-faq-title">
+    <div class="faq-intro"><span class="eyebrow">GOOD TO KNOW</span><h3 id="word-faq-title">A few answers<br class="desktop-break"> before you begin.</h3><p>Understand what changes, what stays, and what to check in your Word document.</p><a routerLink="/contact">Need a hand? Contact support <span aria-hidden="true">↗</span></a></div>
+    <div class="faq-list"><details *ngFor="let item of guide.questions; let i = index" [open]="i === 0"><summary><span>{{ item.question }}</span><span class="faq-toggle" aria-hidden="true"></span></summary><p>{{ item.answer }}</p></details></div>
+  </section>
+  <p class="guide-footer">Your original PDF stays unchanged. Learn more in our <a routerLink="/privacy">privacy policy</a>.</p>
+</section>
