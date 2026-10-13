@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { normalizeHeadingBoxes, normalizeListSymbols, tagTabStops, layoutTabStops } from './word-layout';
+import { normalizeHeadingBoxes, normalizeListSymbols, tagTabStops, layoutTabStops, normalizeTableIndents, layoutListMarkers, normalizeParagraphMarks, applyParagraphStyleFonts, layoutAutomaticLines } from './word-layout';
 export { WORD_INPUT_BYTES } from './docx-preflight';
 import { WORD_INPUT_BYTES } from './docx-preflight';
 export function validateWordSelection(file: File): string | null {
@@ -98,7 +98,12 @@ export class WordToPdfService {
       };
       const model = await parseAsync(checked.buffer, options);
       const source = model.documentPart._xmlDocument as Document;
-      if (source && normalizeHeadingBoxes(source)) model.documentPart.parseXml(source.documentElement);
+      if (source) {
+        const changes = normalizeHeadingBoxes(source) + normalizeTableIndents(source) + normalizeParagraphMarks(source);
+        if (changes) model.documentPart.parseXml(source.documentElement);
+      }
+      const stylesSource = model.stylesPart?._xmlDocument as Document | undefined;
+      if (stylesSource && normalizeTableIndents(stylesSource)) model.stylesPart.parseXml(stylesSource.documentElement);
       const numbering = model.numberingPart?._xmlDocument as Document | undefined;
       if (numbering && normalizeListSymbols(numbering)) model.numberingPart.parseXml(numbering.documentElement);
       signal.throwIfAborted();
@@ -118,7 +123,7 @@ export class WordToPdfService {
           properties.push(child.sectionProps);
           // An empty section delimiter is structural; a browser's default empty
           // paragraph line box can otherwise spill onto an extra blank page.
-          if (!child.children?.length) child.cssStyle = { ...child.cssStyle, 'min-height': '0', height: '0', 'font-size': '0', margin: '0' };
+          if (!child.children?.length) { child.cssStyle = { ...child.cssStyle, 'min-height': '0', height: '0', 'font-size': '0', margin: '0' }; child.fontSize = '0pt'; }
         }
       properties.push(model.documentPart.body.props);
       type Reference = { type: string; id: string };
@@ -139,6 +144,7 @@ export class WordToPdfService {
         props.headerRefs = headers;
         props.footerRefs = footers;
       }
+      applyParagraphStyleFonts(model.stylesPart?.styles || []);
       tagTabStops(model.documentPart.body, model.stylesPart?.styles || []);
       for (const part of model.parts || [])
         if (part.rootElement) tagTabStops(part.rootElement, model.stylesPart?.styles || []);
@@ -200,6 +206,8 @@ export class WordToPdfService {
         signal,
       );
       await this.bounded(doc.fonts.ready, signal);
+      layoutAutomaticLines(doc);
+      layoutListMarkers(doc);
       layoutTabStops(doc, parseFloat(model.settingsPart?.settings?.defaultTabStop) || 36);
       signal.throwIfAborted();
       const sections = [...doc.querySelectorAll<HTMLElement>('section.docx')];

@@ -3,6 +3,110 @@ const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawi
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
+function child(parent: Element, name: string): Element | undefined {
+  return [...parent.children].find(c => c.namespaceURI === W && c.localName === name);
+}
+function property(parent: Element, name: string): Element {
+  const existing = child(parent, name);
+  if (existing) return existing;
+  const created = parent.ownerDocument.createElementNS(W, `w:${name}`);
+  parent.append(created);
+  return created;
+}
+
+/** Transfer supported drawing geometry to the in-memory paragraph adapter. */
+function shapeFlowGeometry(anchor: Element, outer: Element, props: Element, heading: boolean): void {
+  const section = [...outer.ownerDocument.getElementsByTagNameNS(W, 'sectPr')]
+    .find(s => !!(outer.compareDocumentPosition(s) & 4));
+  const margins = section?.getElementsByTagNameNS(W, 'pgMar')[0];
+  const pageSize = section?.getElementsByTagNameNS(W, 'pgSz')[0];
+  const posH = anchor.getElementsByTagNameNS(WP, 'positionH')[0];
+  const posV = anchor.getElementsByTagNameNS(WP, 'positionV')[0];
+  const extent = anchor.getElementsByTagNameNS(WP, 'extent')[0];
+  const xValue = posH?.getElementsByTagNameNS(WP, 'posOffset')[0]?.textContent;
+  const yValue = posV?.getElementsByTagNameNS(WP, 'posOffset')[0]?.textContent;
+  const x = Number(xValue) / 635;
+  if (xValue && margins && posH?.getAttribute('relativeFrom') === 'page' && Number.isFinite(x)) {
+    const indent = property(props, 'ind');
+    const left = x - Number(margins.getAttributeNS(W, 'left'));
+    indent.setAttributeNS(W, 'w:left', String(Math.round(left)));
+    const width = Number(extent?.getAttribute('cx')) / 635;
+    const available = Number(pageSize?.getAttributeNS(W, 'w')) - Number(margins.getAttributeNS(W, 'left')) - Number(margins.getAttributeNS(W, 'right'));
+    if (width > 0 && available > 0) indent.setAttributeNS(W, 'w:right', String(Math.round(available - left - width)));
+  }
+  if (heading) {
+    const spacing = property(props, 'spacing');
+    const y = Number(yValue) / 635;
+    if (yValue && posV?.getAttribute('relativeFrom') === 'paragraph' && y >= 0 && Number.isFinite(y)) {
+      const before = Number(spacing.getAttributeNS(W, 'before')) || 0;
+      spacing.setAttributeNS(W, 'w:before', String(Math.round(before + y)));
+    }
+    const height = Number(extent?.getAttribute('cy')) / 635;
+    // These are single-paragraph rectangular headings. Keep their shaded box
+    // height instead of shrinking it to the font's default line box.
+    if (height > 0 && height < 2880) {
+      const line = spacing.getAttributeNS(W, 'lineRule') === 'exact' ? Number(spacing.getAttributeNS(W, 'line')) : 0;
+      spacing.setAttributeNS(W, 'w:line', String(Math.round(Math.max(height, line))));
+      spacing.setAttributeNS(W, 'w:lineRule', 'exact');
+    }
+  }
+}
+
+/** docx-preview 0.3.7 reads tblInd as paragraph ind, ignoring its w:w value.
+ * Adapt only the in-memory XML handed to that parser; never rewrite the DOCX.
+ */
+export function normalizeTableIndents(doc: Document): number {
+  let count = 0;
+  for (const props of [...doc.getElementsByTagNameNS(W, 'tblPr')]) {
+    const indent = child(props, 'tblInd');
+    const type = indent?.getAttributeNS(W, 'type');
+    const value = indent?.getAttributeNS(W, 'w');
+    const alignment = child(props, 'jc')?.getAttributeNS(W, 'val');
+    if (!indent || !value || (type && type !== 'dxa') || !/^-?\d+$/.test(value) ||
+        child(props, 'tblpPr') || (alignment && !['left', 'start'].includes(alignment))) continue;
+    const adapted = doc.createElementNS(W, 'w:ind');
+    adapted.setAttributeNS(W, 'w:start', value);
+    indent.replaceWith(adapted);
+    count++;
+  }
+  return count;
+}
+
+/** The pinned parser skips pPr/rPr (paragraph-mark typography). Copy supported
+ * font properties to its in-memory pPr adapter so the browser strut is not 12pt.
+ */
+export function normalizeParagraphMarks(doc: Document): number {
+  let count = 0;
+  for (const props of [...doc.getElementsByTagNameNS(W, 'pPr')]) {
+    const run = child(props, 'rPr');
+    if (!run) continue;
+    for (const name of ['sz', 'rFonts']) {
+      const value = child(run, name);
+      if (value && !child(props, name)) { props.append(value.cloneNode(true)); count++; }
+    }
+  }
+  return count;
+}
+
+interface RenderStyle {
+  target?: string;
+  styles: { target: string; values: Record<string, string> }[];
+}
+/** Apply paragraph-style and document-default font sizes to the paragraph too,
+ * not only its runs. This preserves the same font-based line box in standards mode.
+ */
+export function applyParagraphStyleFonts(styles: RenderStyle[]): void {
+  for (const style of styles) {
+    if (style.target && style.target !== 'p') continue;
+    for (const entry of [...style.styles]) {
+      if (entry.target !== 'span') continue;
+      const values: Record<string, string> = {};
+      for (const key of ['font-size', 'font-family']) if (entry.values[key]) values[key] = entry.values[key];
+      if (Object.keys(values).length) style.styles.push({ target: 'p', values });
+    }
+  }
+}
+
 /** Only flatten standalone rectangular headings that explicitly wrap above/below. */
 export function normalizeHeadingBoxes(doc: Document): number {
   let count = 0;
@@ -36,14 +140,7 @@ export function normalizeHeadingBoxes(doc: Document): number {
     if (fill && /^[\da-f]{6}$/i.test(fill)) {
       const shade = doc.createElementNS(W, 'w:shd'); shade.setAttributeNS(W, 'w:fill', fill); props.append(shade);
     }
-    const position = anchor.getElementsByTagNameNS(WP, 'positionH')[0];
-    const section = [...doc.getElementsByTagNameNS(W, 'sectPr')].find(s => !!(outer.compareDocumentPosition(s) & 4));
-    const pageMargin = Number(section?.getElementsByTagNameNS(W, 'pgMar')[0]?.getAttributeNS(W, 'left'));
-    const x = Number(position?.getElementsByTagNameNS(WP, 'posOffset')[0]?.textContent) / 635;
-    if (position?.getAttribute('relativeFrom') === 'page' && Number.isFinite(pageMargin) && Number.isFinite(x)) {
-      const indent = doc.createElementNS(W, 'w:ind');
-      indent.setAttributeNS(W, 'w:left', String(Math.round(x - pageMargin))); props.append(indent);
-    }
+    shapeFlowGeometry(anchor, outer, props, true);
     props.append(doc.createElementNS(W, 'w:keepNext'));
     outer.replaceWith(replacement); count++;
   }
@@ -73,7 +170,9 @@ function normalizeRules(doc: Document): number {
     if (!props) { props = doc.createElementNS(W,'w:pPr'); p.prepend(props); }
     const borders = doc.createElementNS(W,'w:pBdr'), bottom = doc.createElementNS(W,'w:bottom');
     for (const [key,value] of Object.entries({val:'single',sz:String(Math.round(height*8)),color:fill,space:'0'})) bottom.setAttributeNS(W,'w:'+key,value);
-    borders.append(bottom); props.append(borders); run!.remove(); count++;
+    borders.append(bottom); props.append(borders);
+    shapeFlowGeometry(anchor, p, props, false);
+    run!.remove(); count++;
   }
   return count;
 }
@@ -100,9 +199,10 @@ interface LayoutNode {
   tabs?: { position: string; style: string; leader?: string }[];
   cssStyle?: Record<string, string>;
   children?: LayoutNode[];
+  lineSpacing?: { line?: number; lineRule?: string };
 }
 /** Carry explicit Word tab stops through the pinned renderer as an inert data attribute. */
-interface TabStyle { id: string; basedOn?: string; paragraphProps?: { tabs?: NonNullable<LayoutNode['tabs']> }; }
+interface TabStyle { id: string; basedOn?: string; paragraphProps?: { tabs?: NonNullable<LayoutNode['tabs']>; lineSpacing?: LayoutNode['lineSpacing'] }; }
 export function tagTabStops(node: LayoutNode, styles: TabStyle[] = []): void {
   let id = node.styleName;
   const seen = new Set<string>();
@@ -117,7 +217,48 @@ export function tagTabStops(node: LayoutNode, styles: TabStyle[] = []): void {
     node.cssStyle = { ...node.cssStyle, '$data-safepdf-tab-stops': stops.map(t =>
       `${parseFloat(t.position)} ${['left','right','center','decimal','clear'].includes(t.style) ? t.style : 'left'} ${['dot','middleDot','hyphen','heavy','underscore'].includes(t.leader || '') ? t.leader : 'none'}`).join(', ') };
   }
+  let spacing = node.lineSpacing;
+  id = node.styleName;
+  seen.clear();
+  while (!spacing?.line && id && !seen.has(id)) {
+    seen.add(id);
+    const style = styles.find(s => s.id === id);
+    spacing = style?.paragraphProps?.lineSpacing;
+    id = style?.basedOn;
+  }
+  if (spacing?.line && (!spacing.lineRule || spacing.lineRule === 'auto')) {
+    node.cssStyle = { ...node.cssStyle, '$data-word-auto-line': String(spacing.line / 240) };
+  }
   for (const child of node.children || []) tagTabStops(child, styles);
+}
+
+/** Word automatic line spacing scales the font's natural line, rather than its
+ * em square. Measure loaded local fonts once per face/size, before preview zoom.
+ */
+export function layoutAutomaticLines(doc: Document): void {
+  const view = doc.defaultView;
+  if (!view) return;
+  const cache = new Map<string, number>();
+  const probe = doc.createElement('div');
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;margin:0;padding:0;border:0;line-height:normal';
+  probe.textContent = 'Mg\nMg';
+  doc.body.append(probe);
+  try {
+    for (const p of doc.querySelectorAll<HTMLElement>('p[data-word-auto-line]')) {
+      const multiplier = Number(p.dataset['wordAutoLine']);
+      if (!(multiplier > 0 && multiplier < 20)) continue;
+      const css = view.getComputedStyle(p);
+      const key = [css.fontFamily, css.fontSize, css.fontWeight, css.fontStyle].join('|');
+      let height = cache.get(key);
+      if (!height) {
+        probe.style.fontFamily = css.fontFamily; probe.style.fontSize = css.fontSize;
+        probe.style.fontWeight = css.fontWeight; probe.style.fontStyle = css.fontStyle;
+        height = probe.getBoundingClientRect().height / 2;
+        cache.set(key, height);
+      }
+      if (height > 0) p.style.lineHeight = `${height * multiplier}px`;
+    }
+  } finally { probe.remove(); }
 }
 /** Measure against loaded fonts and decoded images, before applying preview zoom. */
 export function layoutTabStops(doc: Document, defaultSize = 36): void {
@@ -166,5 +307,27 @@ export function layoutTabStops(doc: Document, defaultSize = 36): void {
         tab.style.textDecorationStyle = ['dot','middleDot'].includes(stop.leader) ? 'dotted' : 'solid';
       }
     }
+  }
+}
+
+/** Word hanging indents align wrapped lines with text, not with the bullet.
+ * Preserve generated counters/glyphs but take their box out of inline flow.
+ */
+export function layoutListMarkers(doc: Document): void {
+  const view = doc.defaultView;
+  if (!view) return;
+  const style = doc.createElement('style');
+  style.textContent = 'p[data-word-hanging-list]::before{display:inline-block;position:relative;inset-inline-start:var(--word-marker-start);width:0;overflow:visible;text-indent:0;white-space:pre;pointer-events:none}';
+  doc.head.append(style);
+  for (const p of doc.querySelectorAll<HTMLElement>('p')) {
+    if (![...p.classList].some(c => /^docx-num-/.test(c))) continue;
+    const css = view.getComputedStyle(p);
+    const indent = parseFloat(css.textIndent);
+    const marker = view.getComputedStyle(p, '::before').content;
+    if (!(indent < 0) || !marker || ['none', 'normal', '""'].includes(marker)) continue;
+    p.setAttribute('data-word-hanging-list', '');
+    p.style.setProperty('--word-marker-start', `${indent}px`);
+    p.style.textIndent = '0';
+    p.style.display = 'block';
   }
 }

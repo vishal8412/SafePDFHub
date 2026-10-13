@@ -1,61 +1,53 @@
-# Word-to-PDF update — 2026.10.13.2
+# SafePDFHub Word-to-PDF correction — 2026.10.13.3
 
-This project is assembled from the newly uploaded src(8), scripts(8), package and Angular configuration files. The changes are scoped to Word-to-PDF. Other application tools and dependencies retain the uploaded versions.
+This project is based on the latest uploaded src(9), scripts(9), package lock and Angular configuration. Other tool source files are preserved. Conversion remains browser-only.
 
-## Run the corrected project
+## Install
 
-1. Extract this ZIP into a new folder. Do not overlay only selected files onto an older installation.
-2. Open a terminal in SafePDFHub (the folder containing package.json).
-3. Run `npm ci`, then `npm start`.
-4. Reload the browser and prepare the DOCX again. The new save panel explicitly shows the source paper size and explains the Windows print destination.
+Extract the complete ZIP into a new folder, open SafePDFHub (containing package.json), then run:
 
-For production, run `npm run build` and deploy the resulting complete build. The preview host has `data-word-renderer="2026.10.13.2"` for checking which renderer was deployed.
+```sh
+npm ci
+npm start
+```
 
-## What was wrong
+For production use `npm run build`. Deploy the complete build and reload before preparing a new preview. The preview host's data-word-renderer attribute is `2026.10.13.3`.
 
-The newly supplied source still contained the earlier rendering path: custom tab alignment was disabled, fonts were overridden with Arial, text boxes could overlap body content, and print sizing depended on section padding. It did not contain the previously developed layout corrections.
+## Corrections and causes
 
-The supplied testing.pdf was produced by Microsoft Print to PDF, with four US Letter pages and no extractable text. The original DOCX specifies A4. The printer destination and paper settings are a separate source of differences from the document renderer.
+1. **Wrapped list text:** docx-preview places markers inside the paragraph's first line, while the source uses a hanging indent. The new adapter gives the marker a zero-width inline box offset into the hanging-indent area. First and continuation text lines align, and the paragraph remains in ordinary flow to preserve PDF text extraction order. Existing counter and glyph definitions are retained.
+2. **Heading gaps and shaded boxes:** supported standalone heading drawings were flattened without their vertical offset, height or full horizontal geometry. The adapter now transfers those values into the flow layout. The separator's horizontal placement is also retained. Unsupported floating/rotated artwork is not flattened.
+3. **Table position:** the pinned parser treats tblInd as paragraph indentation and ignores its w:w value. An in-memory XML adapter passes supported fixed table indentation to the parser. Cell padding remains separate, and center/right/floating/percentage-positioned tables are excluded from this adaptation. The original DOCX bytes are never modified.
+4. **Excess pages:** paragraph mark font sizing and paragraph/default style font sizing were omitted from the paragraph box, allowing the browser's default 12pt line box to enlarge lines containing 10pt text. Paragraph typography is now propagated. Automatic line spacing uses the loaded font's measured natural line height, while exact line spacing is preserved.
+5. **Test fidelity:** the earlier snapshot test omitted the HTML doctype and therefore used quirks mode, unlike the live iframe. That earlier three-page result was insufficient. Both preview and export tests now assert CSS1Compat, preserve the doctype, and can assert an expected PDF page count. The corrected source document passes with three pages in standards mode.
 
-## Latest export correction
+These are adapters for the pinned docx-preview 0.3.7 renderer. Revalidate them before changing that dependency. Transient XML adaptations are never written back to user files.
 
-The newly supplied output again contains four Letter-sized raster pages, with browser date/title/page-number decorations. The source document still specifies A4. These observations do not prove every difference is caused by the printer: the Windows driver is not available in this environment.
+## Saving
 
-The print stylesheet now places Word margins inside the printed content and requests zero outer page margins. Padding is cloned on automatic continuation pages. This prevents loss of the content inset and suppresses default browser decorations in the tested Chromium print engine, even with headers/footers enabled. Source A4 dimensions and selectable text are retained. User-selected printer settings can still override page sizing.
+Use the browser's **Save as PDF**, select the source paper size (A4 for the supplied document), **Margins: None**, **Scale: 100%**, enable backgrounds, and disable browser headers/footers. Word margins are already part of the document content.
 
-The save panel now explains the margins setting and provides **Check saved PDF**. This optional local PDF.js check reads every page's effective size/orientation and checks for any selectable text. It flags the supplied Letter/raster export. It is deliberately labeled a basic export check: it does not certify text accuracy, missing images, fonts, spacing, page order, or pagination. Mixed-size documents accept any of their source dimensions, and section count is never mistaken for page count. Checks can be cancelled and release their PDF worker; a 60-second timeout bounds the operation. Original files are never changed or uploaded.
+The supplied Testing5.pdf was produced by Windows Microsoft Print to PDF on Letter paper. Its driver settings are outside the web application's control. The updated local Check saved PDF function flags incorrect page sizes and missing selectable text; it is not a full visual/content certification. The Windows driver was not automated in this environment. Verify the final native print preview before saving.
 
-## Corrections
+## Validation
 
-- Preserve the source paper size and margins, including automatic continuation pages.
-- Eliminate empty section-break line boxes and fixed print heights that introduce blank pages.
-- Measure layout in a hidden but measurable frame.
-- Preserve supported standalone rectangular text-box headings and separators in normal document flow.
-- Prefer original Calibri faces when installed; otherwise use bundled Carlito faces with compatible metrics.
-- Render recognized Wingdings/Symbol list markers using Unicode and a bundled symbol font.
-- Recalculate custom tab positions after fonts and images load, using original tab stops instead of timing-dependent word spacing. Include inherited paragraph-style stops.
-- Keep the preview CSP and document title when rendering styles.
-- Request exact print colors and provide explicit PDF-save instructions and paper-size guidance.
+- Production build and 41 focused tests pass.
+- Standards-mode export of the supplied DOCX: 3 A4 pages, selectable text, complete normalized text retained in source order.
+- The first and wrapped lines of the reported bullet both start at x=89.988 pt.
+- Restored vertical gap before Work Experience and the table's source indent were checked in the final PDF.
+- All three pages visually reviewed; no clipped content or additional blank pages in this sample.
+- Initial 390px viewport with delayed fonts yields pixel-identical PDF pages to desktop.
+- Synthetic browser regression: mixed portrait/landscape, inherited headers, images, privacy/no uploads, print action, cancellation and corrupt/external/macro rejection.
+- ZIP CRC, source-byte comparison and full extraction checked before delivery.
 
-## Save settings
+Run focused tests:
 
-Choose the browser destination **Save as PDF**. On Windows, **Microsoft Print to PDF** is a separate printer destination; it may use different paper defaults and text handling.
+```sh
+npm test -- --watch=false --include='src/app/core/word-to-pdf/*.spec.ts' --include='src/app/shared/services/loader.service.spec.ts'
+```
 
-For the supplied resume: choose **A4**, **Margins: None** (the Word margins are already inside the page), **100% scale**, turn **Background graphics on**, and turn **Headers and footers off**. Check the final preview before saving. A website cannot force or inspect all native printer settings or confirm that a print dialog was saved.
+Browser scripts require Playwright and a Chromium executable. Set PLAYWRIGHT_MODULE and WORD_BROWSER as needed. Generate synthetic fixtures with `python scripts/create-word-layout-fixtures.py`, then run `node scripts/word-to-pdf-local-browser.cjs`. For the supplied document set WORD_DOCX, WORD_EXPECTED_PAGES=3, and optionally WORD_BAD_PDF before running `node scripts/word-to-pdf-document-browser.cjs`.
 
-## Verification and limits
+Browser rendering is not Microsoft's Word layout engine. Different fonts, complex floating objects, advanced fields and native printer choices can still change output. This release addresses and tests the reported layout bugs; it does not claim flawless conversion of every DOCX.
 
-The supplied resume exported as three A4 pages with selectable text. Its complete text matches the DOCX after removing whitespace/punctuation and duplicate OOXML compatibility branches. All three output pages were visually inspected. Normal desktop rendering and delayed font loading from a 390px initial viewport produced pixel-identical rendered PDF pages in the tested Chromium environment.
-
-The production build and 34 focused unit tests pass. Browser regression checks cover the preview/print action, mobile widths, inherited headers, mixed page orientation, rejection of damaged/unsafe inputs, cancellation and no document uploads. The automated PDF comparison uses Chromium's print engine with the prepared document; it does not automate or validate the Windows Microsoft Print to PDF driver.
-
-Browser rendering remains different from Microsoft's Word layout engine. Complex floating artwork, advanced fields, repeated headers on automatic continuation pages, footer placement and unavailable fonts can differ. This update does not claim perfect conversion for every DOCX. The uploaded worker, capacity checks and scanned-document processing are unchanged in this release.
-
-Additional validation for this version:
-- The supplied source produced 3 A4 pages; complete normalized text matched the DOCX.
-- Enabling browser headers and footers did not add date/title/page-number text to those pages.
-- The saved-PDF check accepted that output and flagged the supplied incorrect Letter/raster output.
-- A synthetic 130-line continuation document printed across 4 pages with every line retained in order and source top/bottom margins on every page.
-- Production build and 34 focused tests passed; browser regressions retained the mixed-orientation, inherited-header, mobile width, cancellation, and unsafe-input checks.
-
-Private customer documents, screenshots and generated comparison PDFs are not included.
+Customer documents, comparison PDFs, screenshots, node_modules and build outputs are excluded from this project ZIP.

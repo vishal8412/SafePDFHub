@@ -1,29 +1,26 @@
 {
-  "rendererVersion": "2026.10.13.2",
+  "rendererVersion": "2026.10.13.3",
+  "source": "latest uploaded src(9) and scripts(9)",
   "productionBuild": "passed",
-  "focusedTestsPassed": 34,
+  "focusedTestsPassed": 41,
+  "previewAndExportMode": "CSS1Compat",
   "sourceFixture": {
     "pages": 3,
-    "allA4": true,
-    "normalizedTextMatches": true,
+    "paper": "A4",
     "selectableText": true,
-    "browserHeadersEnabledNoAddedText": true
+    "normalizedTextMatchesInOrder": true,
+    "reportedBulletFirstLineX": 89.98828125,
+    "reportedBulletContinuationX": 89.98828125,
+    "workExperienceGapPt": 18.50433349609375,
+    "sourceTableIndentPt": 17.05,
+    "allPagesVisuallyReviewed": true
   },
-  "savedPdfCheck": {
-    "acceptsCorrectedExport": true,
-    "flagsProvidedLetterRasterExport": true,
-    "scope": "size/orientation and presence of selectable text only"
-  },
-  "continuationFixture": {
-    "pages": 4,
-    "lines": 130,
-    "allLinesInOrder": true,
-    "sourceMarginsOnEveryPage": true
-  },
+  "desktopAndDelayedFontMobilePixelIdentical": true,
+  "syntheticBrowserRegression": "passed",
+  "previousSnapshotHarnessQuirksModeCorrected": true,
   "limitations": [
-    "Windows Microsoft Print to PDF was not automated",
-    "Native print settings cannot be forced by window.print",
-    "Does not certify every DOCX layout"
-  ],
-  "desktopAndSlowMobilePixelIdentical": true
+    "Windows Microsoft Print to PDF not automated",
+    "Font metrics and complex Word layouts may differ",
+    "Native print paper settings can override CSS requests"
+  ]
 }
