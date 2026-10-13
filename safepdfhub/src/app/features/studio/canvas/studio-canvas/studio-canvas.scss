@@ -1819,3 +1819,12 @@
 .studio-shape-palette > * {flex-shrink:0;}
 .studio-shape-palette__button {padding:6px 9px;}
 .studio-shape-palette__collapse {margin-left:auto;}
+
+.studio-canvas__upload-icon,.studio-canvas__upload-title { pointer-events:auto; cursor:pointer; font-family:inherit; }
+.studio-canvas__upload-icon { padding:0; flex-shrink:0; }
+.studio-canvas__upload-title { background:none; border:0; padding:0; margin:0; color:inherit; font:inherit; }
+.studio-canvas__upload-icon:focus-visible,.studio-canvas__upload-title:focus-visible { outline:2px solid #19ead3; outline-offset:6px; border-radius:8px; }
+.studio-canvas__upload-title:hover { color:#19ead3; }
+.studio-canvas__upload-icon:disabled,.studio-canvas__upload-title:disabled { cursor:wait; opacity:.6; }
+
+.studio-editor-object--page-number .studio-editor-object__text { padding:0; white-space:nowrap; }

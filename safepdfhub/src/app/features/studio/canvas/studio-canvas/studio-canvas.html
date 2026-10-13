@@ -207,6 +207,7 @@
               [style.transform]="getPdfTextTransform(object)"
               [style.transform-origin]="object.pdfText ? 'top left' : null"
               [class.studio-editor-object--rendered-source]="!!committedPreview() && (!!object.pdfText?.edited || !!object.pdfImage?.replaced)"
+              [class.studio-editor-object--page-number]="!!object.generatedPageNumber"
               [attr.data-object-id]="object.id"
               [attr.aria-selected]="
                 facade.selectedObjectId() === object.id
@@ -1317,16 +1318,10 @@
       class="studio-canvas__empty"
     >
 
-      <div
-        class="studio-canvas__empty-icon"
-        aria-hidden="true"
-      >
-        PDF
-      </div>
-
-      <h2>
-        Open a PDF
-      </h2>
+      <button type="button" class="studio-canvas__empty-icon studio-canvas__upload-icon"
+        aria-label="Open a PDF" title="Choose a PDF file" (click)="openPdf.emit()" [disabled]="facade.isLoading()">PDF</button>
+      <h2><button type="button" class="studio-canvas__upload-title" (click)="openPdf.emit()"
+        [disabled]="facade.isLoading()" title="Choose a PDF file">Open a PDF</button></h2>
 
       <p>
         Start editing your document in

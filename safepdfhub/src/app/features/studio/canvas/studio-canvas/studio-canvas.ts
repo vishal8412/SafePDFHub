@@ -10,6 +10,7 @@ import {
   PLATFORM_ID,
   ChangeDetectionStrategy,
   Component,
+  output,
   ElementRef,
   HostListener,
   OnDestroy,
@@ -123,6 +124,8 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     if (object.type !== 'signature' || !object.signing) return null;
     return object.signing.asset ?? null;
   }
+
+  readonly openPdf = output<void>();
 
   readonly facade =
     inject(StudioFacade);

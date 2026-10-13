@@ -1,3 +1,4 @@
+import { PageNumberBuilder, validatePageNumbers, type PageNumberOptions } from '../services/studio-page-numbering';
 import { StudioExportCache } from '../services/studio-export-cache';
 import {
   Injectable,
@@ -504,10 +505,7 @@ export class StudioFacade {
   }
 
   private collectAllObjects(): readonly StudioObject[] {
-    return Array.from(
-      { length: this.pageCount() },
-      (_, index) => this.objectService.listForPage(index + 1)
-    ).flat();
+    return [...this.objectService.snapshot()].sort((a,b)=>a.pageNumber-b.pageNumber);
   }
 
   private isPasswordRequiredError(error: unknown): boolean {
@@ -3240,6 +3238,28 @@ setCommentResolved(
   }
 
   return selection;
+}
+
+private readonly pageNumberBuilder = new PageNumberBuilder();
+
+async applyPageNumbers(options: PageNumberOptions, signal?: AbortSignal, progress?: (done:number,total:number)=>void): Promise<void> {
+  if (!this.hasDocument()) return;
+  this.flushTextDraft?.();
+  validatePageNumbers(options, this.pageCount());
+  const document = this.document();
+  if (!document) return;
+  const pages = this.pages();
+  const revision = this.history.revision();
+  const objects = await this.pageNumberBuilder.build(document.pdf, pages, options, signal, progress);
+  if (signal?.aborted) throw new DOMException('Page numbering cancelled.', 'AbortError');
+  if (this.document() !== document || this.pages() !== pages || this.history.revision() !== revision)
+    throw new Error('The document changed. Please apply page numbers again.');
+  // Capture once, immediately before the atomic commit; preserve background
+  // text analysis without serializing two entire document snapshots to compare.
+  const before = this.captureHistorySnapshot();
+  this.objectService.replacePageNumbers(objects);
+  this.state.clearSelection();
+  this.commitHistoryMutation('Add / update page numbers', before);
 }
 
 createTextObject(

@@ -152,6 +152,7 @@ export class StudioToolbar {
       kind: 'interaction'
     },
     { id: 'sign', label: 'Sign', shortcut: 'S', kind: 'interaction' },
+    { id: 'page-numbers', label: 'Page numbers', kind: 'action' },
     { id: 'watermark', label: 'Watermark', kind: 'action' },
 
     // {

@@ -1,7 +1,7 @@
 <div
   class="studio"
   [class.studio--showing-result]="!!facade.exportResult()"
-  [attr.inert]="facade.exportResult() ? '' : null"
+  [attr.inert]="facade.exportResult() || numberDialogOpen() ? '' : null"
   [class.studio--toolbar-collapsed]="!toolbarVisible()"
   [class.studio--header-collapsed]="!studioHeaderVisible()">
 
@@ -12,7 +12,7 @@
     }
   </div>
 
-  <app-studio-workspace />
+  <app-studio-workspace (openPdf)="openPdfPicker()" />
 
   <app-studio-status-bar
     [currentPage]="currentPage()"
@@ -409,4 +409,53 @@
       (download)="facade.downloadExport()" (editAgain)="continueEditing()" (processAnother)="openPdfPicker()"
     />
   </main>
+}
+
+@if (numberDialogOpen()) {
+  <div class="number-dialog-backdrop">
+    <section class="number-dialog" role="dialog" aria-modal="true" aria-labelledby="number-title" aria-describedby="number-description" studioDialogFocus (dialogEscape)="closeNumberDialog()" [attr.aria-busy]="numberBusy()">
+      <header class="number-dialog__header">
+        <div><span class="number-dialog__eyebrow">PDF STUDIO</span><h2 id="number-title">Page numbers</h2><p id="number-description">Choose where and how your pages are numbered.</p></div>
+        <button class="number-dialog__close" type="button" (click)="closeNumberDialog()" [attr.aria-label]="numberBusy() ? 'Cancel page numbering' : 'Close page numbers'">×</button>
+      </header>
+      <div class="number-dialog__body">
+        <fieldset class="number-dialog__settings" [disabled]="numberBusy()">
+          <div class="number-dialog__preview-column">
+            <label class="number-dialog__label" for="number-position">Position</label>
+            <select id="number-position" [(ngModel)]="numberOptions.position"><option value="top-left">Top left</option><option value="top-center">Top center</option><option value="top-right">Top right</option><option value="bottom-left">Bottom left</option><option value="bottom-center">Bottom center</option><option value="bottom-right">Bottom right</option></select>
+            <div class="number-dialog__page" aria-label="Illustrative page preview">
+              <div class="number-dialog__page-lines" aria-hidden="true"></div>
+              <strong class="number-dialog__sample" [class.at-top]="numberOptions.position.startsWith('top')" [style.text-align]="numberOptions.position.endsWith('left') ? 'left' : numberOptions.position.endsWith('right') ? 'right' : 'center'" [style.color]="numberOptions.color">{{ numberValidation() ? '—' : numberPreview() }}</strong>
+            </div>
+            <span class="number-dialog__hint">Position &amp; color preview</span>
+          </div>
+          <div class="number-dialog__fields">
+            <label class="number-dialog__field number-dialog__format">Format<select [(ngModel)]="numberOptions.format"><option value="number">1, 2, 3</option><option value="page">Page 1, Page 2</option><option value="total">1 / last number</option></select></label>
+            <label class="number-dialog__field">Start number<input type="number" min="0" max="999999" [(ngModel)]="numberOptions.start" /></label>
+            <label class="number-dialog__field">From page<input type="number" min="1" [max]="totalPages()" [(ngModel)]="numberOptions.from" /></label>
+            <label class="number-dialog__field">To page<input type="number" min="1" [max]="totalPages()" [(ngModel)]="numberOptions.to" /></label>
+            <label class="number-dialog__field">Font size · pt<input type="number" min="8" max="36" [(ngModel)]="numberOptions.size" /></label>
+            <label class="number-dialog__field">Edge margin · pt<input type="number" min="8" max="72" [(ngModel)]="numberOptions.margin" /></label>
+            <div class="number-dialog__color">
+              <label class="number-dialog__label" for="number-hex">Text color</label>
+              <div class="number-dialog__color-row">
+                @for (color of numberColors; track color) { <button type="button" class="number-dialog__swatch" [style.background-color]="color" [class.selected]="numberOptions.color.toLowerCase() === color" [attr.aria-pressed]="numberOptions.color.toLowerCase() === color" [attr.aria-label]="'Use color ' + color" (click)="setNumberColor(color)"></button> }
+                <input class="number-dialog__native-color" type="color" aria-label="Choose custom text color" [value]="numberOptions.color" (input)="setNumberColor($any($event.target).value)" (change)="setNumberColor($any($event.target).value)" />
+                <input id="number-hex" class="number-dialog__hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Text color hex code" [value]="numberOptions.color" (input)="setNumberColor($any($event.target).value)" />
+              </div>
+            </div>
+          </div>
+        </fieldset>
+        <p class="number-dialog__note">Reapplying replaces numbers added here. Existing printed numbers remain. Reapply after changing the page order.</p>
+        @if (numberValidation() || numberError()) { <p class="number-dialog__error" role="alert">{{ numberValidation() || numberError() }}</p> }
+        @if (numberBusy()) {
+          <div class="number-dialog__progress" role="status" aria-live="polite"><span>Preparing {{ numberProgress().done }} of {{ numberProgress().total }} pages…</span><progress [value]="numberProgress().done" [max]="numberProgress().total"></progress></div>
+        }
+      </div>
+      <footer class="number-dialog__footer">
+        <span class="number-dialog__hint">{{ numberValidation() ? 'Check your settings' : (numberOptions.to - numberOptions.from + 1) + ' pages selected' }} · Undo supported</span>
+        <div><button type="button" class="number-dialog__secondary" (click)="closeNumberDialog()">{{ numberBusy() ? 'Cancel operation' : 'Cancel' }}</button><button type="button" class="number-dialog__primary" [disabled]="numberBusy() || !!numberValidation()" (click)="applyNumbers()">{{ numberBusy() ? 'Applying…' : 'Apply numbers' }}</button></div>
+      </footer>
+    </section>
+  </div>
 }

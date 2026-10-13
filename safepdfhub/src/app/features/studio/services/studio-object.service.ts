@@ -142,11 +142,14 @@ export class StudioObjectService {
     this.touch();
   }
 
-  /**
-   * Batch object insertion/replacement for large operations such as applying
-   * a signing field to hundreds of pages. Clone once per object but notify the
-   * reactive layer only once at the end.
-   */
+  /** Replace generated numbers in one notification, retaining unrelated objects. */
+  replacePageNumbers(numbers: readonly StudioTextObject[]): void {
+    for (const [id, object] of this.objects) if (object.generatedPageNumber) this.objects.delete(id);
+    for (const object of numbers) this.objects.set(object.id, this.cloneObject(object));
+    this.touch();
+  }
+
+  /** Batch insertions notify the reactive layer only once. */
   addMany(objects: readonly StudioObject[]): void {
     if (!objects.length) return;
     for (const object of objects) {

@@ -255,6 +255,7 @@ export type StudioPdfTextFitMode =
 
 /** Common immutable identity and geometry shared by every Studio object. */
 export interface StudioObjectBase {
+  readonly generatedPageNumber?: boolean;
   /** Clockwise display rotation for inserted content; bounds remain its axis-aligned selection box. */
   readonly contentRotation?: number;
   readonly id: string;

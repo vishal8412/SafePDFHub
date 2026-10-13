@@ -1,3 +1,4 @@
+import { pageNumberText, validatePageNumbers, type PageNumberOptions } from '../../services/studio-page-numbering';
 import { StudioDialogFocusDirective } from '../../signing/studio-dialog-focus.directive';
 import { UnsavedWorkService } from '../../../../core/guards/unsaved-work.service';
 import { OperationResultComponent } from '../../../../shared/components/operation-result/operation-result.component';
@@ -101,6 +102,53 @@ export class StudioShellComponent implements OnDestroy {
   readonly securityDialogMode = this.facade.securityDialogMode;
   readonly securityDialogBusy = this.facade.securityDialogBusy;
   readonly securityDialogError = this.facade.securityDialogError;
+
+  readonly numberDialogOpen = signal(false);
+  readonly numberBusy = signal(false);
+  readonly numberError = signal<string | null>(null);
+  numberOptions: PageNumberOptions = { from:1, to:1, start:1, size:12, margin:24, position:'bottom-center', format:'number', color:'#101820' };
+  numberPreview(): string { return pageNumberText(this.numberOptions, this.numberOptions.from); }
+  numberValidation(): string | null {
+    try { validatePageNumbers(this.numberOptions, this.totalPages()); return null; }
+    catch (error) { return (error as Error).message; }
+  }
+  readonly numberProgress = signal({done:0,total:0});
+  readonly numberColors = ['#101820','#475569','#ef4444','#f97316','#00a891','#2563eb','#7c3aed','#ffffff'];
+  private numberAbort?: AbortController;
+  private numberDocumentId: string | null = null;
+  private numberPreviousPageCount = 0;
+  private openNumberDialog(): void {
+    const id=this.facade.document()?.id ?? null, count=this.totalPages();
+    if (id !== this.numberDocumentId) {
+      this.numberOptions={...this.numberOptions,from:1,to:count,start:1};
+    } else {
+      const to=this.numberOptions.to === this.numberPreviousPageCount ? count : Math.min(this.numberOptions.to,count);
+      this.numberOptions={...this.numberOptions,from:Math.min(this.numberOptions.from,to),to};
+    }
+    this.numberDocumentId=id; this.numberPreviousPageCount=count;
+    this.numberError.set(null); this.numberDialogOpen.set(true);
+  }
+  setNumberColor(value: string): void {
+    this.numberOptions.color=value.trim();
+    this.numberError.set(null);
+  }
+  closeNumberDialog(): void {
+    if (this.numberBusy()) { this.numberAbort?.abort(); return; }
+    this.numberDialogOpen.set(false);
+  }
+  async applyNumbers(): Promise<void> {
+    if (this.numberBusy() || this.numberValidation()) return;
+    this.numberAbort = new AbortController();
+    this.numberBusy.set(true); this.numberError.set(null);
+    this.numberProgress.set({done:0,total:this.numberOptions.to-this.numberOptions.from+1});
+    try {
+      await this.facade.applyPageNumbers({ ...this.numberOptions }, this.numberAbort.signal,
+        (done,total)=>this.numberProgress.set({done,total}));
+      this.numberDialogOpen.set(false);
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') this.numberError.set((error as Error).message || 'Could not add page numbers.');
+    } finally { this.numberBusy.set(false); this.numberAbort=undefined; }
+  }
 
   passwordInput = '';
   readonly signingDialogOpen = signal(false);
@@ -606,7 +654,7 @@ export class StudioShellComponent implements OnDestroy {
 
 @HostListener('window:keydown', ['$event'])
 onKeyDown(event: KeyboardEvent): void {
-  if (this.facade.exportBusy() || this.facade.exportResult()) return;
+  if (this.numberDialogOpen() || this.facade.exportBusy() || this.facade.exportResult()) return;
   if (!this.facade.hasDocument()) {
     return;
   }
@@ -753,6 +801,11 @@ onToolSelected(
       this.signingDialogOpen.set(true);
       return;
 
+    case 'page-numbers':
+      if (!this.facade.hasDocument() || this.isLoading()) return;
+      this.openNumberDialog();
+      return;
+
     case 'watermark':
       if (!this.facade.hasDocument()) return;
       this.watermark.open();
@@ -829,6 +882,7 @@ async onExportPdf(): Promise<void> {
   }
 
   ngOnDestroy(): void {
+    this.numberAbort?.abort();
     this.unregisterUnsavedWork();
     // Release signature data URLs and active signing state as soon as the
     // Studio route is destroyed. The service itself is component-scoped.
