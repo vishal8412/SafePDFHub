@@ -1,3 +1,5 @@
+import { wrapTextLines, isJustifiedLine } from './studio-text-preview';
+import { pdfjsFontOptions } from '../../../core/pdf/pdfjs-font-options';
 import { studioSourcePages } from './studio-source-page';
 import { pdfFontSize, textFontWeight, textFontStyle, pdfFontFaceChanged } from './studio-text-typography';
 import { pdfTextDestination } from './studio-pdf-text-geometry';
@@ -1932,6 +1934,7 @@ export class StudioPdfExportService {
 
     const loadingTask =
       pdfjs.getDocument({
+        ...pdfjsFontOptions(),
         data: sourceBytes.slice(),
         /*
          * PDF.js normally releases FontFaceObject.data after attaching the
@@ -2066,9 +2069,25 @@ export class StudioPdfExportService {
     return Math.max(0.25, Math.min(4, matrixScaleX * calibration));
   }
 
-  private drawTrackedText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, fontSize: number, tracking: number, color: ReturnType<typeof rgb>, rotate: ReturnType<typeof degrees>, metricScaleX = 1): void {
+  private drawTrackedText(page: PDFPage, text: string, x: number, y: number, font: PDFFont, fontSize: number, tracking: number, color: ReturnType<typeof rgb>, rotate: ReturnType<typeof degrees>, metricScaleX = 1, justifyWidth?: number): void {
     if (!text.length) return;
     const safeScaleX = Number.isFinite(metricScaleX) ? Math.max(0.25, Math.min(4, metricScaleX)) : 1;
+    if (justifyWidth !== undefined) {
+      const words = text.trim().split(/\s+/u);
+      const widths = words.map(word => this.textWidthWithTracking(word, font, fontSize, tracking) * safeScaleX);
+      const total = widths.reduce((sum, width) => sum + width, 0);
+      if (words.length > 1 && total <= justifyWidth) {
+        const gap = (justifyWidth - total) / (words.length - 1);
+        const angle = rotate.angle * Math.PI / 180;
+        let cursor = 0;
+        words.forEach((word, index) => {
+          this.drawTrackedText(page, word, x + Math.cos(angle) * cursor, y + Math.sin(angle) * cursor,
+            font, fontSize, tracking, color, rotate, safeScaleX);
+          cursor += widths[index] + gap;
+        });
+        return;
+      }
+    }
     if (tracking === 0 && Math.abs(safeScaleX - 1) < 0.002) {
       page.drawText(text, { x, y, size: fontSize, font, color, rotate });
       return;
@@ -2171,6 +2190,7 @@ export class StudioPdfExportService {
         this.hexToPdfRgb(object.pdfText?.textColor ?? object.textStyle?.color ?? '#000000'),
         degrees(rotation - (object.contentRotation ?? 0) - (object.pdfText?.rotation ?? 0)),
         this.resolveSourceScaleX(object),
+        object.textStyle?.textAlign === 'justify' && isJustifiedLine(object.text ?? '', lines, index) ? boxWidth : undefined,
       );
     }
   }
@@ -2228,6 +2248,7 @@ export class StudioPdfExportService {
       y -= vy * sourceLineHeight * index;
       this.drawTrackedText(
         page, line, x, y, font, fontSize, tracking, color, degrees(sourceRotation), scaleX,
+        alignment === 'justify' && isJustifiedLine(object.text ?? '', lines, index) ? sourceWidth : undefined,
       );
     }
   }
@@ -2369,71 +2390,7 @@ export class StudioPdfExportService {
     maxWidth: number,
     tracking = 0,
   ): string[] {
-    const sourceLines =
-      text
-        .replace(/\r\n/g, '\n')
-        .split('\n');
-
-    const result: string[] = [];
-
-    for (const sourceLine of sourceLines) {
-      if (sourceLine.length === 0) {
-        result.push('');
-        continue;
-      }
-
-      const words = sourceLine.split(/\s+/);
-      let current = '';
-
-      for (const word of words) {
-        let candidate = current
-          ? `${current} ${word}`
-          : word;
-
-        if (
-          current &&
-          this.textWidthWithTracking(candidate, font, fontSize, tracking) > maxWidth
-        ) {
-          result.push(current);
-          current = '';
-          candidate = word;
-        }
-
-        if (
-          !current &&
-          this.textWidthWithTracking(word, font, fontSize, tracking) > maxWidth
-        ) {
-          const chunks =
-            this.breakLongWord(
-              word,
-              font,
-              fontSize,
-              maxWidth,
-              tracking,
-            );
-
-          if (chunks.length > 1) {
-            result.push(
-              ...chunks.slice(0, -1),
-            );
-            current =
-              chunks[chunks.length - 1];
-          } else {
-            current = word;
-          }
-
-          continue;
-        }
-
-        current = candidate;
-      }
-
-      result.push(current);
-    }
-
-    return result.length
-      ? result
-      : [''];
+    return wrapTextLines(text, maxWidth, value => this.textWidthWithTracking(value, font, fontSize, tracking));
   }
 
   private breakLongWord(

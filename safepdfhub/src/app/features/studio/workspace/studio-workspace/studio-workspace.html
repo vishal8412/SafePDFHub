@@ -1,5 +1,6 @@
 <main
   class="studio-workspace"
+  [class.studio-workspace--focus-view]="focusView && !watermark.isOpen() && !organizeFocusMode()"
   [class.studio-workspace--watermark-open]="watermark.isOpen()"
   [class.studio-workspace--organize-focus]="organizeFocusMode()"
   aria-label="Studio workspace">

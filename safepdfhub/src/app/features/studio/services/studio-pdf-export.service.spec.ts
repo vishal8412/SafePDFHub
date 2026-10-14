@@ -20,6 +20,21 @@ describe('Studio PDF export regressions', () => {
     ] });
     service = TestBed.inject(StudioPdfExportService);
   });
+  it('justifies full lines within the PDF margins without stretching paragraph endings', async () => {
+    const doc=await PDFDocument.create(), page=doc.addPage([600,800]);
+    const font=await doc.embedFont('Helvetica');
+    const draw=vi.spyOn(page,'drawText');
+    service.drawEditedPdfTextFromSourceGeometry(page, {
+      text:'one two three four',textStyle:{textAlign:'justify'},
+      pdfText:{transform:[12,0,0,12,60,700],textWidthPdf:200,fontSizePdf:12}
+    },['one two','three four'],font,12,14.4);
+    const calls=draw.mock.calls;
+    expect(calls.map(call=>call[0])).toEqual(['one','two','three four']);
+    expect(calls[0][1]!.x).toBe(60);
+    expect(calls[1][1]!.x! + font.widthOfTextAtSize('two',12)).toBeCloseTo(260);
+    expect(calls[2][1]!.x).toBe(60);
+    expect(calls[2][1]!.y).toBeCloseTo(685.6);
+  });
   it('exports inserted text upright on an already rotated page', () => {
     const draw = vi.spyOn(service, 'drawTrackedText').mockImplementation(() => {});
     service.drawObject({getCropBox:()=>({x:10,y:20})}, {

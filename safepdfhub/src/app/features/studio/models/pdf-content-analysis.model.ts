@@ -16,6 +16,7 @@ export interface PdfSourceTextRun {
 }
 
 export interface PdfExistingTextBlock {
+  readonly textAlign?: 'left' | 'justify';
   readonly sourceLines?: readonly { transform: PdfTextTransform; width: number; height: number }[];
   readonly id: string;
   readonly pageNumber: number;

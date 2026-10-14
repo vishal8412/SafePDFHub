@@ -74,6 +74,21 @@ describe('Studio source analysis and editing regressions', () => {
     expect(result!.textBlocks[0].lineHeightPdf).toBe(24);
     expect(result!.textBlocks[0].sourceLines![1].transform[5]).toBe(656);
   });
+  it('preserves justified paragraph alignment through edit and restore without classifying ragged text', async () => {
+    for (const widths of [[470,469.7,470,330],[470,430,450,330]]) {
+      const page = pageFixture({fnArray:[8,7,7,7,7],argsArray:[['#123456'],[],[],[],[]]});
+      page.getTextContent = async () => ({items: widths.map((width,index)=>({
+        str:`Line ${index} with several words`, fontName:'F1', transform:[10.56,0,0,10.56,71.3,658.66-index*14.1],width,height:10.56
+      })),styles:{F1:{ascent:.75,descent:-.25}}});
+      const result=await new PdfContentAnalysisService().ensurePage(documentFixture(),1,async()=>page as any);
+      const block=result!.textBlocks[0], expected=widths[1]>469?'justify':'left';
+      expect(block.textAlign).toBe(expected);
+      const store=new StudioObjectService();store.syncPdfTextBlocks([block]);
+      expect(store.get(block.id)?.textStyle?.textAlign).toBe(expected);
+      store.updateTextStyle(block.id,{textAlign:'right'});
+      expect(store.restorePdfText(block.id)?.textStyle?.textAlign).toBe(expected);
+    }
+  });
   it('retains source text erase geometry when resizing and reanalyzing', async () => {
     const result=await new PdfContentAnalysisService().ensurePage(documentFixture(),1,async()=>pageFixture() as any);
     const store=new StudioObjectService();store.syncPdfTextBlocks(result!.textBlocks);

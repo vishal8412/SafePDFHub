@@ -56,6 +56,7 @@
             ><span><strong>Editing toolbar</strong><small>Text, images and annotations</small></span
             ><input type="checkbox" [checked]="toolbarVisible" (change)="toolbarToggle.emit()"
           /></label>
+          <label><span><strong>Focus view</strong><small>Hide side panels for a wider PDF view</small></span><input type="checkbox" [checked]="focusView" (change)="focusViewToggle.emit()" /></label>
         </div>
       </details>
     </nav>

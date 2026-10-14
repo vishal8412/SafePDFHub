@@ -1,3 +1,4 @@
+import { pdfjsFontOptions } from '../../../core/pdf/pdfjs-font-options';
 import {
   Injectable,
   PLATFORM_ID,
@@ -126,7 +127,7 @@ export class PdfEngineService {
 
     const loadingTask = pdfjs.getDocument({
       data,
-      disableFontFace: false,
+      ...pdfjsFontOptions(),
       fontExtraProperties: true
     });
 

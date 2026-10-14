@@ -1,3 +1,4 @@
+import { STUDIO_CANVAS_PADDING, studioZoomScale } from '../services/studio-view-layout';
 import { PageNumberBuilder, validatePageNumbers, type PageNumberOptions } from '../services/studio-page-numbering';
 import { StudioExportCache } from '../services/studio-export-cache';
 import {
@@ -600,7 +601,7 @@ async renderCurrentPage(
               mode: 'fit-width',
               rotation,
               viewportWidth,
-              padding: 32
+              padding: STUDIO_CANVAS_PADDING
             }
           );
 
@@ -635,7 +636,7 @@ async renderCurrentPage(
               rotation,
               viewportWidth,
               viewportHeight,
-              padding: 32
+              padding: STUDIO_CANVAS_PADDING
             }
           );
 
@@ -700,7 +701,7 @@ async renderCurrentPage(
         ? baseWidth
         : baseHeight;
 
-    const padding = 32;
+    const padding = STUDIO_CANVAS_PADDING;
 
     let scale = 1;
 
@@ -787,19 +788,8 @@ async renderCurrentPage(
     );
   }
 
-  private normalizeRenderZoom(
-    zoomPercent: number
-  ): number {
-
-    if (!Number.isFinite(zoomPercent)) {
-      return 1;
-    }
-
-    return this.clampRenderScale(
-      zoomPercent / 100,
-      0.5,
-      2
-    );
+  private normalizeRenderZoom(zoomPercent: number): number {
+    return studioZoomScale(zoomPercent);
   }
 
   private clampRenderScale(

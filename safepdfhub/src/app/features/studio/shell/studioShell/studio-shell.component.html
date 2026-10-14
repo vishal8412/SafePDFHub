@@ -5,14 +5,14 @@
   [class.studio--toolbar-collapsed]="!toolbarVisible()"
   [class.studio--header-collapsed]="!studioHeaderVisible()">
 
-  <app-studio-header [projectName]="projectName()" [browserProcessing]="browserProcessing()" [pdfLoaded]="pdfLoaded()" [documentBarVisible]="studioHeaderVisible()" [toolbarVisible]="toolbarVisible()" (documentBarToggle)="toggleStudioHeader()" (toolbarToggle)="toggleToolbar()" (exportPdf)="onExportPdf()" (security)="openSecurityMenu()" (openPdf)="openPdfPicker()" />
+  <app-studio-header [focusView]="focusView()" (focusViewToggle)="focusView.set(!focusView())" [projectName]="projectName()" [browserProcessing]="browserProcessing()" [pdfLoaded]="pdfLoaded()" [documentBarVisible]="studioHeaderVisible()" [toolbarVisible]="toolbarVisible()" (documentBarToggle)="toggleStudioHeader()" (toolbarToggle)="toggleToolbar()" (exportPdf)="onExportPdf()" (security)="openSecurityMenu()" (openPdf)="openPdfPicker()" />
   <div class="studio-toolbar-region">
     @if (toolbarVisible()) {
       <app-studio-toolbar [activeTool]="activeTool()" [canUndo]="canUndo()" [canRedo]="canRedo()" (toolSelected)="onToolSelected($event)" (undo)="onUndo()" (redo)="onRedo()" />
     }
   </div>
 
-  <app-studio-workspace (openPdf)="openPdfPicker()" />
+  <app-studio-workspace [focusView]="focusView()" (openPdf)="openPdfPicker()" />
 
   <app-studio-status-bar
     [currentPage]="currentPage()"

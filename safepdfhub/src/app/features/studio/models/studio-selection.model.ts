@@ -13,7 +13,8 @@ export type StudioObjectType =
 export type StudioTextAlign =
   | 'left'
   | 'center'
-  | 'right';
+  | 'right'
+  | 'justify';
 
 export type StudioTextFontWeight =
   | 400
@@ -39,6 +40,7 @@ export type StudioTextFontFamily =
  * as the original PDF font size during export.
  */
 export interface StudioPdfTextSource {
+  readonly sourceTextAlign?: StudioTextAlign;
   readonly sourceLines?: readonly { transform: readonly number[]; width: number; height: number }[];
   /** Original text extracted from the uploaded PDF. */
   readonly originalText: string;

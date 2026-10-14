@@ -1939,7 +1939,7 @@ app-studio-status-bar {
 @media(max-width:600px){:host{--studio-header-height:100px;}.studio-chrome-controls{gap:5px;padding:0 8px}.studio-chrome-controls > span{display:none}.studio-chrome-controls button{font-size:10px;}}
 
 /* Permanent brand/navigation row; the document row is optional. */
-:host{--studio-header-height:112px;}
+:host{--studio-header-height:98px;}
 .studio{grid-template-rows:var(--studio-header-row-height) var(--toolbar-row-height) minmax(0,1fr) var(--studio-status-bar-height);}
 .studio--header-collapsed{--studio-header-row-height:56px;}.studio-toolbar-region{grid-row:2;}app-studio-workspace{grid-row:3;}app-studio-status-bar{grid-row:4;}app-studio-header{overflow:visible;z-index:100;}
 .studio-security-dialog__panel--security{background:#0d1c2b;color:#eff7fb;border:1px solid #2b4659;border-radius:18px;width:min(620px,calc(100vw - 24px));max-height:calc(100dvh - 32px);padding:0;scrollbar-width:thin;scrollbar-color:#36596a transparent;}

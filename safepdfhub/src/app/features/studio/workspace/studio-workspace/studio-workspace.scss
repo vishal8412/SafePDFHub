@@ -2845,3 +2845,11 @@
   min-width: 0;
 }
 .sidebar__virtual-spacer { grid-column: 1 / -1; pointer-events: none; }
+
+/* On narrow screens these panels already use drawers. Keep those accessible. */
+@media (min-width:921px) {
+  .studio-workspace--focus-view { grid-template-columns:minmax(0,1fr); }
+  .studio-workspace--focus-view > .studio-workspace__left-sidebar,
+  .studio-workspace--focus-view > .studio-workspace__right-sidebar { display:none; }
+  .studio-workspace--focus-view > .studio-workspace__canvas { grid-column:1; width:100%; }
+}

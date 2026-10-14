@@ -1,3 +1,5 @@
+import { pdfjsFontOptions } from '../../../../core/pdf/pdfjs-font-options';
+import { STUDIO_CANVAS_PADDING } from '../../services/studio-view-layout';
 import { pdfFontSize, textFontWeight, textFontStyle, pdfFontFaceChanged } from '../../services/studio-text-typography';
 import { fitPreviewFontSize } from '../../services/studio-text-preview';
 import { readStudioImage } from '../../services/studio-image-import';
@@ -125,6 +127,7 @@ export class StudioCanvas implements AfterViewInit, OnDestroy {
     return object.signing.asset ?? null;
   }
 
+  readonly canvasPadding = STUDIO_CANVAS_PADDING;
   readonly openPdf = output<void>();
 
   readonly facade =
@@ -503,7 +506,7 @@ private activeRenderVersion: number | null = null;
             if (this.destroyed || generation !== this.previewGeneration) return;
             const pdfjs = await import('pdfjs-dist');
             pdfjs.GlobalWorkerOptions.workerSrc = '/assets/pdfjs/pdf.worker.min.mjs';
-            pdf = await pdfjs.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
+            pdf = await pdfjs.getDocument({ ...pdfjsFontOptions(), data: new Uint8Array(await blob.arrayBuffer()) }).promise;
             const page = await pdf.getPage(1);
             const natural = page.getViewport({ scale: 1 });
             const scale = Math.min(2, 1600 / Math.max(natural.width, natural.height));

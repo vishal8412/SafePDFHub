@@ -20,6 +20,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StudioHeader {
+  @Input() focusView = false;
+  @Output() readonly focusViewToggle = new EventEmitter<void>();
   @Input() documentBarVisible = true;
   @Input() toolbarVisible = true;
   @Output() readonly documentBarToggle = new EventEmitter<void>();

@@ -1,3 +1,4 @@
+import { studioZoomScale } from './studio-view-layout';
 import {
   Injectable
 } from '@angular/core';
@@ -314,9 +315,9 @@ export class PdfPageRendererService {
 
     await previousQueue;
 
-    this.throwIfRequestIsStale(state, requestVersion);
-
     try {
+      // Superseded blank renders must still release their queue gate.
+      this.throwIfRequestIsStale(state, requestVersion);
 
       if (state.task) {
         try {
@@ -667,23 +668,8 @@ export class PdfPageRendererService {
   );
 }
 
-  private normalizeZoom(
-    zoomPercent: number
-  ): number {
-
-    if (
-      !Number.isFinite(zoomPercent)
-    ) {
-      return 1;
-    }
-
-    return Math.min(
-      Math.max(
-        zoomPercent / 100,
-        0.5
-      ),
-      2
-    );
+  private normalizeZoom(zoomPercent: number): number {
+    return studioZoomScale(zoomPercent);
   }
 
   private getDevicePixelRatio(): number {

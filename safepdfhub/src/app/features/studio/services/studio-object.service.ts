@@ -203,7 +203,7 @@ export class StudioObjectService {
             transformScaleY: block.transformScaleY,
             baselineXPdf: block.baselineXPdf,
             baselineYPdf: block.baselineYPdf,
-            sourceLines: block.sourceLines, sourceRuns: block.sourceRuns
+            sourceTextAlign: block.textAlign, sourceLines: block.sourceLines, sourceRuns: block.sourceRuns
           };
           const sourceBounds = this.resolvePdfSourceTextBounds(block);
           let destinationBounds = currentSource.sourceBounds ? existing.bounds : sourceBounds;
@@ -276,7 +276,7 @@ export class StudioObjectService {
         transformScaleY: block.transformScaleY,
         baselineXPdf: block.baselineXPdf,
         baselineYPdf: block.baselineYPdf,
-        sourceLines: block.sourceLines, sourceRuns: block.sourceRuns,
+        sourceTextAlign: block.textAlign, sourceLines: block.sourceLines, sourceRuns: block.sourceRuns,
         // Source-PDF covers never use horizontal padding. The legacy field is
         // retained for backwards compatibility but is normalized to zero.
         coverPadding: 0,
@@ -300,6 +300,7 @@ export class StudioObjectService {
           fontSize: estimatedFontSize,
           fontWeight: block.fontWeight >= 600 ? 700 : 400,
           fontStyle: block.fontStyle,
+          textAlign: block.textAlign ?? 'left',
           fontFamily: this.mapPdfFontFamily(block.sourceFontFamily || block.fontFamily || block.fontName)
         },
         pdfText: source
@@ -410,7 +411,7 @@ export class StudioObjectService {
       textStyle: object.textStyle ? { ...object.textStyle,
         fontSize: (object.pdfText.fontSizePdf ?? 12) / (object.pdfText.pageHeightPdf ?? 800),
         fontWeight: object.pdfText.sourceFontWeight ?? 400,
-        fontStyle: object.pdfText.sourceFontStyle ?? 'normal', textAlign: 'left' } : object.textStyle,
+        fontStyle: object.pdfText.sourceFontStyle ?? 'normal', textAlign: object.pdfText.sourceTextAlign ?? 'left' } : object.textStyle,
       pdfText: { ...object.pdfText, sourceBounds: undefined, edited: false,
         replacementFontSizePdf: undefined, replacementFontWeight: undefined, replacementFontStyle: undefined }
     };
@@ -1779,7 +1780,8 @@ export class StudioObjectService {
 
     return (
       value === 'center' ||
-      value === 'right'
+      value === 'right' ||
+      value === 'justify'
         ? value
         : 'left'
     );

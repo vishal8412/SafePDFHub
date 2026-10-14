@@ -18,6 +18,7 @@
     <div
       #pdfStage
       class="studio-canvas__stage"
+      [style.padding.px]="canvasPadding"
       [class.studio-canvas__stage--hand]="
         facade.activeTool() === 'hand'
       "
@@ -1264,6 +1265,11 @@
       >
         ≡
       </button>
+
+      <button type="button" class="studio-text-toolbar__button"
+        [class.is-active]="editingTextObject.textStyle?.textAlign === 'justify'"
+        aria-label="Justify paragraph" title="Justify paragraph"
+        (click)="setTextAlign('justify')">☰</button>
 
       <span
         class="studio-text-toolbar__divider"

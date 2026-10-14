@@ -38,12 +38,12 @@
 
   display: flex;
 
-  justify-content: center;
+  justify-content: safe center;
   align-items: flex-start;
 
   box-sizing: border-box;
 
-  padding: 32px;
+  padding: 12px;
 
   user-select: none;
 
@@ -599,7 +599,7 @@
 @media (max-width: 900px) {
 
   .studio-canvas__stage {
-    padding: 20px;
+    padding: 12px;
   }
 
   .studio-selection-box::after {

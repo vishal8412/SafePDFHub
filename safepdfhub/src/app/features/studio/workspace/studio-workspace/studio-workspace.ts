@@ -3,6 +3,7 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  Input,
   output,
   ElementRef,
   QueryList,
@@ -39,6 +40,7 @@ import type { StudioSidebarPageView } from '../../models/studio-sidebar.model';
 export class StudioWorkspace
   implements AfterViewInit {
 
+  @Input() focusView = false;
   readonly openPdf = output<void>();
 
   readonly facade = inject(StudioFacade);

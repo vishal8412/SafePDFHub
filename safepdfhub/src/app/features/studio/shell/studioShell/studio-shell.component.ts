@@ -1,3 +1,4 @@
+import { studioZoomPercent } from '../../services/studio-view-layout';
 import { pageNumberText, validatePageNumbers, type PageNumberOptions } from '../../services/studio-page-numbering';
 import { StudioDialogFocusDirective } from '../../signing/studio-dialog-focus.directive';
 import { UnsavedWorkService } from '../../../../core/guards/unsaved-work.service';
@@ -74,7 +75,7 @@ export class StudioShellComponent implements OnDestroy {
 
   readonly browserProcessing = this.facade.isReady;
 
-  readonly zoom = computed(() => this.facade.viewMode() === 'zoom' ? this.facade.zoom() : Math.round(this.facade.renderScale() * 100));
+  readonly zoom = computed(() => this.facade.viewMode() === 'zoom' ? this.facade.zoom() : studioZoomPercent(this.facade.renderScale()));
 
   readonly viewMode = this.facade.viewMode;
 
@@ -169,6 +170,8 @@ export class StudioShellComponent implements OnDestroy {
    * controlled separately so collapsing one never
    * collapses the other.
    */
+  readonly focusView = signal(false);
+
   readonly toolbarVisible =
     signal(true);
 

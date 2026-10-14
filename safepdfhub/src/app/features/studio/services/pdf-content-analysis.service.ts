@@ -550,7 +550,16 @@ export class PdfContentAnalysisService {
       const y = Math.min(...group.map(line => line.y));
       const bottom = Math.max(...group.map(line => line.y + line.height));
       const leftPdf = Math.min(...group.map(line => line.baselineXPdf));
+      // Infer justification only from several full lines sharing both margins.
+      // The shorter final line is normal for a justified paragraph.
+      const fullLines = group.slice(0, -1);
+      const tolerance = Math.max(.75, first.fontSizePdf * .08);
+      const justified = group.length >= 3 && !first.tableId && fullLines.every(line =>
+        Math.abs(line.baselineXPdf - leftPdf) <= tolerance &&
+        Math.abs(line.baselineXPdf + line.textWidthPdf - right * first.pageWidthPdf) <= tolerance)
+        && last.textWidthPdf < (right - x) * first.pageWidthPdf * .95;
       return { ...first,
+        textAlign: justified ? 'justify' : 'left',
         text: group.length === 1 ? first.text : group.map(line => line.text.trim()).join(' '),
         x, y, width: cells.has(first.id) ? cells.get(first.id)!.widthPdf / first.pageWidthPdf : right - x, height: bottom - y,
         textWidthPdf: cells.get(first.id)?.widthPdf ?? (right - x) * first.pageWidthPdf,
