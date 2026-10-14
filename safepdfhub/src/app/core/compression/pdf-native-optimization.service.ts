@@ -36,7 +36,10 @@ export class PdfNativeOptimizationService {
       };
       worker.onerror = () => { cleanup(); resolve([]); };
       worker.onmessageerror = () => { cleanup(); resolve([]); };
-      try { worker.postMessage({ file, options }); } catch { cleanup(); resolve([]); }
+      const memory = (navigator as Navigator & {deviceMemory?: number}).deviceMemory ?? 0;
+      const pixelBudget = memory >= 8 ? 32_000_000 : memory >= 4 ? 16_000_000 : 8_000_000;
+      const boundedOptions = { ...options, maxImagePixels: Math.min(options.maxImagePixels ?? pixelBudget, pixelBudget) };
+      try { worker.postMessage({ file, options: boundedOptions }); } catch { cleanup(); resolve([]); }
     });
   }
 }

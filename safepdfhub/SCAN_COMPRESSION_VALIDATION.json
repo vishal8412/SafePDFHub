@@ -1,0 +1,69 @@
+{
+  "baseline": "Uploaded src(10), scripts(10), package(10), lockfile and Angular/TypeScript configurations",
+  "input_bytes": 143288037,
+  "pages": 240,
+  "browser": "Chromium 138; desktop 8 GiB capability profile",
+  "runs": [
+    {
+      "target_bytes": 20000000,
+      "output_bytes": 19663707,
+      "elapsed_seconds": 86.392,
+      "target_met": true
+    },
+    {
+      "target_bytes": 5000000,
+      "output_bytes": 17651102,
+      "elapsed_seconds": 80.862,
+      "target_met": false
+    }
+  ],
+  "validation": {
+    "page_count": 240,
+    "image_uses_retained": 480,
+    "image_uses_recompressed": 240,
+    "image_uses_unchanged": 240,
+    "page_boxes_rotations_and_decoded_content_streams": "identical",
+    "metadata_including_empty_date": "identical",
+    "visual_spot_checks": [
+      1,
+      120,
+      240
+    ],
+    "focused_tests_passed": 37,
+    "production_build": "passed"
+  },
+  "limitations": [
+    "Lossy image recompression reduces resolution and detail; compare important fine print with the original.",
+    "5 MB was not reached by the bounded search.",
+    "Lower-memory large-file paths retain conservative limits and can return lossless/original output.",
+    "Timing depends on the device and document."
+  ],
+  "ordinary_mode_followup_runs": [
+    {
+      "mode": "smart",
+      "custom_target_enabled": false,
+      "output_bytes": 19663707,
+      "elapsed_seconds": 86.854
+    },
+    {
+      "mode": "strong",
+      "custom_target_enabled": false,
+      "output_bytes": 16155721,
+      "elapsed_seconds": 83.925
+    }
+  ],
+  "followup_visual_spot_checks": {
+    "smart": [
+      120
+    ],
+    "strong": [
+      1,
+      120
+    ]
+  },
+  "old_ordinary_modes": {
+    "smart_bytes": 108522160,
+    "strong_bytes": 37778752
+  },
+  "ordinary_mode_structural_validation": "Both: all 240 pages, 480 image uses, geometry, rotations, decoded drawing streams and metadata retained."
+}

@@ -2,7 +2,7 @@ import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFObject, PDFRawSt
 import { captureDocumentFacts, PdfDocumentFacts } from './pdf-document-facts';
 import { CompressionLevel } from './compression.types';
 
-export interface NativeOptimizationOptions { level?: CompressionLevel; targetBytes?: number; retainOnlyBest?: boolean; }
+export interface NativeOptimizationOptions { level?: CompressionLevel; targetBytes?: number; retainOnlyBest?: boolean; maxImagePixels?: number; }
 
 /** Each candidate still requires final semantic and visual certification. */
 export async function optimizeNativeCandidates(bytes: Uint8Array, options: NativeOptimizationOptions = {}, onSourceFacts?: (facts: PdfDocumentFacts) => void): Promise<Uint8Array[]> {
@@ -85,21 +85,33 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
   };
   const lossless = await save();
   const candidates = lossless.length < bytes.length ? [lossless] : [];
-  const target = options.targetBytes;
+  let target = options.targetBytes;
   const level = options.level ?? 'light';
-  if (level === 'light' || (target && lossless.length <= target) || typeof OffscreenCanvas === 'undefined') return candidates;
+  if ((level === 'light' && !target) || (target && lossless.length <= target) || typeof OffscreenCanvas === 'undefined') return candidates;
 
   // Decode one supported image at a time, never rasterize pages or their text.
   const images = pdf.context.enumerateIndirectObjects().filter((entry): entry is [PDFRef, PDFRawStream] =>
     entry[1] instanceof PDFRawStream && entry[1].dict.get(PDFName.of('Subtype')) === PDFName.of('Image'));
   const imageBytes = images.reduce((sum, [, image]) => sum + image.getContents().length, 0);
-  const qualities = target ? targetQualityLadder(lossless.length, imageBytes, target)
+  // Large scan-heavy PDFs need a byte-budget search even when the user has
+  // not enabled a custom target. A fixed JPEG quality alone can leave tens of
+  // megabytes of photographic paper texture. Never apply this to High Quality.
+  const largeImages = images.filter(([, image]) => {
+    const width = pdf.context.lookup(image.dict.get(PDFName.of('Width')));
+    const height = pdf.context.lookup(image.dict.get(PDFName.of('Height')));
+    return width instanceof PDFNumber && height instanceof PDFNumber && width.asNumber() * height.asNumber() >= 1_000_000;
+  }).length;
+  target ??= automaticScanTarget(level, lossless.length, imageBytes, largeImages, pdf.getPageCount());
+  const qualities = target ? (options.targetBytes === undefined && level === 'strong' ? [0.55, 0.40] : [0.65, 0.48])
     : [level === 'recommended' ? 0.82 : 0.55];
+  const maxPixels = Math.min(32_000_000, options.maxImagePixels ?? 8_000_000);
+  let maxEdge = target ? Math.max(1000, Math.min(2400, Math.round(3200 * Math.cbrt(target / Math.max(lossless.length, 1)))))
+    : level === 'recommended' ? 2400 : 1600;
   let best = lossless;
   for (const quality of qualities) {
     for (const [ref, original] of images) {
       try {
-        const replacement = await recompressImage(pdf, original, quality);
+        const replacement = await recompressImage(pdf, original, quality, maxEdge, maxPixels);
         // Every pass starts from the original image, avoiding generational loss.
         pdf.context.assign(ref, replacement ?? original);
       } catch { pdf.context.assign(ref, original); }
@@ -113,6 +125,7 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
       }
     }
     if (target && best.length <= target) break;
+    if (target) maxEdge = Math.max(1000, Math.floor(maxEdge * Math.min(0.95, Math.sqrt(target / best.length * 0.95))));
   }
   return candidates;
 }
@@ -121,18 +134,23 @@ export async function optimizeNativePdf(bytes: Uint8Array): Promise<Uint8Array |
   return (await optimizeNativeCandidates(bytes))[0] ?? null;
 }
 
-async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: number): Promise<PDFRawStream | null> {
+async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: number, maxEdge: number, maxPixels: number): Promise<PDFRawStream | null> {
   const dict = stream.dict;
   const get = (key: string) => pdf.context.lookup(dict.get(PDFName.of(key)));
   // Preserve masks, color conversion, unusual codecs and tiny line-art exactly.
-  if (['Decode', 'DecodeParms', 'ImageMask', 'Mask', 'F', 'SMaskInData'].some(key => dict.has(PDFName.of(key)))) return null;
+  if (['Decode', 'DecodeParms', 'ImageMask', 'Mask', 'SMask', 'F', 'SMaskInData'].some(key => dict.has(PDFName.of(key)))) return null;
   if (get('ColorSpace') !== PDFName.of('DeviceRGB') || (get('BitsPerComponent') as PDFNumber)?.asNumber?.() !== 8) return null;
   const width = (get('Width') as PDFNumber)?.asNumber?.() ?? 0;
   const height = (get('Height') as PDFNumber)?.asNumber?.() ?? 0;
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width * height > 8_000_000 || width * height < 65_536) return null;
-  const filter = get('Filter');
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width * height > maxPixels || width * height < 65_536) return null;
+  let filter = get('Filter');
+  // A one-element Filter array is semantically identical to a single name.
+  if (filter instanceof PDFArray && filter.size() === 1) filter = pdf.context.lookup(filter.get(0));
   if (filter && filter !== PDFName.of('DCTDecode') && filter !== PDFName.of('FlateDecode')) return null;
-  const canvas = new OffscreenCanvas(width, height);
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  const outputWidth = Math.max(1, Math.round(width * scale));
+  const outputHeight = Math.max(1, Math.round(height * scale));
+  const canvas = new OffscreenCanvas(outputWidth, outputHeight);
   const context = canvas.getContext('2d');
   if (!context) return null;
   try {
@@ -140,7 +158,8 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
       const bitmap = await createImageBitmap(new Blob([new Uint8Array(stream.getContents())], { type: 'image/jpeg' }));
       try {
         if (bitmap.width !== width || bitmap.height !== height) return null;
-        context.drawImage(bitmap, 0, 0);
+        context.imageSmoothingEnabled = true; context.imageSmoothingQuality = 'high';
+        context.drawImage(bitmap, 0, 0, outputWidth, outputHeight);
       } finally { bitmap.close(); }
     } else {
       const rgb = decodePDFRawStream(stream).getBytes(width * height * 3 + 1);
@@ -149,11 +168,23 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
       for (let i = 0, j = 0; i < rgb.length; i += 3, j += 4) {
         pixels.data[j] = rgb[i]; pixels.data[j + 1] = rgb[i + 1]; pixels.data[j + 2] = rgb[i + 2]; pixels.data[j + 3] = 255;
       }
-      context.putImageData(pixels, 0, 0);
+      if (scale === 1) context.putImageData(pixels, 0, 0);
+      else {
+        const staging = new OffscreenCanvas(width, height);
+        try {
+          const stagingContext = staging.getContext('2d');
+          if (!stagingContext) return null;
+          stagingContext.putImageData(pixels, 0, 0);
+          context.imageSmoothingEnabled = true; context.imageSmoothingQuality = 'high';
+          context.drawImage(staging, 0, 0, outputWidth, outputHeight);
+        } finally { staging.width = staging.height = 1; }
+      }
     }
     const jpeg = await canvas.convertToBlob({ type: 'image/jpeg', quality });
     if (jpeg.type !== 'image/jpeg' || jpeg.size + 32 >= stream.getContents().length) return null;
     const dictionary = dict.clone(pdf.context);
+    dictionary.set(PDFName.of('Width'), PDFNumber.of(outputWidth));
+    dictionary.set(PDFName.of('Height'), PDFNumber.of(outputHeight));
     dictionary.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
     const bytes = new Uint8Array(await jpeg.arrayBuffer());
     dictionary.set(PDFName.of('Length'), PDFNumber.of(bytes.length));
@@ -170,4 +201,10 @@ export function targetQualityLadder(losslessBytes: number, imageBytes: number, t
   if (requiredImageReduction >= 0.40) return [0.45];
   if (requiredImageReduction >= 0.20) return [0.65, 0.45];
   return [0.82, 0.65, 0.45];
+}
+
+/** Best-effort scan budgets; custom limits always take precedence at the caller. */
+export function automaticScanTarget(level: CompressionLevel, bytes: number, imageBytes: number, largeImages: number, pages: number): number | undefined {
+  if (level === 'light' || bytes <= 20_000_000 || pages <= 0 || imageBytes < bytes * 0.9 || largeImages < pages * 0.8) return undefined;
+  return level === 'strong' ? 10_000_000 : 20_000_000;
 }

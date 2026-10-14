@@ -270,7 +270,7 @@
       [ngModel]="targetSizeMB" (ngModelChange)="setTarget($event === null ? 0 : $event)"
       [disabled]="loading || compressing" [attr.aria-invalid]="targetInvalid" aria-describedby="target-help" />
     <div class="target-presets">
-      <button type="button" *ngFor="let size of [1, 2, 5]" (click)="setTarget(size)" [disabled]="loading || compressing">{{ size }} MB</button>
+      <button type="button" *ngFor="let size of [1, 2, 5, 10, 20]" (click)="setTarget(size)" [disabled]="loading || compressing">{{ size }} MB</button>
     </div>
     <p id="target-help">{{ largeFileMode ? 'Above 200 MB, the target is checked against lossless output only.' : 'Tries lossless optimization first, then stronger image compression within device limits.' }} The result will say whether it meets your limit. Very small targets may be impossible while preserving all content.</p>
     <p *ngIf="targetInvalid" role="alert">Enter a size greater than 0 and no more than 10,000 MB.</p>

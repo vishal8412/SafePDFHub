@@ -85,7 +85,7 @@ export class LargeCompressionService {
           let pages: number;
           try {
             pages = await this.runWorker(file, directory, signal, n => progress(Math.round(n * 0.4)),
-              { outputName: 'output.pdf', nativeOptions: native ? options : undefined, quality: firstQuality, timeoutMs: Math.max(1, Math.min(native ? 180_000 : 300_000, deadline - Date.now())) });
+              { outputName: 'output.pdf', nativeOptions: native ? options : undefined, quality: firstQuality, timeoutMs: Math.max(1, Math.min(native ? 240_000 : 300_000, deadline - Date.now())) });
           } catch (error) {
             throwIfCompressionCancelled(signal);
             if ((!native && firstQuality === undefined) || error instanceof CompressionCancelledError || Date.now() >= deadline) throw error;

@@ -17,3 +17,17 @@ describe('Worker source facts', () => {
     expect(facts.metadata[0]).toBe('Original');
   });
 });
+
+it('retains empty scanner dates without throwing during validation', async () => {
+  const pdf = await PDFDocument.create({updateMetadata:false});
+  pdf.addPage();
+  pdf.setTitle('Scanned pages');
+  const {PDFDict, PDFName, PDFString} = await import('pdf-lib');
+  const info = pdf.context.lookup(pdf.context.trailerInfo.Info);
+  if (!(info instanceof PDFDict)) throw Error('Missing test Info dictionary');
+  info.set(PDFName.of('ModDate'), PDFString.of(''));
+  info.set(PDFName.of('CreationDate'), PDFString.of('not-a-date'));
+  const source = captureDocumentFacts(pdf);
+  const parsed = await PDFDocument.load(await pdf.save(), {updateMetadata:false});
+  expect(captureDocumentFacts(parsed)).toEqual(source);
+});

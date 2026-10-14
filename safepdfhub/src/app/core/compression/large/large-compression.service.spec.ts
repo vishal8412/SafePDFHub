@@ -144,7 +144,7 @@ describe('200 MB native routing and fallback', () => {
         const first = run.mock.calls[0][4] as any;
         expect(!!first.nativeOptions).toBe(native);
         if (native) {
-          expect(first.timeoutMs).toBeLessThanOrEqual(180000);
+          expect(first.timeoutMs).toBeLessThanOrEqual(240000);
           expect(run).toHaveBeenCalledTimes(2);
           expect((run.mock.calls[1][4] as any).nativeOptions).toBeUndefined();
           expect(result.note).toContain('lossless');

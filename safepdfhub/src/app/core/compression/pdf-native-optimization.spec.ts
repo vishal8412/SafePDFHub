@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
-import { optimizeNativePdf, targetQualityLadder } from './pdf-native-optimization';
+import { automaticScanTarget, optimizeNativePdf, targetQualityLadder } from './pdf-native-optimization';
 
 describe('Native lossless worker algorithm', () => {
   it('compresses unfiltered streams and preserves content, metadata and page boxes', async () => {
@@ -57,5 +57,19 @@ describe('Target byte-budget search', () => {
     expect(targetQualityLadder(1_200_000, 1_000_000, 950_000)).toEqual([0.65, 0.45]);
     expect(targetQualityLadder(1_200_000, 0, 1_000_000)).toEqual([]);
     expect(targetQualityLadder(1_200_000, 1_000_000, 2_000_000)).toEqual([]);
+  });
+});
+
+describe('Automatic large-scan budget', () => {
+  it('gives Smart and Maximum Reduction different budgets for image-dominated documents', () => {
+    expect(automaticScanTarget('recommended', 143_000_000, 142_000_000, 240, 240)).toBe(20_000_000);
+    expect(automaticScanTarget('strong', 143_000_000, 142_000_000, 240, 240)).toBe(10_000_000);
+  });
+  it('keeps lossless, small and non-scan documents outside the automatic search', () => {
+    expect(automaticScanTarget('light', 143_000_000, 142_000_000, 240, 240)).toBeUndefined();
+    expect(automaticScanTarget('recommended', 19_000_000, 18_900_000, 240, 240)).toBeUndefined();
+    expect(automaticScanTarget('recommended', 143_000_000, 50_000_000, 240, 240)).toBeUndefined();
+    expect(automaticScanTarget('recommended', 143_000_000, 142_000_000, 10, 240)).toBeUndefined();
+    expect(automaticScanTarget('recommended', 143_000_000, 142_000_000, 0, 0)).toBeUndefined();
   });
 });

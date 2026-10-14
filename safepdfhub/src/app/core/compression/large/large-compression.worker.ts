@@ -65,7 +65,7 @@ self.onmessage = async ({ data }: MessageEvent) => {
         postMessage({ type: 'phase', operation: ['native-optimization'] });
         let sourceFacts: unknown;
         let bytes = new Uint8Array(await file.arrayBuffer());
-        const candidates = await optimizeNativeCandidates(bytes, { ...nativeOptions, retainOnlyBest: true }, facts => { sourceFacts = facts; });
+        const candidates = await optimizeNativeCandidates(bytes, { ...nativeOptions, retainOnlyBest: true, maxImagePixels: memoryMiB >= 512 ? 32_000_000 : 12_000_000 }, facts => { sourceFacts = facts; });
         let best: Uint8Array = bytes;
         for (const candidate of candidates) if (candidate.length < best.length) best = candidate;
         candidates.length = 0;
