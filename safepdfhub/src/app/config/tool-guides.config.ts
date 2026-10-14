@@ -2,13 +2,13 @@
 export interface ToolGuide { steps: string[]; questions: { question: string; answer: string }[]; }
 export const TOOL_GUIDES: Record<string, ToolGuide> = {
   'word-to-pdf': {
-    steps: ['Choose an unencrypted DOCX from your device.', 'Prepare a private preview and review fonts, tables, images and layout.', 'Choose Save as PDF. In the browser print dialog, review the final pages and save your document.'],
+    steps: ['Choose a DOCX file from your device.', 'Click Convert to PDF and keep the tab open while it processes locally.', 'Download the generated PDF from the result screen.'],
     questions: [
-      { question: 'Does my Word file leave my device?', answer: 'No. Document checks and rendering run in your browser. No Docker or conversion server is required.' },
-      { question: 'Will the layout match Microsoft Word?', answer: 'Not always. Missing fonts, floating objects, automatic pagination and repeated headers can differ. Review both the document preview and final print preview. Unsupported content is rejected when detected; checks cannot identify every layout difference.' },
-      { question: 'Why does Save as PDF open a print dialog?', answer: 'The browser print engine creates the PDF. Select Save as PDF and review paper size, margins and scale. Disable browser headers and footers. The website cannot silently save the PDF or confirm that you saved it.' },
-      { question: 'How large can my DOCX be?', answer: 'The input limit is 200 MB, with no fixed page-count limit. Expanded archive size, document complexity and image pixels are checked separately. Large files can exceed browser resources even below 200 MB. Devices reporting limited memory use a smaller expanded-content budget.' },
-      { question: 'Which files are supported?', answer: 'Use an unencrypted DOCX with ordinary text and embedded PNG or JPEG images. Old DOC files must be saved as DOCX first. Macros, embedded objects and external linked images are rejected. Some image formats and advanced Word features are unsupported.' }
+      { question: 'Does my Word file leave my device?', answer: 'No. DOCX reading and PDF generation run locally in your browser. Only bundled conversion fonts are loaded from this website.' },
+      { question: 'Will the layout match Microsoft Word?', answer: 'Compatible fonts and local pagination can change line breaks. Ordinary text, images, simple tables, and text headers and footers are supported. Advanced layouts may be rejected. Check the converted PDF and any conversion notes.' },
+      { question: 'Do I need the print dialog?', answer: 'No. The converter generates a PDF file directly. Click Download PDF when conversion finishes.' },
+      { question: 'How large can my DOCX be?', answer: 'The input limit is 200 MB. Archive parts are read as needed without copying the complete file into JavaScript memory. Available device memory and document complexity still affect conversion. Individual parts have resource limits.' },
+      { question: 'Which files are supported?', answer: 'Use an unencrypted DOCX with embedded PNG or JPEG images. Save older DOC files as DOCX first. Grouped drawings and DrawingML text boxes are supported. Macros, external images, equations, legacy VML-only drawings, footnotes, nested tables and multi-column layouts are not currently supported.' }
     ]
   },
   'pdf-to-word': {

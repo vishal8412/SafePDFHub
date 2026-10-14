@@ -1,126 +1,77 @@
-<section class="word-panel" aria-labelledby="word-pdf-heading">
-  <div class="word-heading">
-    <div>
-      <span class="eyebrow">PRIVATE · ON YOUR DEVICE</span>
-      <h1 id="word-pdf-heading">Word to PDF, without uploads</h1>
-      <p>Prepare your document, check its appearance, then save a PDF using your browser.</p>
+<ng-container *ngIf="result; else ready">
+  <app-operation-result
+    [file]="result.file"
+    [originalFileName]="file.name"
+    [durationMs]="result.durationMs"
+    eyebrow="CONVERSION COMPLETE"
+    title="Your PDF is ready"
+    [description]="
+      result.pages +
+      (result.pages === 1
+        ? ' page converted locally.'
+        : ' pages converted locally.')
+    "
+    operationLabel="Converted PDF"
+    actionLabel="Download PDF"
+    processAnotherLabel="Convert another Word file"
+    privacyHeading="Your Word file stayed on this device."
+    (download)="download()"
+    (processAnother)="replaceFile.emit()"
+  />
+  <details class="word-notice" *ngIf="result.warnings.length">
+    <summary>Conversion notes</summary>
+    <p *ngFor="let warning of result.warnings">{{ warning }}</p>
+  </details>
+</ng-container>
+<ng-template #ready>
+  <section class="word-panel" aria-labelledby="word-pdf-title">
+    <div class="word-heading">
+      <div>
+        <span class="eyebrow">WORD TO PDF</span>
+        <h1 id="word-pdf-title">Convert your Word document</h1>
+        <p>Create a PDF privately on your device.</p>
+      </div>
+      <button
+        class="secondary"
+        type="button"
+        (click)="replaceFile.emit()"
+        [disabled]="busy"
+      >
+        Choose another file
+      </button>
     </div>
-    <button class="secondary" type="button" (click)="replaceFile.emit()" [disabled]="busy">
-      Choose another Word file
-    </button>
-  </div>
-  <ol class="journey" aria-label="Conversion steps">
-    <li [class.active]="!result"><b>1</b> Prepare</li>
-    <li [class.active]="!!result"><b>2</b> Review</li>
-    <li><b>3</b> Save as PDF</li>
-  </ol>
-  <div class="source">
-    <span class="source-icon" aria-hidden="true">DOCX</span>
-    <div>
-      <strong>{{ file.name }}</strong
-      ><span>{{ size }} · Original document</span>
+    <div class="source">
+      <span class="source-icon" aria-hidden="true">DOCX</span>
+      <div>
+        <strong>{{ file.name }}</strong
+        ><span>{{ size }} · Ready to convert</span>
+      </div>
     </div>
-  </div>
-  <div *ngIf="!result" class="conversion-notes">
-    <h2>Keep your document private</h2>
-    <p>
-      No Docker, conversion server or account is needed. Text stays text where the browser supports
-      it; images retain their source resolution.
+    <p class="limits">
+      DOCX up to 200 MB · Large documents depend on available device memory.
     </p>
-    <p>
-      Complex layouts and unavailable fonts can change the result. You will review the document
-      before saving.
+    <p class="limits">
+      Compatible fonts are included. Complex Word layouts may differ;
+      unsupported content is reported before download.
     </p>
-    <button class="primary" type="button" (click)="convert()" [disabled]="busy">
-      {{ busy ? 'Preparing preview…' : 'Prepare preview' }}
-    </button>
-    <p class="capacity">
-      DOCX up to 200 MB · Memory and complexity checks apply · No fixed page-count limit
+    <div class="error" role="alert" *ngIf="error">{{ error }}</div>
+    <p role="status" aria-live="polite" *ngIf="status && !error">
+      {{ status }}
     </p>
-  </div>
-  <p class="error" role="alert" *ngIf="error">{{ error }}</p>
-  <div *ngIf="result" class="review-notes">
-    <h2>Check before you save</h2>
-    <ul>
-      <li *ngFor="let warning of result.warnings">{{ warning }}</li>
-    </ul>
-    <details *ngIf="result.fonts.length">
-      <summary>Fonts requested by this document</summary>
-      <p>{{ result.fonts.join(', ') }}</p>
-      <p>
-        Availability is not guaranteed. If text wraps differently, install the original fonts and
-        prepare the preview again.
-      </p>
-    </details>
-    <p>
-      The document below is a layout preview. The browser’s print preview determines the final PDF
-      pages.
-    </p>
-  </div>
-</section>
-<div
-  #previewHost
-  class="preview-host"
-  data-word-renderer="2026.10.13.3"
-  [class.is-measuring]="busy"
-  [class.is-visible]="!!result"
-  aria-label="Document preview"
-></div>
-<section class="save-panel" *ngIf="result">
-  <label class="review-checkbox"
-    ><input
-      type="checkbox"
-      [checked]="reviewed"
-      (change)="reviewed = $any($event.target).checked"
-    />
-    I have reviewed the document and understand that print pagination may differ.</label
-  >
-  <aside class="pdf-save-settings" aria-label="PDF save settings">
-    <h3>Keep the saved PDF’s layout</h3>
-    <ol>
-      <li>Destination: choose your browser’s <strong>Save as PDF</strong>.</li>
-      <li>Paper: <strong>{{ result.paperSizes.join(', ') }}</strong>, matching your Word document.</li>
-      <li>Margins: <strong>None</strong> (Word’s margins are already included). Use <strong>100% scale</strong>, enable <strong>Background graphics</strong>, and disable browser headers and footers.</li>
-    </ol>
-    <p><strong>On Windows:</strong> Microsoft Print to PDF is a different destination. It can use Letter paper and change text handling. Choose the browser’s Save as PDF for this conversion.</p>
-    <p>Check the final page count in the print preview. Calibri uses the bundled Carlito font if Calibri is unavailable.</p>
-  </aside>
-  <button class="primary" type="button" (click)="print()" [disabled]="!reviewed">
-    Save as PDF
-  </button>
-  <p role="status" *ngIf="printOpened">
-    Print dialog opened. Your browser handles saving; SafePDFHub cannot confirm whether you saved or
-    cancelled.
-  </p>
-  <button class="secondary" type="button" (click)="convert()" [disabled]="checkingExport">Rebuild preview</button>
-  <div class="export-check">
-    <h3>Check your saved PDF</h3>
-    <p>Choose the PDF you just saved to check its paper size and whether text is selectable. It stays on your device.</p>
-    <input #savedPdf type="file" accept="application/pdf,.pdf" hidden (change)="checkExport($event)" />
-    <button class="secondary" type="button" (click)="savedPdf.click()" [disabled]="checkingExport">{{ checkingExport ? 'Checking…' : 'Check saved PDF' }}</button>
-    <p *ngIf="exportError" role="alert" class="error">{{ exportError }}</p>
-    <div *ngIf="exportCheck as check" aria-live="polite">
-      <p><strong>{{ check.pages }} pages checked.</strong> {{ check.issues.length ? 'Export settings need attention.' : 'Basic export checks passed.' }}</p>
-      <ul *ngIf="check.issues.length"><li *ngFor="let issue of check.issues">{{ issue }}</li></ul>
-      <p>This check does not verify text accuracy, fonts, spacing, page order, or missing images. Compare the saved pages with your Word document.</p>
+    <div class="actions">
+      <button
+        type="button"
+        class="primary"
+        [disabled]="busy"
+        (click)="convert()"
+      >
+        {{ busy ? "Converting…" : "Convert to PDF" }}</button
+      ><button type="button" class="secondary" *ngIf="busy" (click)="cancel()">
+        Cancel
+      </button>
     </div>
-  </div>
-</section>
-<app-operation-result
-  *ngIf="result && reviewed"
-  [file]="file"
-  [originalFileName]="file.name"
-  [durationMs]="result.durationMs"
-  eyebrow="PREVIEW PREPARED"
-  title="Ready to save as PDF"
-  description="Open your browser’s print dialog and choose Save as PDF. A PDF file has not been generated yet."
-  operationLabel="Source DOCX"
-  privacyHeading="Your Word file stayed on this device."
-  actionLabel="Save as PDF"
-  actionDescription="Open the browser print dialog"
-  statusLabel="Preview ready"
-  [showEditAgain]="false"
-  processAnotherLabel="Choose another Word file"
-  (download)="print()"
-  (processAnother)="replaceFile.emit()"
-/>
+    <p class="privacy">
+      Private by design · Processed on your device · Download after conversion
+    </p>
+  </section>
+</ng-template>

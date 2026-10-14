@@ -34,7 +34,7 @@ export interface ToolBehavior {
 
 export const TOOL_BEHAVIORS: ToolBehavior[] = [
   { slug: 'word-to-pdf', allowMultiple: false, replaceOnUpload: true, acceptedTypes: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    heroTitle: 'Convert Word to PDF', heroDescription: 'Preview your DOCX on your device, check its layout, then choose Save as PDF in your browser.',
+    heroTitle: 'Convert Word to PDF', heroDescription: 'Choose your DOCX, convert it privately on your device, and download your PDF.',
     uploadTitle: 'Choose a Word document', uploadButtonText: 'Choose a Word file', uploadHint: 'DOCX to PDF conversion', showQuickActions: false, showWorkflowSuggestions: false, primaryActionText: 'Convert to PDF' },
 
   { slug: 'pdf-to-word', allowMultiple: false, replaceOnUpload: true, acceptedTypes: '.pdf,application/pdf',

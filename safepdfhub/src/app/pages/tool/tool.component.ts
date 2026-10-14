@@ -359,7 +359,7 @@ export class ToolComponent implements OnInit, OnDestroy {
   }
 
   get capacitySummary(): string {
-    if (this.isWordToPdfTool) return 'DOCX up to 200 MB · Local preview · Memory checks apply';
+    if (this.isWordToPdfTool) return 'DOCX up to 200 MB · Convert and download locally';
     if (this.isWordTool) return `Up to ${this.pdfToWord.limits.bytes / 1_000_000} MB · No fixed page limit`;
     if (this.isCompressTool) return `Up to ${this.maxFileMB} MB on this device • up to 500 MB on supported desktops`;
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {

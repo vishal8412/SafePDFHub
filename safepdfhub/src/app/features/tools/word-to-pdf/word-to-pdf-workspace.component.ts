@@ -7,42 +7,37 @@ import {
   OnDestroy,
   inject,
   ChangeDetectorRef,
-  ViewChild,
-  ElementRef,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { OperationResultComponent } from '../../../shared/components/operation-result/operation-result.component';
-import { LoaderService } from '../../../shared/services/loader.service';
-import { WordToPdfService, WordPreview } from '../../../core/word-to-pdf/word-to-pdf.service';
-import { WordExportCheckService, WordExportCheck } from '../../../core/word-to-pdf/word-export-check.service';
+} from "@angular/core";
+import { CommonModule } from "@angular/common";
+import { OperationResultComponent } from "../../../shared/components/operation-result/operation-result.component";
+import { LoaderService } from "../../../shared/services/loader.service";
+import {
+  WordDirectPdfService,
+  WordPdfResult,
+} from "../../../core/word-to-pdf/word-direct-pdf.service";
 @Component({
-  selector: 'app-word-to-pdf-workspace',
+  selector: "app-word-to-pdf-workspace",
   standalone: true,
   imports: [CommonModule, OperationResultComponent],
-  templateUrl: './word-to-pdf-workspace.component.html',
-  styleUrls: ['../word/word-workspace.component.scss', './word-to-pdf-workspace.component.scss'],
+  templateUrl: "./word-to-pdf-workspace.component.html",
+  styleUrls: [
+    "../word/word-workspace.component.scss",
+    "./word-to-pdf-workspace.component.scss",
+  ],
 })
 export class WordToPdfWorkspaceComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) file!: File;
   @Output() replaceFile = new EventEmitter<void>();
-  @ViewChild('previewHost', { static: true }) host!: ElementRef<HTMLDivElement>;
-  private engine = inject(WordToPdfService);
-  private exportChecker = inject(WordExportCheckService);
-  private checkController?: AbortController;
-  exportCheck: WordExportCheck | null = null;
-  checkingExport = false;
-  exportError = '';
+  private engine = inject(WordDirectPdfService);
   private loader = inject(LoaderService);
   private cd = inject(ChangeDetectorRef);
   private controller?: AbortController;
   private release?: () => void;
   private generation = 0;
-  private frame?: HTMLIFrameElement;
   busy = false;
-  error = '';
-  result: WordPreview | null = null;
-  printOpened = false;
-  reviewed = false;
+  error = "";
+  status = "";
+  result: WordPdfResult | null = null;
   get size() {
     return `${(this.file.size / 1_000_000).toFixed(2)} MB`;
   }
@@ -51,45 +46,31 @@ export class WordToPdfWorkspaceComponent implements OnChanges, OnDestroy {
   }
   private reset() {
     this.generation++;
-    this.checkController?.abort();
-    this.exportCheck = null;
-    this.checkingExport = false;
-    this.exportError = '';
     this.controller?.abort();
     this.release?.();
-    this.result?.dispose();
-    this.frame?.remove();
-    this.frame = undefined;
+    this.release = undefined;
     this.result = null;
     this.busy = false;
-    this.error = '';
-    this.reviewed = false;
-    this.printOpened = false;
+    this.error = "";
+    this.status = "";
+  }
+  cancel() {
+    this.reset();
+    this.status = "Conversion cancelled. Your Word file is unchanged.";
+    this.cd.markForCheck();
   }
   async convert() {
     if (this.busy) return;
     this.reset();
     const id = this.generation;
-    this.controller = new AbortController();
-    const signal = this.controller.signal;
-    const frame = document.createElement('iframe');
-    frame.title = 'Local Word document preview';
-    frame.setAttribute('sandbox', 'allow-same-origin allow-modals');
-    frame.style.cssText = 'width:100%;height:760px;border:0;background:white';
-    this.host.nativeElement.append(frame);
-    this.frame = frame;
+    const controller = new AbortController();
+    this.controller = controller;
     this.busy = true;
-    this.loader.show('Checking your Word document…', { determinate: true });
+    this.loader.show("Converting Word to PDF…", { determinate: true });
     this.loader.setIndeterminate();
-    const unregister = this.loader.registerCancellationHandler(() => {
-      this.generation++;
-      this.controller?.abort();
-      this.frame?.remove();
-      this.busy = false;
-      this.error = 'Preview cancelled. You can try again.';
-      release();
-      this.cd.markForCheck();
-    });
+    const unregister = this.loader.registerCancellationHandler(() =>
+      this.cancel(),
+    );
     let released = false;
     const release = () => {
       if (released) return;
@@ -99,17 +80,22 @@ export class WordToPdfWorkspaceComponent implements OnChanges, OnDestroy {
     };
     this.release = release;
     try {
-      const result = await this.engine.preview(this.file, frame, signal, (message) => {
-        if (id === this.generation) this.loader.setText(message);
-      });
+      const result = await this.engine.convert(
+        this.file,
+        controller.signal,
+        (message) => {
+          if (id === this.generation) {
+            this.status = message;
+            this.loader.setText(message);
+            this.cd.markForCheck();
+          }
+        },
+      );
       if (id === this.generation) this.result = result;
-      else result.dispose();
     } catch (e) {
       if (id === this.generation)
         this.error =
-          (e as Error).name === 'AbortError'
-            ? 'Preview cancelled. You can try again.'
-            : (e as Error).message || 'Unable to preview this document.';
+          e instanceof Error ? e.message : "Unable to convert this document.";
     } finally {
       release();
       if (id === this.generation) {
@@ -118,56 +104,14 @@ export class WordToPdfWorkspaceComponent implements OnChanges, OnDestroy {
       }
     }
   }
-  print() {
-    if (!this.result || !this.reviewed || !this.frame?.contentWindow) return;
-    try {
-      this.frame.contentWindow.focus();
-      this.frame.contentWindow.print();
-      this.printOpened = true;
-    } catch {
-      this.error =
-        'Printing is unavailable in this browser. Try a desktop browser with Save as PDF support.';
-    }
-  }
-  async checkExport(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file || !this.result || this.checkingExport) return;
-    const id = this.generation;
-    const controller = new AbortController();
-    this.checkController = controller;
-    this.checkingExport = true;
-    this.exportCheck = null;
-    this.exportError = '';
-    this.loader.show('Checking saved PDF…', { determinate: true });
-    const unregister = this.loader.registerCancellationHandler(() => controller.abort());
-    let released = false;
-    const release = () => {
-      if (released) return;
-      released = true;
-      unregister();
-      this.loader.hide();
-    };
-    this.release = release;
-    const timeout = setTimeout(() => controller.abort(), 60000);
-    try {
-      const checked = await this.exportChecker.check(file, this.result, controller.signal, (page, total) => {
-        if (id === this.generation) this.loader.setPage(page, total);
-      });
-      if (id === this.generation) this.exportCheck = checked;
-    } catch {
-      if (id === this.generation) this.exportError = controller.signal.aborted
-        ? 'Check cancelled or timed out. Your files have not been changed.'
-        : 'The PDF could not be checked. Choose an unencrypted PDF saved from this document.';
-    } finally {
-      clearTimeout(timeout);
-      release();
-      if (id === this.generation) {
-        this.checkingExport = false;
-        this.cd.markForCheck();
-      }
-    }
+  download() {
+    if (!this.result) return;
+    const url = URL.createObjectURL(this.result.file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = this.result.file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
   ngOnDestroy() {
     this.reset();

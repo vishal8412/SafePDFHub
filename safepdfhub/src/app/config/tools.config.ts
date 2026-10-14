@@ -32,7 +32,7 @@ export interface Tool {
  */
 export const TOOLS: Tool[] = [
   { slug: 'word-to-pdf', title: 'Word to PDF Converter | Convert DOCX to PDF',
-    description: 'Preview Word DOCX files privately in your browser, review the layout, then use Save as PDF. No document uploads or conversion server.',
+    description: 'Convert Word DOCX files to downloadable PDFs locally in your browser. Files up to 200 MB; no document uploads or conversion server.',
     keywords: 'word to pdf, docx to pdf, convert word to pdf', category: 'convert', label: 'Word to PDF',
     shortDescription: 'Turn Word documents into PDFs', icon: 'FileText', displayOrder: 9, nextTools: ['compress-pdf', 'merge-pdf'] },
   { slug: 'pdf-to-word', title: 'PDF to Word Converter | Editable DOCX Online',
