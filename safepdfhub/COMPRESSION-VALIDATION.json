@@ -1,0 +1,50 @@
+{
+  "input_bytes": 39514672,
+  "pages": 201,
+  "runs": [
+    {
+      "mode": "smart",
+      "output_bytes": 17494895,
+      "seconds": 16.276,
+      "custom_target": false
+    },
+    {
+      "mode": "strong",
+      "output_bytes": 13683010,
+      "seconds": 15.991,
+      "custom_target": false
+    }
+  ],
+  "focused_tests": 42,
+  "test_files": 9,
+  "build": "passed",
+  "structural_checks": "All pages: geometry, rotations, drawing streams, image placements, metadata retained",
+  "visual_spot_checks": [
+    1,
+    100
+  ],
+  "text_pdf_update": {
+    "input_bytes": 6676195,
+    "output_bytes": 6414859,
+    "seconds": 16.172,
+    "integrity": {
+      "pages": 403,
+      "geometry_rotations_page_streams_metadata_annotation_counts": "identical",
+      "unique_reachable_decoded_streams": 965,
+      "all_unique_reachable_stream_bytes": "identical",
+      "unresolved_references_preserved": [
+        [
+          135678,
+          0
+        ],
+        [
+          135679,
+          0
+        ]
+      ]
+    },
+    "tests": 45,
+    "build": "passed",
+    "scan_regression_bytes": 17484831
+  }
+}

@@ -1,3 +1,5 @@
+import { recompressFlateStreams } from './pdf-stream-compression';
+import { extractJpegBytes } from './pdf-jpeg-stream';
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFObject, PDFRawStream, PDFRef, PDFStreamWriter, decodePDFRawStream } from 'pdf-lib';
 import { captureDocumentFacts, PdfDocumentFacts } from './pdf-document-facts';
 import { CompressionLevel } from './compression.types';
@@ -26,6 +28,9 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
     visited.add(object);
     if (object instanceof PDFRef) {
       reachable.add(object);
+      // Reserve unresolved references too: serialization must not reuse their
+      // numbers for new object streams and accidentally make them point there.
+      pdf.context.largestObjectNumber = Math.max(pdf.context.largestObjectNumber, object.objectNumber);
       const resolved = pdf.context.lookup(object);
       if (resolved) pending.push(resolved);
     } else if (object instanceof PDFRawStream) pending.push(object.dict);
@@ -44,6 +49,7 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
     const compressed = pdf.context.flateStream(raw, dictionary);
     if (compressed.getContents().length + 32 < raw.length) pdf.context.assign(ref, compressed);
   }
+  await recompressFlateStreams(pdf);
   // Share only byte-identical streams with identical dictionaries. Resolve
   // every reference to the canonical stream before deleting its duplicate.
   const canonical = new Map<string, PDFRef>();
@@ -107,6 +113,15 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
   const maxPixels = Math.min(32_000_000, options.maxImagePixels ?? 8_000_000);
   let maxEdge = target ? Math.max(1000, Math.min(2400, Math.round(3200 * Math.cbrt(target / Math.max(lossless.length, 1)))))
     : level === 'recommended' ? 2400 : 1600;
+  if (target) {
+    const edges = images.map(([, image]) => {
+      const width = pdf.context.lookup(image.dict.get(PDFName.of('Width')));
+      const height = pdf.context.lookup(image.dict.get(PDFName.of('Height')));
+      return width instanceof PDFNumber && height instanceof PDFNumber && width.asNumber() * height.asNumber() >= 1_000_000
+        ? Math.max(width.asNumber(), height.asNumber()) : 0;
+    }).filter(edge => edge > 0);
+    maxEdge = capTargetEdge(maxEdge, edges);
+  }
   let best = lossless;
   for (const quality of qualities) {
     for (const [ref, original] of images) {
@@ -138,7 +153,7 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
   const dict = stream.dict;
   const get = (key: string) => pdf.context.lookup(dict.get(PDFName.of(key)));
   // Preserve masks, color conversion, unusual codecs and tiny line-art exactly.
-  if (['Decode', 'DecodeParms', 'ImageMask', 'Mask', 'SMask', 'F', 'SMaskInData'].some(key => dict.has(PDFName.of(key)))) return null;
+  if (['Decode', 'ImageMask', 'Mask', 'SMask', 'F', 'SMaskInData'].some(key => dict.has(PDFName.of(key)))) return null;
   if (get('ColorSpace') !== PDFName.of('DeviceRGB') || (get('BitsPerComponent') as PDFNumber)?.asNumber?.() !== 8) return null;
   const width = (get('Width') as PDFNumber)?.asNumber?.() ?? 0;
   const height = (get('Height') as PDFNumber)?.asNumber?.() ?? 0;
@@ -146,7 +161,8 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
   let filter = get('Filter');
   // A one-element Filter array is semantically identical to a single name.
   if (filter instanceof PDFArray && filter.size() === 1) filter = pdf.context.lookup(filter.get(0));
-  if (filter && filter !== PDFName.of('DCTDecode') && filter !== PDFName.of('FlateDecode')) return null;
+  const jpegBytes = await extractJpegBytes(pdf, stream);
+  if (!jpegBytes && (dict.has(PDFName.of('DecodeParms')) || (filter && filter !== PDFName.of('FlateDecode')))) return null;
   const scale = Math.min(1, maxEdge / Math.max(width, height));
   const outputWidth = Math.max(1, Math.round(width * scale));
   const outputHeight = Math.max(1, Math.round(height * scale));
@@ -154,8 +170,8 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
   const context = canvas.getContext('2d');
   if (!context) return null;
   try {
-    if (filter === PDFName.of('DCTDecode')) {
-      const bitmap = await createImageBitmap(new Blob([new Uint8Array(stream.getContents())], { type: 'image/jpeg' }));
+    if (jpegBytes) {
+      const bitmap = await createImageBitmap(new Blob([new Uint8Array(jpegBytes)], { type: 'image/jpeg' }));
       try {
         if (bitmap.width !== width || bitmap.height !== height) return null;
         context.imageSmoothingEnabled = true; context.imageSmoothingQuality = 'high';
@@ -186,6 +202,7 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
     dictionary.set(PDFName.of('Width'), PDFNumber.of(outputWidth));
     dictionary.set(PDFName.of('Height'), PDFNumber.of(outputHeight));
     dictionary.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
+    dictionary.delete(PDFName.of('DecodeParms'));
     const bytes = new Uint8Array(await jpeg.arrayBuffer());
     dictionary.set(PDFName.of('Length'), PDFNumber.of(bytes.length));
     return PDFRawStream.of(dictionary, bytes);
@@ -207,4 +224,11 @@ export function targetQualityLadder(losslessBytes: number, imageBytes: number, t
 export function automaticScanTarget(level: CompressionLevel, bytes: number, imageBytes: number, largeImages: number, pages: number): number | undefined {
   if (level === 'light' || bytes <= 20_000_000 || pages <= 0 || imageBytes < bytes * 0.9 || largeImages < pages * 0.8) return undefined;
   return level === 'strong' ? 10_000_000 : 20_000_000;
+}
+
+/** Adapt from actual source resolution, not a larger theoretical canvas. */
+export function capTargetEdge(proposed: number, sourceEdges: number[]): number {
+  if (!sourceEdges.length) return proposed;
+  const sorted = [...sourceEdges].sort((a, b) => a - b);
+  return Math.min(proposed, Math.max(1000, sorted[Math.floor(sorted.length / 2)]));
 }

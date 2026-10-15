@@ -36,8 +36,7 @@
     <strong>Some pages need a closer review</strong>
     <p>
       Proofreading or visual preservation is required on {{ result.reviewPages.length }}
-      {{ result.reviewPages.length === 1 ? 'page' : 'pages' }}. Try a clearer scan or check the
-      selected language. Pages: {{ result.reviewPages.slice(0, 20).join(', ')
+      {{ result.reviewPages.length === 1 ? 'page' : 'pages' }}. Review the page details below and proofread any OCR text. Pages: {{ result.reviewPages.slice(0, 20).join(', ')
       }}{{ result.reviewPages.length > 20 ? '…' : '' }}.
     </p>
   </div>
@@ -83,10 +82,9 @@
           />
           <div>
             <strong>Editable text</strong
-            ><span>Convert selectable text and scanned words into editable Word text.</span
+            ><span>Keep selectable text in editable text boxes at its original position.</span
             ><small
-              >Automatic OCR reads scanned pages. Fonts, graphics, columns, and tables may
-              change.</small
+              >Artwork stays as a background image. Text boxes do not reflow like ordinary paragraphs. OCR reads scanned pages.</small
             >
           </div></label
         >

@@ -1,7 +1,7 @@
-import { documentXml, packWord, WordPage, xml } from './word-document';
-import { groupText, safeWordName } from './word-layout';
-import JSZip from 'jszip';
-describe('Word export', () => {
+import { documentXml, packWord, WordPage, xml } from "./word-document";
+import { groupText, safeWordName } from "./word-layout";
+import JSZip from "jszip";
+describe("Word export", () => {
   const page: WordPage = {
     width: 612,
     height: 792,
@@ -13,25 +13,32 @@ describe('Word export', () => {
         y: 36,
         width: 120,
         height: 12,
-        runs: [{ text: 'A & B <test> हिन्दी', font: 'Arial', size: 12 }],
+        runs: [{ text: "A & B <test> हिन्दी", font: "Arial", size: 12 }],
       },
     ],
   };
-  it('escapes XML and rejects control characters without losing Unicode', () => {
-    const doc = new DOMParser().parseFromString(documentXml([page]), 'application/xml');
-    expect(doc.querySelector('parsererror')).toBeNull();
-    expect(doc.getElementsByTagName('w:t')[0].textContent).toBe('A & B <test> हिन्दी');
-    expect(xml('a\u0000b')).toBe('ab');
+  it("escapes XML and rejects control characters without losing Unicode", () => {
+    const doc = new DOMParser().parseFromString(
+      documentXml([page]),
+      "application/xml",
+    );
+    expect(doc.querySelector("parsererror")).toBeNull();
+    expect(doc.getElementsByTagName("w:t")[0].textContent).toBe(
+      "A & B <test> हिन्दी",
+    );
+    expect(xml("a\u0000b")).toBe("ab");
   });
-  it('writes separate page sections and landscape geometry', () => {
+  it("writes separate page sections and landscape geometry", () => {
     const doc = new DOMParser().parseFromString(
       documentXml([page, { ...page, width: 792, height: 612 }]),
-      'application/xml',
+      "application/xml",
     );
-    expect(doc.getElementsByTagName('w:sectPr').length).toBe(2);
-    expect(doc.getElementsByTagName('w:pgSz')[1].getAttribute('w:orient')).toBe('landscape');
+    expect(doc.getElementsByTagName("w:sectPr").length).toBe(2);
+    expect(doc.getElementsByTagName("w:pgSz")[1].getAttribute("w:orient")).toBe(
+      "landscape",
+    );
   });
-  it('packages real Word relationships and embedded images', async () => {
+  it("packages real Word relationships and embedded images", async () => {
     const blob = await packWord([
       {
         ...page,
@@ -54,24 +61,68 @@ describe('Word export', () => {
       reader.readAsArrayBuffer(blob);
     });
     const zip = await JSZip.loadAsync(buffer);
-    expect(await zip.file('word/document.xml')!.async('string')).toContain('r:embed="img1"');
-    expect(await zip.file('word/_rels/document.xml.rels')!.async('string')).toContain(
-      'media/image1.jpg',
+    expect(await zip.file("word/document.xml")!.async("string")).toContain(
+      'r:embed="img1"',
     );
-    expect(zip.file('word/media/image1.jpg')).toBeTruthy();
-    expect(Object.keys(zip.files).some((p) => p.includes('vba'))).toBe(false);
+    expect(
+      await zip.file("word/_rels/document.xml.rels")!.async("string"),
+    ).toContain("media/image1.jpg");
+    expect(zip.file("word/media/image1.jpg")).toBeTruthy();
+    expect(Object.keys(zip.files).some((p) => p.includes("vba"))).toBe(false);
   });
-  it('joins glyph fragments without joining distant columns', () => {
+  it("joins glyph fragments without joining distant columns", () => {
     const lines = groupText([
-      { text: 'Hello', x: 40, y: 50, width: 25, size: 12 },
-      { text: 'world', x: 69, y: 50, width: 30, size: 12 },
-      { text: 'Column', x: 300, y: 50, width: 40, size: 12 },
+      { text: "Hello", x: 40, y: 50, width: 25, size: 12 },
+      { text: "world", x: 69, y: 50, width: 30, size: 12 },
+      { text: "Column", x: 300, y: 50, width: 40, size: 12 },
     ]);
     expect(lines.length).toBe(2);
-    expect(lines[0].runs.map((r) => r.text).join('')).toBe('Hello world');
+    expect(lines[0].runs.map((r) => r.text).join("")).toBe("Hello world");
   });
-  it('uses a safe DOCX filename', () => {
-    expect(safeWordName('report.PDF')).toBe('report.docx');
-    expect(safeWordName('../bad:name.pdf')).toBe('.._bad_name.docx');
+  it("writes page-anchored editable text with no text-box padding or reflow", () => {
+    const output = documentXml([
+      {
+        ...page,
+        positioned: true,
+        lines: [
+          {
+            ...page.lines[0],
+            x: 230,
+            y: 80,
+            runs: [
+              {
+                text: "Column",
+                font: "Arial",
+                size: 12,
+                color: "334455",
+                scale: 90,
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    const doc = new DOMParser().parseFromString(output, "application/xml");
+    expect(doc.querySelector("parsererror")).toBeNull();
+    expect(
+      doc.getElementsByTagName("wp:positionH")[0].getAttribute("relativeFrom"),
+    ).toBe("page");
+    expect(doc.getElementsByTagName("wp:posOffset")[0].textContent).toBe(
+      String(230 * 12700),
+    );
+    expect(doc.getElementsByTagName("wps:bodyPr")[0].getAttribute("wrap")).toBe(
+      "none",
+    );
+    expect(doc.getElementsByTagName("wps:bodyPr")[0].getAttribute("lIns")).toBe(
+      "0",
+    );
+    expect(doc.getElementsByTagName("w:color")[0].getAttribute("w:val")).toBe(
+      "334455",
+    );
+    expect(doc.getElementsByTagName("w:w")[0].getAttribute("w:val")).toBe("90");
+  });
+  it("uses a safe DOCX filename", () => {
+    expect(safeWordName("report.PDF")).toBe("report.docx");
+    expect(safeWordName("../bad:name.pdf")).toBe(".._bad_name.docx");
   });
 });

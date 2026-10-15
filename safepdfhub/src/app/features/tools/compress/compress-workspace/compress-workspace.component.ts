@@ -36,6 +36,11 @@ export class CompressWorkspaceComponent {
     this.targetSizeMBChange.emit(value);
   }
 
+  get limitedReduction(): boolean {
+    return !!this.resultFile && !this.compressionResult?.returnedOriginal &&
+      (this.files[0]?.size ?? 0) > 0 && this.resultFile.size >= this.files[0].size * 0.99;
+  }
+
   get resultDescription(): string {
     if (!this.resultFile) return '';
     const bytes = this.resultFile.size;
@@ -46,6 +51,7 @@ export class CompressWorkspaceComponent {
         ? `Target met. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Download size: ${actual}.`
         : `Target not reached. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Smallest validated result: ${actual}. This limit could not be reached with content-preserving compression; consider splitting the PDF.`;
     }
+    if (this.limitedReduction) return `Only a small reduction was possible. Download size: ${actual}. Some images may already be optimized or require a format this device cannot recompress safely.`;
     return result?.returnedOriginal
       ? `No smaller result passed validation. Your original PDF is retained: ${actual}.`
       : `Download size: ${actual}. Saved ${result?.reduction ?? 0}% from the original.`;

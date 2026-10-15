@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
-import { automaticScanTarget, optimizeNativePdf, targetQualityLadder } from './pdf-native-optimization';
+import { capTargetEdge, automaticScanTarget, optimizeNativePdf, targetQualityLadder } from './pdf-native-optimization';
 
 describe('Native lossless worker algorithm', () => {
   it('compresses unfiltered streams and preserves content, metadata and page boxes', async () => {
@@ -71,5 +71,37 @@ describe('Automatic large-scan budget', () => {
     expect(automaticScanTarget('recommended', 143_000_000, 50_000_000, 240, 240)).toBeUndefined();
     expect(automaticScanTarget('recommended', 143_000_000, 142_000_000, 10, 240)).toBeUndefined();
     expect(automaticScanTarget('recommended', 143_000_000, 142_000_000, 0, 0)).toBeUndefined();
+  });
+});
+
+describe('Target search source-resolution cap', () => {
+  it('reduces the search edge for scans already below the nominal canvas size', () => {
+    expect(capTargetEdge(2400, [1470, 1500, 1618])).toBe(1500);
+    expect(capTargetEdge(1660, [4000, 4500, 4800])).toBe(1660);
+    expect(capTargetEdge(2400, [])).toBe(2400);
+    expect(capTargetEdge(2400, [800])).toBe(1000);
+  });
+});
+
+describe('Unresolved reference preservation', () => {
+  it('does not reuse an unresolved reference number for a new object stream', async () => {
+    const bodies = [
+      '<< /Type /Catalog /Pages 2 0 R /Unresolved 5 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R >>',
+      '<< /Length 3 >>\nstream\nq Q\nendstream',
+    ];
+    let source = '%PDF-1.7\n'; const offsets = [0];
+    bodies.forEach((body, i) => { offsets.push(source.length); source += `${i + 1} 0 obj\n${body}\nendobj\n`; });
+    const xref = source.length;
+    source += 'xref\n0 5\n0000000000 65535 f \n';
+    for (const offset of offsets.slice(1)) source += `${String(offset).padStart(10, '0')} 00000 n \n`;
+    source += `trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n%${'padding'.repeat(1000)}`;
+    const output = await optimizeNativePdf(new Uint8Array(new TextEncoder().encode(source)));
+    expect(output).not.toBeNull();
+    const parsed = await PDFDocument.load(output!, { updateMetadata: false });
+    const ref = parsed.catalog.get(PDFName.of('Unresolved'));
+    expect(ref?.toString()).toBe('5 0 R');
+    expect(parsed.context.lookup(ref)).toBeUndefined();
   });
 });

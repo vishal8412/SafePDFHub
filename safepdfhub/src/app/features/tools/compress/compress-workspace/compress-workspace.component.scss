@@ -1330,3 +1330,9 @@
 .target-presets button { padding: 8px 16px; border: 1px solid #328398; border-radius: 8px; background: #102332; color: white; cursor: pointer; }
 .mode-card:disabled, .target-presets button:disabled { opacity: .6; cursor: wait; }
 .stat-value { overflow-wrap: anywhere; }
+
+.preview-image-wrap.preview-unavailable { height: auto; min-height: 0; box-shadow: none; border: 1px solid rgba(80,210,220,.18); }
+.file-ready-summary { padding: 24px; text-align: center; display: grid; justify-items: center; gap: 12px; }
+.file-ready-summary strong { font-size: 18px; color: #eefaff; }
+.file-ready-summary p { margin: 0; color: #b7cbd8; font-size: 14px; line-height: 1.6; }
+.file-ready-icon { border: 2px solid #46d9d0; border-radius: 10px; padding: 16px 12px; color: #46d9d0; font-weight: 800; letter-spacing: 1px; }

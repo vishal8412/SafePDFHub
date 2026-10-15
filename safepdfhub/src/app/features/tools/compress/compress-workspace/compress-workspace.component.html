@@ -4,14 +4,14 @@
     [file]="resultFile"
     [originalFileName]="originalFileName"
     [durationMs]="durationMs"
-    [eyebrow]="compressionResult?.returnedOriginal ? 'ORIGINAL RETAINED' : 'COMPRESSION COMPLETE'"
-    [title]="compressionResult?.targetMet === false ? 'Target size not reached' : 'Your PDF is ready'"
+    [eyebrow]="compressionResult?.returnedOriginal ? 'ORIGINAL RETAINED' : limitedReduction ? 'LIMITED REDUCTION' : 'COMPRESSION COMPLETE'"
+    [title]="compressionResult?.targetMet === false ? 'Target size not reached' : compressionResult?.returnedOriginal ? 'Original PDF retained' : 'Your PDF is ready'"
     [description]="resultDescription + (compressionResult?.processingNote ? ' ' + compressionResult?.processingNote : '')"
-    operationLabel="Compressed PDF"
+    [operationLabel]="compressionResult?.returnedOriginal ? 'Original PDF' : 'Compressed PDF'"
     [statusLabel]="compressionResult?.targetMet === false ? 'Above target' : 'Ready'"
     icon="compress"
-    actionLabel="Download compressed PDF"
-    actionDescription="Save your optimized PDF to your device"
+    [actionLabel]="compressionResult?.returnedOriginal ? 'Download original PDF' : 'Download compressed PDF'"
+    [actionDescription]="compressionResult?.returnedOriginal ? 'Save your unchanged PDF' : 'Save your optimized PDF to your device'"
     privacyHeading="Your PDF stayed on this device."
     privacyDescription="SafePDFHub did not upload or receive your document."
     [showEditAgain]="true"
@@ -41,9 +41,13 @@
 
       </div>
 
-      <div class="preview-image-wrap">
+      <div class="preview-image-wrap" [class.preview-unavailable]="!previews[0] && diskBackedMode">
         <img *ngIf="previews[0]" [src]="previews[0]" class="preview-image" alt="First page preview of the selected PDF"/>
-        <p *ngIf="!previews[0] && diskBackedMode" style="padding:24px;text-align:center">Your PDF is ready to compress.<br>Preview is paused to conserve memory for this large file.</p>
+        <div *ngIf="!previews[0] && diskBackedMode" class="file-ready-summary" role="status">
+          <span class="file-ready-icon" aria-hidden="true">PDF</span>
+          <strong>File ready to compress</strong>
+          <p>A preview isn’t loaded for large files to keep your browser responsive. Choose a compression mode below to continue.</p>
+        </div>
         <div class="progress-overlay" *ngIf="compressing" role="status" aria-live="polite" aria-label="Compression progress">
           <div class="progress-circle">
             {{ progress }}%
@@ -193,7 +197,7 @@
     <p class="estimate-note">The exact size depends on this PDF and is measured after compression. Modes can produce the same size when further reduction would fail validation. Sizes use 1 MB = 1,000,000 bytes.</p>
 
     <!-- MODES -->
-    <p *ngIf="diskBackedMode" role="status">This PDF uses temporary disk storage. Previews are disabled to conserve memory. Keep this tab open.</p>
+    <p *ngIf="diskBackedMode" role="status">Keep this tab open while your PDF is being compressed. Your file stays on this device.</p>
     <p *ngIf="largeFileMode" role="status">Inputs above 200 MB use lossless compression only. A target is checked against the result but cannot be guaranteed.</p>
     <p *ngIf="diskBackedMode && !largeFileMode">All three modes are available through 200 MB. Image compression runs within this device's resource limits; any fallback is explained in the result.</p>
     <div class="compression-modes" *ngIf="!largeFileMode">
