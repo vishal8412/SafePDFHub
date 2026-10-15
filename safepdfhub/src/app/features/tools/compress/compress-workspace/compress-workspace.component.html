@@ -23,362 +23,58 @@
   />
 
   <ng-container *ngIf="!resultFile">
-
-  <!-- LEFT -->
-  <div class="preview-section">
-
-    <div class="preview-card">
-
-      <div class="preview-header">
-
-        <div class="preview-badge">
-          {{ largeFileMode ? 'Large-file lossless' : targetSizeMB !== null ? 'Target Size' : compressionLevel === 'light' ? 'High Quality' : compressionLevel === 'strong' ? 'Maximum Reduction' : 'Smart Compression' }}
-        </div>
-
-        <div class="preview-pages">
-          {{ diskBackedMode ? 'Pages checked during compression' : (pageCounts[0] || 0) + ' pages' }}
-        </div>
-
-      </div>
-
-      <div class="preview-image-wrap" [class.preview-unavailable]="!previews[0] && diskBackedMode">
-        <img *ngIf="previews[0]" [src]="previews[0]" class="preview-image" alt="First page preview of the selected PDF"/>
-        <div *ngIf="!previews[0] && diskBackedMode" class="file-ready-summary" role="status">
+    <aside class="document-card" aria-labelledby="document-heading">
+      <div class="section-caption"><span class="step-number">1</span><h2 id="document-heading">Your PDF</h2><span class="ready-label">{{ loading ? 'Preparing' : 'Selected' }}</span></div>
+      <div class="preview-image-wrap" [class.preview-unavailable]="!previews[0]">
+        <img *ngIf="previews[0]" [src]="previews[0]" class="preview-image" alt="First page preview of the selected PDF" />
+        <div *ngIf="!previews[0]" class="file-ready-summary" role="status">
           <span class="file-ready-icon" aria-hidden="true">PDF</span>
-          <strong>File ready to compress</strong>
-          <p>A preview isn’t loaded for large files to keep your browser responsive. Choose a compression mode below to continue.</p>
+          <strong>{{ loading ? 'Preparing your PDF…' : 'Your file is selected' }}</strong>
+          <p>{{ diskBackedMode ? 'Preview skipped to keep large files responsive.' : 'You can continue without a page preview.' }}</p>
         </div>
-        <div class="progress-overlay" *ngIf="compressing" role="status" aria-live="polite" aria-label="Compression progress">
-          <div class="progress-circle">
-            {{ progress }}%
-          </div>
-       </div>
+        <div *ngIf="compressing" class="progress-overlay" role="status" aria-live="polite" aria-label="Compression progress"><strong>{{ progress }}%</strong><span>Compressing your PDF</span></div>
       </div>
-
-<div class="preview-bottom">
-
-  <div class="preview-footer">
-
-  <div class="file-top-row">
-
-    <div class="file-info">
-
-      <div class="file-name">
-        {{ files[0]?.name }}
+      <div class="file-info">
+        <h3 class="file-name" [title]="files[0]?.name">{{ files[0]?.name }}</h3>
+        <p class="file-meta"><strong>{{ formatFileSize(files[0]?.size || 0) }}</strong><span *ngIf="pageCounts[0]">{{ pageCounts[0] }} pages</span></p>
       </div>
+      <button type="button" class="replace-btn" [disabled]="loading || compressing" (click)="triggerReplace()">Choose a different PDF</button>
+      <details class="document-details"><summary>File details</summary><p>{{ originalSizeDetails }}</p><p *ngIf="pdfInsights?.type">Document type: {{ pdfInsights.type | titlecase }}</p><p *ngIf="diskBackedMode">Page count is checked during compression.</p><p>File sizes use 1 MB = 1,000,000 bytes.</p></details>
+      <div class="privacy-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z"/><path d="m8 12 3 3 5-6"/></svg><div><strong>Your file stays on your device</strong><span>No upload needed to compress.</span></div></div>
+    </aside>
 
-      <div class="file-size">
-        {{ formatFileSize(files[0]?.size || 0) }}
-        <small style="display:block;font-size:12px;font-weight:400">{{ originalSizeDetails }}</small>
+    <section class="optimize-panel" aria-labelledby="compression-heading">
+      <div class="section-caption"><span class="step-number">2</span><h2 id="compression-heading">Choose your compression</h2></div>
+      <p class="panel-intro">Find the balance between a smaller file and image detail.</p>
+      <div *ngIf="largeFileMode" class="large-file-notice" role="status"><strong>Lossless compression for this file</strong><p>Files above 200 MB keep their original image quality. The final size depends on the PDF.</p></div>
+      <fieldset class="compression-modes" *ngIf="!largeFileMode" [disabled]="loading || compressing" aria-labelledby="compression-heading">
+        <legend class="sr-only">Compression quality</legend>
+        <button type="button" class="mode-card" [class.active]="compressionLevel === 'light' && targetSizeMB === null" [attr.aria-pressed]="compressionLevel === 'light' && targetSizeMB === null" [disabled]="loading || compressing" (click)="selectLevel('light')">
+          <span class="selection-dot" aria-hidden="true"></span><span class="mode-copy"><span class="mode-title">High Quality</span><span class="mode-desc">Keep original image quality with lossless compression.</span></span><span class="mode-tag">Best detail</span>
+        </button>
+        <button type="button" class="mode-card" [class.active]="compressionLevel === 'recommended' && targetSizeMB === null" [attr.aria-pressed]="compressionLevel === 'recommended' && targetSizeMB === null" [disabled]="loading || compressing" (click)="selectLevel('recommended')">
+          <span class="selection-dot" aria-hidden="true"></span><span class="mode-copy"><span class="mode-title">Smart Compression</span><span class="mode-desc">Balance file size and image detail for everyday use.</span></span><span class="mode-tag recommended-pill">Recommended</span>
+        </button>
+        <button type="button" class="mode-card" [class.active]="compressionLevel === 'strong' && targetSizeMB === null" [attr.aria-pressed]="compressionLevel === 'strong' && targetSizeMB === null" [disabled]="loading || compressing" (click)="selectLevel('strong')">
+          <span class="selection-dot" aria-hidden="true"></span><span class="mode-copy"><span class="mode-title">Maximum Reduction</span><span class="mode-desc">Use stronger image compression. Fine detail may soften.</span></span><span class="mode-tag">Smallest size</span>
+        </button>
+      </fieldset>
+      <div class="target-size-panel" [class.target-size-panel--active]="targetSizeMB !== null">
+        <label class="target-toggle" for="target-toggle"><input id="target-toggle" type="checkbox" [checked]="targetSizeMB !== null" [disabled]="loading || compressing" (change)="setTarget($any($event.target).checked ? 5 : null)" /><span><strong>Need a specific file size?</strong><small>Set a maximum size for an upload or attachment.</small></span><span class="optional-label">Optional</span></label>
+        <div *ngIf="targetSizeMB !== null" class="target-controls">
+          <label for="compression-target">Maximum file size</label>
+          <div class="target-input-wrap"><input id="compression-target" type="number" min="0.001" max="10000" step="any" [ngModel]="targetSizeMB" (ngModelChange)="setTarget($event === null ? 0 : $event)" [disabled]="loading || compressing" [attr.aria-invalid]="targetInvalid" aria-describedby="target-help target-error" /><span>MB</span></div>
+          <div class="target-presets" aria-label="Common file size limits"><button type="button" *ngFor="let size of [1, 2, 5, 10, 20]" (click)="setTarget(size)" [disabled]="loading || compressing" [class.active]="targetSizeMB === size" [attr.aria-pressed]="targetSizeMB === size">{{ size }} MB</button></div>
+          <p id="target-help">{{ largeFileMode ? 'This file uses lossless compression only.' : 'Image quality may be reduced to approach your limit.' }} The result will confirm whether the target was reached.</p>
+          <p id="target-error" class="input-error" [hidden]="!targetInvalid" role="alert">Enter a size greater than 0 and no more than 10,000 MB.</p>
+        </div>
       </div>
-
-    </div>
-
-    <button
-      class="replace-btn"
-      [disabled]="loading || compressing"
-      (click)="triggerReplace()"
-    >
-      ↻ Replace PDF
-    </button>
-
-  </div>
-
-</div>
-
-  <!-- ACTION -->
-<button type="button" class="compress-v2-btn" (click)="startCompress()" [disabled]="loading || compressing || targetInvalid" [attr.aria-busy]="compressing" [attr.aria-disabled]="loading || compressing">
-  <ng-container *ngIf="!compressing">
-    Compress PDF
+      <div class="compress-action">
+        <button type="button" class="compress-v2-btn" (click)="startCompress()" [disabled]="loading || compressing || targetInvalid" [attr.aria-busy]="compressing" [attr.aria-disabled]="loading || compressing || targetInvalid"><span>{{ compressing ? 'Compressing ' + progress + '%' : loading ? 'Preparing your PDF…' : 'Compress PDF' }}</span><svg *ngIf="!compressing && !loading" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button>
+        <p *ngIf="!compressing" class="action-note">Review the final size before downloading.</p>
+        <p *ngIf="compressing" class="action-note" role="status">Keep this tab open while we process your PDF.</p>
+      </div>
+      <details class="processing-details"><summary>What to expect</summary><ul><li>Results depend on the PDF. Already optimized files may only become slightly smaller.</li><li>Pages and document structure are checked before the result is offered.</li><li>If a smaller validated file is unavailable, your original is retained.</li></ul><p *ngIf="diskBackedMode && !largeFileMode">Image compression depends on your device’s available resources.</p><div class="other-tools"><span>Need another tool?</span><button type="button" [disabled]="loading || compressing" (click)="openSmartTool('split-pdf')">Split PDF</button><button type="button" [disabled]="loading || compressing" (click)="openSmartTool('protect-pdf')">Protect PDF</button></div></details>
+    </section>
   </ng-container>
-  <ng-container *ngIf="compressing">
-    Compressing {{ progress }}%
-  </ng-container>
-</button>
-
-<!-- TRUST STRIP -->
-<div class="trust-strip-premium">
-
-  <div class="trust-item">
-    🔒 100% Private
-  </div>
-
-  <div class="trust-item">
-    ⚡ Local Processing
-  </div>
-
-  <div class="trust-item">
-    🌍 No Uploads
-  </div>
-
-</div>
-
-</div>
-
-</div>
-  </div>
-
-  <!-- RIGHT -->
-  <div class="optimize-panel">
-
-    <!-- TITLE -->
-    <div class="panel-top">
-
-      <div class="panel-label">
-        Smart Optimization Engine
-      </div>
-
-      <h2>
-        Compress your PDF intelligently
-      </h2>
-
-      <p>
-        Reduce PDF size with smart browser-side optimization.
-        Best results for scanned and image-heavy PDFs.
-      </p>
-
-    </div>
-
-    <!-- STATS -->
-<div class="stats-grid">
-
-  <div class="stat-box">
-  <div class="stat-head">
-    <div class="stat-icon">
-      📄
-    </div>
-
-    <div class="stat-title">
-      Original Size (1 MB = 1,000,000 bytes)
-    </div>
-   </div>
-    <div class="stat-value">
-      {{ formatFileSize(files[0]?.size || 0) }}
-    </div>
-
-  </div>
-
-  <div class="stat-box highlight">
-<div class="stat-head">
-  
-    <div class="stat-icon">
-      ⚡
-    </div>
-
-    <div class="stat-title">
-      Output Size
-    </div>
-</div>
-    <div class="stat-value">
-      Calculated after compression
-    </div>
-
-  </div>
-
-  <div class="stat-box success">
-<div class="stat-head">
-  
-    <div class="stat-icon">
-      💾
-    </div>
-
-    <div class="stat-title">
-      Quality Policy
-    </div>
-</div>
-    <div class="stat-value">
-      {{ largeFileMode ? 'Lossless' : targetSizeMB !== null ? 'Adaptive' : compressionLevel === 'light' ? 'Lossless' : compressionLevel === 'strong' ? 'Smaller images' : 'Balanced' }}
-    </div>
-
-  </div>
-
-</div>
-
-    <p class="estimate-note">The exact size depends on this PDF and is measured after compression. Modes can produce the same size when further reduction would fail validation. Sizes use 1 MB = 1,000,000 bytes.</p>
-
-    <!-- MODES -->
-    <p *ngIf="diskBackedMode" role="status">Keep this tab open while your PDF is being compressed. Your file stays on this device.</p>
-    <p *ngIf="largeFileMode" role="status">Inputs above 200 MB use lossless compression only. A target is checked against the result but cannot be guaranteed.</p>
-    <p *ngIf="diskBackedMode && !largeFileMode">All three modes are available through 200 MB. Image compression runs within this device's resource limits; any fallback is explained in the result.</p>
-    <div class="compression-modes" *ngIf="!largeFileMode">
-
-      <!-- HIGH -->
-      <button type="button"
-        class="mode-card"
-        [disabled]="loading || compressing"
-        [class.active]="compressionLevel === 'light' && targetSizeMB === null"
-        [attr.aria-pressed]="compressionLevel === 'light' && targetSizeMB === null"
-        (click)="selectLevel('light')"
-      >
-
-        <div class="mode-title">
-          High Quality
-        </div>
-
-        <div class="mode-desc">
-          Lossless optimization; preserves original image quality
-        </div>
-
-      </button>
-
-      <!-- SMART -->
-      <button type="button"
-        class="mode-card recommended"
-        [disabled]="loading || compressing"
-        [class.active]="compressionLevel === 'recommended' && targetSizeMB === null"
-        [attr.aria-pressed]="compressionLevel === 'recommended' && targetSizeMB === null"
-        (click)="selectLevel('recommended')"
-      >
-
-        <div class="recommended-pill">
-          Recommended
-        </div>
-
-        <div class="mode-title">
-          Smart Compression
-        </div>
-
-        <div class="mode-desc">
-          Balanced image compression; preserves text and layout
-        </div>
-
-      </button>
-
-      <!-- MAX -->
-      <button type="button"
-        class="mode-card"
-        [disabled]="loading || compressing"
-        [class.active]="compressionLevel === 'strong' && targetSizeMB === null"
-        [attr.aria-pressed]="compressionLevel === 'strong' && targetSizeMB === null"
-        (click)="selectLevel('strong')"
-      >
-
-        <div class="mode-title">
-          Maximum Reduction
-        </div>
-
-        <div class="mode-desc">
-          Stronger image compression; some detail may soften
-        </div>
-
-      </button>
-
-    </div>
-
-<div class="target-size-panel">
-  <label><input type="checkbox" [checked]="targetSizeMB !== null" [disabled]="loading || compressing"
-    (change)="setTarget($any($event.target).checked ? 5 : null)" /> Compress to a target size</label>
-  <div *ngIf="targetSizeMB !== null">
-    <label for="compression-target">Maximum file size (MB)</label>
-    <input id="compression-target" type="number" min="0.001" max="10000" step="any"
-      [ngModel]="targetSizeMB" (ngModelChange)="setTarget($event === null ? 0 : $event)"
-      [disabled]="loading || compressing" [attr.aria-invalid]="targetInvalid" aria-describedby="target-help" />
-    <div class="target-presets">
-      <button type="button" *ngFor="let size of [1, 2, 5, 10, 20]" (click)="setTarget(size)" [disabled]="loading || compressing">{{ size }} MB</button>
-    </div>
-    <p id="target-help">{{ largeFileMode ? 'Above 200 MB, the target is checked against lossless output only.' : 'Tries lossless optimization first, then stronger image compression within device limits.' }} The result will say whether it meets your limit. Very small targets may be impossible while preserving all content.</p>
-    <p *ngIf="targetInvalid" role="alert">Enter a size greater than 0 and no more than 10,000 MB.</p>
-  </div>
-</div>
-
-<!-- AI ANALYSIS -->
-<div class="analysis-box">
-
-  <div class="analysis-title">
-    Smart Analysis
-  </div>
-
-  <div class="analysis-list">
-
-    <!-- <div class="analysis-item">
-      ✔ Browser-secure local processing
-    </div>
-
-    <div class="analysis-item">
-      ✔ Compression optimized for readability
-    </div>
-
-    <div class="analysis-item">
-      ✔ No uploads — everything stays private
-    </div>
-
-    <div
-      class="analysis-item"
-      *ngIf="analyzedPdfType === 'text'"
-    >
-      ✔ Text-based PDF detected — best compression expected
-    </div>
-
-    <div
-      class="analysis-item"
-      *ngIf="analyzedPdfType === 'scanned'"
-    >
-      ✔ Scanned PDF detected — image optimization enabled
-    </div> -->
-
-    <!-- PDF TYPE -->
-<div
-  class="analysis-item"
-  *ngIf="pdfInsights?.type"
->
-  📄 PDF Type:
-  <strong>
-    {{ pdfInsights?.type | titlecase }}
-  </strong>
-</div>
-
-<!-- IMAGE HEAVY -->
-<div
-  class="analysis-item"
-  *ngIf="pdfInsights?.imageHeavy"
->
-  ⚡ Image-heavy document detected
-</div>
-
-<!-- LARGE PAGES -->
-<div
-  class="analysis-item"
-  *ngIf="pdfInsights?.largePages"
->
-  📐 Large page dimensions detected
-</div>
-
-
-    <div class="analysis-estimation">
-
-  <span>Validation</span>
-
-  <strong>Text, page structure and visual checks</strong>
-
-</div>
-
-  </div>
-
-</div>
-
-
-  <!-- SMART TOOLS -->
-  <div class="smart-tools">
-
-    <div class="smart-tools-title">
-      ⚡ Continue working with your PDF
-    </div>
-
-    <div class="smart-tools-list">
-
-      <button type="button" class="tool-chip" (click)="openSmartTool('split-pdf')">
-        Split PDF
-      </button>
-
-      <button type="button" class="tool-chip" (click)="openSmartTool('protect-pdf')">
-        Protect PDF
-      </button>
-
-    </div>
-
-  </div>
-  
-  </div>
-  
-</ng-container>
 </div>

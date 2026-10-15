@@ -1,0 +1,27 @@
+{
+  "changed_source_files": [
+    "src/app/features/tools/compress/compress-workspace/compress-workspace.component.html",
+    "src/app/features/tools/compress/compress-workspace/compress-workspace.component.scss"
+  ],
+  "all_other_source_hashes_unchanged": true,
+  "build": "passed",
+  "existing_workspace_tests": 3,
+  "browser_cases": [
+    "3 modes",
+    "target presets",
+    "invalid target blocking",
+    "mode clears target",
+    "processing locks settings",
+    "download",
+    "return to settings",
+    "small-file thumbnail"
+  ],
+  "widths_checked": [
+    1440,
+    768,
+    390,
+    320
+  ],
+  "real_download_bytes": 17484831,
+  "target_bytes": 20000000
+}

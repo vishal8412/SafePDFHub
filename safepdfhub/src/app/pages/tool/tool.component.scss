@@ -1850,3 +1850,41 @@ border:
 
 
 .word-pdf-guide { max-width:1120px; }.word-pdf-guide ol { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; list-style:none; padding:0; counter-reset:docxstep; }.word-pdf-guide li { border:1px solid #345265; background:#102b3b; border-radius:16px; padding:24px; color:#b9d0e0; counter-increment:docxstep; }.word-pdf-guide li::before { content:'0' counter(docxstep); display:block; font-size:25px; color:#69e4d0; font-weight:700; margin-bottom:12px; }.word-pdf-guide article { border-bottom:1px solid #2b455b; padding:4px 0 20px; }.word-pdf-guide p { color:#b6cddd; } @media(max-width:760px) { .word-pdf-guide ol {grid-template-columns:1fr;} }
+
+/* Compress landing guide: scoped to this tool; no workspace or upload rules. */
+.compress-guide { max-width: 1120px; margin: 72px auto 64px; padding: 0 20px; text-align: left; color: #edf5ff; }
+.compress-guide-heading { margin-bottom: 30px; max-width: 720px; }
+.compress-guide .guide-eyebrow { display: block; color: #75d8d4; font-size: 10px; letter-spacing: 1.7px; font-weight: 650; line-height: 1.7; }
+.compress-guide h2 { margin: 10px 0 12px; color: #f1f6ff; font-size: clamp(25px,3vw,34px); line-height: 1.25; letter-spacing: -.8px; }
+.compress-guide-heading > p, .faq-intro > p { color: #aebfd1; font-size: 14px; line-height: 1.75; margin: 0; }
+.compress-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; list-style: none; padding: 0; margin: 0; }
+.compress-step { position: relative; min-width: 0; display: flex; flex-direction: column; padding: 24px; border: 1px solid #294255; border-radius: 17px; background: linear-gradient(145deg,#102a3b,#0c1b2e); }
+.step-topline { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; }
+.step-count { font-size: 10px; font-weight: 700; letter-spacing: 1.4px; color: #8cdcd5; }
+.step-topline > svg { padding: 10px; width: 27px; height: 27px; box-sizing: content-box; border: 1px solid #2b5b64; border-radius: 12px; color: #75e7db; background: #123540; }
+.compress-step h3 { margin: 0 0 12px; font-size: 19px; line-height: 1.4; letter-spacing: -.3px; }
+.compress-step > p { color: #b4c8d9; font-size: 13px; line-height: 1.8; margin: 0 0 22px; }
+.step-footnote { margin-top: auto; padding-top: 16px; border-top: 1px solid #284252; font-size: 11px; color: #91aabd; line-height: 1.6; }
+.guide-tip { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px; margin-top: 20px; background: #0c2433; border: 1px solid #284f5d; border-radius: 12px; }
+.tip-symbol { display: grid; place-items: center; height: 19px; width: 19px; flex: 0 0 19px; margin-top: 2px; border: 1px solid #62b9b9; color: #91e4da; border-radius: 50%; font-size: 12px; }
+.guide-tip p { margin: 0; color: #adc5d4; font-size: 12px; line-height: 1.8; }
+.guide-tip strong { color: #e1f5f1; font-weight: 600; }
+.compress-faq { display: grid; grid-template-columns: minmax(0,.7fr) minmax(0,1.3fr); gap: 54px; padding-top: 48px; margin-top: 48px; border-top: 1px solid #293b50; }
+.faq-intro h2 { font-size: clamp(23px,2.7vw,29px); margin-top: 10px; }
+.faq-intro p { font-size: 13px; max-width: 300px; }
+.compress-faq-item { border-bottom: 1px solid #2b4055; }
+.compress-faq-item:first-child { border-top: 1px solid #2b4055; }
+.compress-faq-item > summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 0; font-size: 14px; font-weight: 550; line-height: 1.6; color: #e7f2fa; }
+.compress-faq-item > summary::-webkit-details-marker { display: none; }
+.compress-faq-item > summary > svg { flex-shrink: 0; width: 19px; height: 19px; color: #7ccac8; transition: transform .15s ease; }
+.compress-faq-item[open] > summary > svg { transform: rotate(180deg); }
+.compress-faq-item[open] > summary { color: #9bede1; }
+.compress-faq-item p { padding: 0 32px 22px 0; margin: 0; font-size: 13px; line-height: 1.85; color: #b0c5d5; }
+.compress-faq-item summary:hover { color: #9bede1; }
+.compress-guide summary:focus-visible, .compress-guide a:focus-visible { outline: 3px solid #6ee5e2; outline-offset: 4px; border-radius: 3px; }
+.guide-privacy { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 36px; color: #92b2c5; }
+.guide-privacy svg { width: 18px; height: 21px; flex-shrink: 0; color: #74d4cb; }
+.guide-privacy p { margin: 0; font-size: 12px; line-height: 1.8; }
+.compress-guide a { color: #8bddd8; text-decoration: underline; text-underline-offset: 3px; }
+@media(max-width:760px) { .compress-guide { margin-top: 44px; padding: 0 16px; } .compress-steps { grid-template-columns: 1fr; gap: 12px; } .compress-step { padding: 20px; } .step-topline { margin-bottom: 10px; } .step-topline > svg { width: 23px; height: 23px; padding: 8px; } .compress-step h3 { font-size: 18px; } .compress-step > p { margin-bottom: 16px; } .step-footnote { padding-top: 12px; } .compress-faq { grid-template-columns: 1fr; gap: 22px; margin-top: 32px; padding-top: 32px; } .faq-intro p { max-width: none; } .guide-privacy { align-items: flex-start; justify-content: flex-start; } .guide-tip { padding: 16px; } }
+@media(prefers-reduced-motion:reduce) { .compress-faq-item > summary > svg { transition: none; } }

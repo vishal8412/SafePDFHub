@@ -1,0 +1,16 @@
+{
+  "changed_source_files": [
+    "src/app/pages/tool/tool.component.scss",
+    "src/app/pages/tool/tool.component.html"
+  ],
+  "all_other_source_hashes_identical": true,
+  "build": "passed",
+  "browser_checks": [
+    "3 steps",
+    "4 FAQs",
+    "keyboard expand and collapse",
+    "768/390/320px no overflow",
+    "other tool unchanged",
+    "upload transitions to workspace"
+  ]
+}
