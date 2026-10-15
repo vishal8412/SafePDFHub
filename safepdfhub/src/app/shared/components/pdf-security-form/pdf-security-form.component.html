@@ -1,6 +1,7 @@
 <section
   class="security-form"
   [class.security-form--studio]="appearance === 'studio'"
+  [class.security-form--protect]="mode === 'protect'"
   [attr.aria-labelledby]="appearance === 'studio' ? null : 'pdf-security-title'"
   [attr.aria-label]="appearance === 'studio' ? title : null"
 >
@@ -71,10 +72,11 @@
           (ngModelChange)="onPasswordChanged()"
           [autocomplete]="passwordAutocomplete"
           [disabled]="busy"
+          [attr.aria-invalid]="!!passwordValidationMessage"
           maxlength="128"
           aria-describedby="security-password-help security-password-error"
           placeholder="{{
-            mode === 'protect' ? 'Enter a strong password' : 'Enter the current PDF password'
+            mode === 'protect' ? 'Enter your password' : 'Enter the current PDF password'
           }}"
         />
         <button
@@ -103,7 +105,7 @@
         <span id="security-password-help" class="security-form__field-help">
           {{
             mode === 'protect'
-              ? '8–128 characters • use at least 3 character types'
+              ? '8–128 characters.'
               : 'Enter the password that currently protects this PDF'
           }}
         </span>

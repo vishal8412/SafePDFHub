@@ -316,15 +316,8 @@ export class PdfSecurityService {
       throw new PdfSecurityError('Control characters are not supported in PDF passwords.', 'PASSWORD_INVALID');
     }
 
-    const categories = [
-      /[a-z]/.test(password),
-      /[A-Z]/.test(password),
-      /\d/.test(password),
-      /[^A-Za-z0-9\s]/.test(password)
-    ];
-
-    if (categories.filter(Boolean).length < 3) {
-      throw new PdfSecurityError('Use at least 3 of these 4 character groups: lowercase, uppercase, number, and symbol.', 'PASSWORD_INVALID');
+    if (/^\s+$/.test(password)) {
+      throw new PdfSecurityError('Use at least one non-space character.', 'PASSWORD_INVALID');
     }
   }
 

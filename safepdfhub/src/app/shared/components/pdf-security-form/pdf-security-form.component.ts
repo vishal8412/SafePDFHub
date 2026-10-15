@@ -93,17 +93,6 @@ export class PdfSecurityFormComponent {
     return this.password.length >= 8 && this.password.length <= 128;
   }
 
-  get passwordCharacterMixValid(): boolean {
-    if (!this.password) return false;
-    const categories = [
-      /[a-z]/.test(this.password),
-      /[A-Z]/.test(this.password),
-      /\d/.test(this.password),
-      /[^A-Za-z0-9\s]/.test(this.password)
-    ];
-    return categories.filter(Boolean).length >= 3;
-  }
-
   get passwordHasControlCharacter(): boolean {
     return /[\u0000-\u001F\u007F]/.test(this.password);
   }
@@ -114,7 +103,6 @@ export class PdfSecurityFormComponent {
     }
 
     return this.passwordLengthValid
-      && this.passwordCharacterMixValid
       && !this.passwordHasControlCharacter
       && !/^\s+$/.test(this.password);
   }
@@ -142,20 +130,19 @@ export class PdfSecurityFormComponent {
   }
 
   get passwordStrengthLabel(): string {
-    if (!this.password) return 'Use 8–128 characters';
-    if (this.passwordStrength === 'strong') return 'Strong password';
-    if (this.passwordStrength === 'fair') return 'Good start — make it stronger';
-    return 'Use a longer, more varied password';
+    if (!this.password) return 'Strength estimate is optional';
+    if (this.passwordStrength === 'strong') return 'Estimated strength: strong (advisory)';
+    if (this.passwordStrength === 'fair') return 'Estimated strength: fair (advisory)';
+    return 'Estimated strength: basic (advisory)';
   }
 
   get passwordValidationMessage(): string | null {
     if (!this.passwordTouched && !this.password) return null;
     if (!this.password) return 'Enter a password.';
     if (this.passwordHasControlCharacter) return 'Control characters are not supported in PDF passwords.';
-    if (!this.passwordLengthValid) return 'Use between 8 and 128 characters.';
-    if (this.mode === 'protect' && !this.passwordCharacterMixValid) {
-      return 'Use at least 3 of these 4 groups: lowercase, uppercase, number, symbol.';
-    }
+    if (this.mode === 'protect' && !this.passwordLengthValid) return 'Use between 8 and 128 characters.';
+    if (this.password.length > 128) return 'Use no more than 128 characters.';
+    if (this.mode === 'protect' && /^\s+$/.test(this.password)) return 'Enter a password containing at least one non-space character.';
     return null;
   }
 

@@ -672,3 +672,80 @@
 .security-form--studio {
   width: 100%;
 }
+
+/* Website theme; Studio keeps its existing appearance overrides. */
+.security-form:not(.security-form--studio) {
+  padding: 26px; border-color: #2c4358; background: #0c1c2d; color: #edf5ff;
+  box-shadow: none; max-width: 900px; margin: 0 auto;
+  .security-form__header { grid-template-columns: 46px minmax(0,1fr) auto; gap: 13px; margin-bottom: 22px; }
+  .security-form__icon { width: 46px; height: 46px; border-radius: 12px; background: #133c45; color: #70ded4; }
+  .security-form__icon svg { width: 25px; height: 25px; }
+  .security-form__eyebrow { color: #8bcacb; font-size: 9px; }
+  .security-form__heading h2 { color: #edf5ff; font-size: 25px; line-height: 1.3; }
+  .security-form__heading p { color: #b3c6d5; font-size: 13px; }
+  .security-form__local-badge { background: #10343b; border-color: #315e65; color: #a2ebdb; }
+  .security-form__file { background: #102738; border-color: #304b5e; margin-bottom: 24px; }
+  .security-form__file-icon { background: #163e48; color: #8fe8db; }
+  .security-form__file strong { color: #a7c6d6; }
+  .security-form__file > div > span { color: #edf5ff; white-space: normal; overflow-wrap: anywhere; }
+  .security-form__section-heading { margin: 0 0 16px; }
+  .security-form__section-heading strong, .security-form__field > label { color: #e5f0f8; }
+  .security-form__section-heading span { color: #adc3d4; font-size: 12px; line-height: 1.6; }
+  .security-form__field { margin-bottom: 20px; }
+  .security-form__input-wrap { background: #081625; border-color: #486277; border-radius: 10px; }
+  .security-form__input-wrap input { color: #f3f8ff; font-size: 15px; }
+  .security-form__input-wrap input::placeholder { color: #8ba5b9; }
+  .security-form__show { color: #86e4d8; min-height: 40px; }
+  .security-form__field-help, .security-form__strength small { color: #b3c8d7; font-size: 11px; line-height: 1.7; }
+  .security-form__strength > div span { background: #364a5e; }
+  .security-form__strength--weak > div span:first-child { background: #e6ba72; }
+  .security-form__strength--fair > div span:nth-child(-n+3) { background: #e6ba72; }
+  .security-form__strength--strong > div span { background: #6cdbb4; }
+  .security-form__validation { color: #ffb4a8; font-size: 12px; }
+  .security-form__field-success { color: #8be2c4; }
+  .security-form__permissions { border-color: #345066; padding: 16px; border-radius: 13px; margin: 8px 0 22px; }
+  .security-form__permissions legend { color: #e5f0f8; }
+  .security-form__permissions legend span { color: #afc5d6; }
+  .permission-card { background: #102336; border-color: #354c61; }
+  .permission-card--enabled { background: #10343c; border-color: #39777a; }
+  .permission-card strong { color: #edf5ff; font-size: 12px; }
+  .permission-card small { color: #b0c8d8; font-size: 10px; }
+  .permission-card__icon { background: #233a4f; color: #a9c2d2; }
+  .permission-card--enabled .permission-card__icon { background: #1c5052; color: #88e7d8; }
+  .permission-card input { background: #081625; border-color: #6c879b; }
+  .permission-card input:checked { background: #63d9c8; border-color: #63d9c8; box-shadow: inset 0 0 0 3px #10343c; }
+  .security-form__privacy { background: #102b37; border-color: #345966; margin-top: 6px; }
+  .security-form__privacy-icon { background: #17444d; color: #80dccf; }
+  .security-form__privacy strong { color: #d4f1e8; font-size: 12px; }
+  .security-form__privacy span { color: #b4ccd7; font-size: 11px; line-height: 1.7; }
+  .security-form__actions { border-top: 1px solid #2d4357; padding-top: 20px; margin-top: 22px; }
+  .security-form__primary { background: linear-gradient(110deg,#ffa34e,#ff8040); color: #20180e; border: 1px solid #ffc08b; box-shadow: none; border-radius: 11px; min-height: 48px; }
+  .security-form__primary:hover:not(:disabled) { background: #ffb269; }
+  .security-form__secondary { color: #d6e5ef; background: transparent; border-color: #466077; }
+  .security-form__error { color: #ffc0b3; background: #3b2028; border-color: #86505b; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #76e4dd; outline-offset: 3px; }
+}
+@media(max-width:600px) {
+  .security-form:not(.security-form--studio) { padding: 20px; border-radius: 18px;
+    .security-form__header { grid-template-columns: 38px minmax(0,1fr); }
+    .security-form__local-badge { grid-column: 2; justify-self: start; }
+    .security-form__permissions { grid-template-columns: 1fr; }
+    .security-form__permissions legend { display: block; }
+    .security-form__permissions legend span { display: block; margin-top: 4px; }
+    .security-form__actions { display: flex; flex-direction: column-reverse; }
+    .security-form__actions button { width: 100%; }
+    .security-form__heading h2 { font-size: 23px; }
+  }
+}
+.security-form:not(.security-form--studio) {
+  gap: 18px;
+  .security-form__header, .security-form__file, .security-form__section-heading { margin-bottom: 0; }
+  .security-form__field { margin-bottom: 0; align-self: start; }
+  .security-form__permissions { margin-bottom: 0; }
+  .security-form__actions { margin-top: 0; }
+}
+.security-form--protect:not(.security-form--studio) {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  .security-form__header, .security-form__file, .security-form__section-heading, .security-form__permissions, .security-form__privacy, .security-form__error, .security-form__actions { grid-column: 1 / -1; }
+}
+@media(max-width:700px) { .security-form--protect:not(.security-form--studio) { grid-template-columns: minmax(0,1fr); } }
