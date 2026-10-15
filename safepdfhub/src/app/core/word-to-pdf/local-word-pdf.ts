@@ -67,6 +67,7 @@ interface Paragraph {
   exact: boolean;
   borders?: X;
   keepLines: boolean;
+  widowControl: boolean;
   contextual: boolean;
   style: string;
   lines: Token[][];
@@ -475,12 +476,11 @@ export async function convertLocalWord(
   };
   const numberingRoot = await xml("word/numbering.xml");
   const counters = new Map<string, number>();
-  const listPrefix = (pr: X | undefined) => {
-    const np = child(pr, "numPr");
-    if (!np || !numberingRoot) return "";
+  const listInfo = (np: X | undefined) => {
+    if (!np || !numberingRoot) return undefined;
     const id = attr(child(np, "numId")),
       level = attr(child(np, "ilvl")) || "0";
-    if (id === "0") return "";
+    if (id === "0") return undefined;
     const n = children(numberingRoot, "num").find(
       (n) => attr(n, "numId") === id,
     );
@@ -489,13 +489,31 @@ export async function convertLocalWord(
     const definition = children(numberingRoot, "abstractNum").find(
       (e) => attr(e, "abstractNumId") === abstractId,
     );
-    const lvl = children(definition, "lvl").find(
+    const override = children(n, "lvlOverride").find(
       (e) => attr(e, "ilvl") === level,
     );
+    const lvl =
+      child(override, "lvl") ||
+      children(definition, "lvl").find((e) => attr(e, "ilvl") === level);
     const key = id + ":" + level,
-      value = (counters.get(key) ?? num(attr(child(lvl, "start")), 1) - 1) + 1;
+      value =
+        (counters.get(key) ??
+          num(
+            attr(child(override, "startOverride")) || attr(child(lvl, "start")),
+            1,
+          ) - 1) + 1;
     counters.set(key, value);
-    return attr(child(lvl, "numFmt")) === "bullet" ? "• " : `${value}. `;
+    if (!lvl) return undefined;
+    const format = attr(child(lvl, "numFmt"));
+    const prefix =
+      format === "bullet"
+        ? "•"
+        : (attr(child(lvl, "lvlText")) || "%1.").replace(
+            /%([1-9])/g,
+            (_, digit) =>
+              String(counters.get(id + ":" + (Number(digit) - 1)) ?? value),
+          );
+    return { prefix, lvl };
   };
   const paragraph = async (
     p: X,
@@ -533,12 +551,13 @@ export async function convertLocalWord(
       }
       return fallback;
     };
-    const spacing = property("spacing"),
-      ind = property("ind"),
-      left = num(attr(ind, "left"), 0) / 20,
-      right = num(attr(ind, "right"), 0) / 20,
-      first =
-        (num(attr(ind, "firstLine"), 0) - num(attr(ind, "hanging"), 0)) / 20;
+    const list = listInfo(property("numPr"));
+    const listInd = child(child(list?.lvl, "pPr"), "ind");
+    const indent = (name: string) =>
+      num(inherited("ind", name, attr(listInd, name)), 0) / 20;
+    const left = indent("left"),
+      right = indent("right"),
+      first = indent("firstLine") - indent("hanging");
     const base = [
       child(child(defaults, "rPrDefault"), "rPr"),
       ...context.map((s) => child(s, "rPr")),
@@ -567,8 +586,22 @@ export async function convertLocalWord(
         });
       }
     };
-    const prefix = listPrefix(pr);
-    if (prefix) await push(prefix, faceFrom(base));
+    if (list) {
+      await push(list.prefix, faceFrom(base));
+      const suffix = attr(child(list.lvl, "suff")) || "tab";
+      if (suffix === "space") await push(" ", faceFrom(base));
+      else if (suffix === "tab") {
+        const markerWidth = tokens.reduce((n, t) => n + t.width, 0);
+        tokens.push({
+          ...empty,
+          text: " ",
+          width: Math.max(
+            empty.font.widthOfTextAtSize(" ", empty.face.size),
+            -first - markerWidth,
+          ),
+        });
+      }
+    }
     const walk = async (el: X): Promise<void> => {
       if (["pPr", "del"].includes(el.localName!)) return;
       if (el.localName === "r") {
@@ -659,7 +692,8 @@ export async function convertLocalWord(
       lines.push([]);
       used = 0;
     };
-    for (const token of tokens) {
+    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+      const token = tokens[tokenIndex];
       if (token.height === -1) {
         lines.at(-1)!.push(token);
         next();
@@ -669,12 +703,22 @@ export async function convertLocalWord(
         1,
         width - left - right - (lines.length === 1 ? first : 0),
       );
-      if (token.width + used > limit && lines.at(-1)!.length) next();
+      let wordWidth = token.width;
+      if (token.text.trim())
+        for (
+          let j = tokenIndex + 1;
+          j < tokens.length && tokens[j].text.trim() && tokens[j].height !== -1;
+          j++
+        )
+          wordWidth += tokens[j].width;
+      if (wordWidth + used > limit && lines.at(-1)!.length) next();
       if (!used && !token.text.trim() && !token.image && !token.drawing)
         continue;
       if (token.width > limit && !token.image && !token.drawing) {
         for (const c of Array.from(token.text)) {
-          const w = token.font.widthOfTextAtSize(c, token.face.size);
+          const w =
+            token.font.widthOfTextAtSize(c, token.face.size) +
+            token.face.spacing;
           if (used + w > limit && used) next();
           lines.at(-1)!.push({ ...token, text: c, width: w });
           used += w;
@@ -708,6 +752,7 @@ export async function convertLocalWord(
       exact: lineRule === "exact",
       borders: property("pBdr"),
       keepLines: on(property("keepLines")),
+      widowControl: !property("widowControl") || on(property("widowControl")),
       contextual: on(property("contextualSpacing")),
       style: attr(child(pr, "pStyle")) || "Normal",
       lines,
@@ -1037,6 +1082,11 @@ export async function convertLocalWord(
       y -= plan.after;
       return;
     }
+    // Saved Word pagination is a lower-bound hint, never an instruction to add
+    // a second break after layout or an explicit break already reached that page.
+    const savedPage = savedParagraphPages.get(p);
+    if (savedPage === pdf.getPageCount() + 1 && y < paper.height - paper.top)
+      newPage();
     if (plan.pageBreak && y < paper.height - paper.top) newPage();
     let before = Math.max(previousAfter, plan.before);
     if (plan.contextual && previousContextual && previousStyle === plan.style)
@@ -1046,12 +1096,24 @@ export async function convertLocalWord(
     const nextHeight = following
       ? Math.max(plan.after, following.before) +
         following.lines
-          .slice(0, 2)
+          .slice(
+            0,
+            following.keepLines
+              ? following.lines.length
+              : following.widowControl && following.lines.length === 3
+                ? 3
+                : following.widowControl
+                  ? 2
+                  : 1,
+          )
           .reduce((n, l) => n + lineHeight(l, following), 0)
       : 0;
-    const required =
-      (plan.keepLines ? estimated : lineHeight(plan.lines[0], plan)) +
-      (plan.keep ? nextHeight : 0);
+    const startsWithPageBreak = plan.tokens[0]?.break === true;
+    if (startsWithPageBreak) before = 0;
+    const required = startsWithPageBreak
+      ? 0
+      : (plan.keepLines ? estimated : lineHeight(plan.lines[0], plan)) +
+        (plan.keep ? nextHeight : 0);
     // An empty paragraph that only overflows the bottom margin must not create
     // a leading blank line and its spacing on the following page.
     if (
@@ -1073,6 +1135,48 @@ export async function convertLocalWord(
     }
     y -= before;
     for (const token of plan.anchors) placeAnchor(token, paper.height - y, x);
+    const plain =
+      !floats.length &&
+      !plan.anchors.length &&
+      !plan.tokens.some((t) => t.height === -1 || t.image || t.drawing);
+    if (plain) {
+      // Paginate measured lines as groups so a paragraph cannot leave a single
+      // first/last line isolated across a page boundary (Word's default).
+      let atLine = 0;
+      while (atLine < plan.lines.length) {
+        let count = 0,
+          usedHeight = 0;
+        while (
+          atLine + count < plan.lines.length &&
+          usedHeight + lineHeight(plan.lines[atLine + count], plan) <=
+            y - paper.bottom + 0.01
+        ) {
+          usedHeight += lineHeight(plan.lines[atLine + count], plan);
+          count++;
+        }
+        const remaining = plan.lines.length - atLine;
+        if (plan.widowControl && count < remaining) {
+          if (remaining - count === 1) count--;
+          if (atLine === 0 && count === 1) count = 0;
+        }
+        if (!count) {
+          if (y < paper.height - paper.top - 0.01) {
+            newPage();
+            continue;
+          }
+          // Oversized lines must fail rather than retry forever. A very short
+          // authored page can fit one line but cannot satisfy widow control.
+          if (lineHeight(plan.lines[atLine], plan) > y - paper.bottom)
+            throw Error("A text line is taller than the page.");
+          count = 1;
+        }
+        for (let i = 0; i < count; i++, atLine++) {
+          drawLine(plan.lines[atLine], plan, x, y, width, atLine);
+          y -= lineHeight(plan.lines[atLine], plan);
+        }
+        if (atLine < plan.lines.length) newPage();
+      }
+    }
     // Work with a copy: line splitting must not mutate cached paragraph plans or their drawings.
     const queue = plan.tokens.map((t) => ({ ...t }));
     let at = 0,
@@ -1080,154 +1184,160 @@ export async function convertLocalWord(
       finalBreak = false,
       laidEmpty = false,
       bandHeight = 0;
-    do {
-      const head = queue[at];
-      if (head?.height === -1 && head.break) {
-        newPage();
-        at++;
-        index++;
-        finalBreak = at >= queue.length;
-        continue;
-      }
-      const lineStart = at;
-      const splitBefore: [number, Token][] = [];
-      const fragments: {
-        line: Token[];
-        plan: Paragraph;
-        x: number;
-        width: number;
-      }[] = [];
-      let height = Math.max(bandHeight, lineHeight(head ? [head] : [], plan));
-      const initialHeight = height;
-      if (height > paper.height - paper.top - paper.bottom)
-        throw Error(
-          "An image or text line is taller than the page. Resize it in Word before converting.",
-        );
-      if (y - height < paper.bottom) newPage();
-      const left = x + plan.left + (index === 0 ? plan.first : 0),
-        right = x + width - plan.right;
-      const slots = lineSlots(
-        left,
-        right - left,
-        paper.height - y,
-        height,
-        floats,
-      );
-      if (!slots.length) {
-        const bottoms = floats
-          .filter(
-            (f) =>
-              f.mode !== "none" &&
-              f.top + f.height + f.below > paper.height - y,
-          )
-          .map((f) => f.top + f.height + f.below);
-        if (!bottoms.length)
-          throw Error("The document has no available text area.");
-        y = paper.height - Math.min(...bottoms);
-        continue;
-      }
-      let consumed = false;
-      for (const slot of slots) {
-        const line: Token[] = [];
-        let used = 0;
-        while (at < queue.length) {
-          const t = queue[at];
-          if (t.height === -1) {
-            at++;
-            line.push(t);
-            consumed = true;
-            break;
-          }
-          if (!used && /^\s+$/.test(t.text)) {
-            at++;
-            continue;
-          }
-          // Keep text fragments belonging to the same word together, even across Word runs.
-          let wordWidth = t.width;
-          if (t.text.trim())
-            for (
-              let j = at + 1;
-              j < queue.length &&
-              queue[j].text.trim() &&
-              queue[j].height !== -1;
-              j++
-            )
-              wordWidth += queue[j].width;
-          if (used + wordWidth > slot.width + 0.01 && line.length) break;
-          if (t.width > slot.width + 0.01 && !t.drawing && !t.image) {
-            let text = "",
-              size = 0;
-            for (const char of Array.from(t.text)) {
-              const cw =
-                t.font.widthOfTextAtSize(char, t.face.size) + t.face.spacing;
-              if (text && size + cw > slot.width) break;
-              text += char;
-              size += cw;
-            }
-            if (!text) break;
-            line.push({ ...t, text, width: size });
-            splitBefore.push([at, { ...t }]);
-            t.text = t.text.slice(text.length);
-            t.width -= size;
-            if (!t.text) at++;
-            consumed = true;
-            break;
-          }
-          line.push(t);
-          used += t.width;
+    if (!plain)
+      do {
+        const head = queue[at];
+        if (head?.height === -1 && head.break) {
+          newPage();
           at++;
-          consumed = true;
-          if (used >= slot.width) break;
+          index++;
+          finalBreak = at >= queue.length;
+          continue;
         }
-        while (line.length && /^\s+$/.test(line.at(-1)!.text)) line.pop();
-        height = Math.max(height, lineHeight(line, plan));
-        const fragment = {
-          ...plan,
-          left: 0,
-          right: 0,
-          first: 0,
-          lines: at >= queue.length ? [line] : [line, []],
-        };
-        fragments.push({ line, plan: fragment, x: slot.x, width: slot.width });
-        if (line.some((t) => t.height === -1)) break;
-        if (at >= queue.length) break;
-      }
-      if (height > paper.height - paper.top - paper.bottom)
-        throw Error(
-          "An image or text line is taller than the page. Resize it in Word before converting.",
-        );
-      if (
-        y - height < paper.bottom ||
-        (height > initialHeight + 0.01 && floats.length)
-      ) {
-        at = lineStart;
-        for (const [i, t] of splitBefore) queue[i] = t;
+        const lineStart = at;
+        const splitBefore: [number, Token][] = [];
+        const fragments: {
+          line: Token[];
+          plan: Paragraph;
+          x: number;
+          width: number;
+        }[] = [];
+        let height = Math.max(bandHeight, lineHeight(head ? [head] : [], plan));
+        const initialHeight = height;
+        if (height > paper.height - paper.top - paper.bottom)
+          throw Error(
+            "An image or text line is taller than the page. Resize it in Word before converting.",
+          );
         if (y - height < paper.bottom) newPage();
-        bandHeight = height;
-        continue;
-      }
-      for (const fragment of fragments)
-        drawLine(
-          fragment.line,
-          fragment.plan,
-          fragment.x,
-          y,
-          fragment.width,
-          0,
+        const left = x + plan.left + (index === 0 ? plan.first : 0),
+          right = x + width - plan.right;
+        const slots = lineSlots(
+          left,
+          right - left,
+          paper.height - y,
+          height,
+          floats,
         );
-      bandHeight = 0;
-      y -= height;
-      laidEmpty = true;
-      index++;
-      if (!consumed && at < queue.length)
-        throw Error(
-          "Text cannot fit beside this drawing. Adjust its wrapping in Word.",
-        );
-      if (queue[at - 1]?.break) {
-        newPage();
-        finalBreak = at >= queue.length;
-      }
-    } while (at < queue.length || (!queue.length && !laidEmpty));
+        if (!slots.length) {
+          const bottoms = floats
+            .filter(
+              (f) =>
+                f.mode !== "none" &&
+                f.top + f.height + f.below > paper.height - y,
+            )
+            .map((f) => f.top + f.height + f.below);
+          if (!bottoms.length)
+            throw Error("The document has no available text area.");
+          y = paper.height - Math.min(...bottoms);
+          continue;
+        }
+        let consumed = false;
+        for (const slot of slots) {
+          const line: Token[] = [];
+          let used = 0;
+          while (at < queue.length) {
+            const t = queue[at];
+            if (t.height === -1) {
+              at++;
+              line.push(t);
+              consumed = true;
+              break;
+            }
+            if (!used && /^\s+$/.test(t.text)) {
+              at++;
+              continue;
+            }
+            // Keep text fragments belonging to the same word together, even across Word runs.
+            let wordWidth = t.width;
+            if (t.text.trim())
+              for (
+                let j = at + 1;
+                j < queue.length &&
+                queue[j].text.trim() &&
+                queue[j].height !== -1;
+                j++
+              )
+                wordWidth += queue[j].width;
+            if (used + wordWidth > slot.width + 0.01 && line.length) break;
+            if (t.width > slot.width + 0.01 && !t.drawing && !t.image) {
+              let text = "",
+                size = 0;
+              for (const char of Array.from(t.text)) {
+                const cw =
+                  t.font.widthOfTextAtSize(char, t.face.size) + t.face.spacing;
+                if (text && size + cw > slot.width) break;
+                text += char;
+                size += cw;
+              }
+              if (!text) break;
+              line.push({ ...t, text, width: size });
+              splitBefore.push([at, { ...t }]);
+              t.text = t.text.slice(text.length);
+              t.width -= size;
+              if (!t.text) at++;
+              consumed = true;
+              break;
+            }
+            line.push(t);
+            used += t.width;
+            at++;
+            consumed = true;
+            if (used >= slot.width) break;
+          }
+          while (line.length && /^\s+$/.test(line.at(-1)!.text)) line.pop();
+          height = Math.max(height, lineHeight(line, plan));
+          const fragment = {
+            ...plan,
+            left: 0,
+            right: 0,
+            first: 0,
+            lines: at >= queue.length ? [line] : [line, []],
+          };
+          fragments.push({
+            line,
+            plan: fragment,
+            x: slot.x,
+            width: slot.width,
+          });
+          if (line.some((t) => t.height === -1)) break;
+          if (at >= queue.length) break;
+        }
+        if (height > paper.height - paper.top - paper.bottom)
+          throw Error(
+            "An image or text line is taller than the page. Resize it in Word before converting.",
+          );
+        if (
+          y - height < paper.bottom ||
+          (height > initialHeight + 0.01 && floats.length)
+        ) {
+          at = lineStart;
+          for (const [i, t] of splitBefore) queue[i] = t;
+          if (y - height < paper.bottom) newPage();
+          bandHeight = height;
+          continue;
+        }
+        for (const fragment of fragments)
+          drawLine(
+            fragment.line,
+            fragment.plan,
+            fragment.x,
+            y,
+            fragment.width,
+            0,
+          );
+        bandHeight = 0;
+        y -= height;
+        laidEmpty = true;
+        index++;
+        if (!consumed && at < queue.length)
+          throw Error(
+            "Text cannot fit beside this drawing. Adjust its wrapping in Word.",
+          );
+        if (queue[at - 1]?.break) {
+          newPage();
+          finalBreak = at >= queue.length;
+        }
+      } while (at < queue.length || (!queue.length && !laidEmpty));
     // Paragraph borders are part of the Word style, not a separate HTML decoration.
     const border = child(plan.borders, "bottom");
     if (border && !["nil", "none"].includes(attr(border))) {
@@ -1524,6 +1634,22 @@ export async function convertLocalWord(
   };
   const blocks = children(body),
     sections: { blocks: X[]; props: X | undefined }[] = [];
+  const savedParagraphPages = new Map<X, number>();
+  let savedPage = 1;
+  for (const block of blocks) {
+    let contentBefore = false;
+    const visit = (el: X) => {
+      if (["pPr", "rPr", "del"].includes(el.localName || "")) return;
+      if (el.localName === "lastRenderedPageBreak") {
+        savedPage++;
+        if (block.localName === "p" && !contentBefore)
+          savedParagraphPages.set(block, savedPage);
+      } else if (["t", "drawing", "tab"].includes(el.localName || "")) {
+        contentBefore = true;
+      } else for (const c of children(el)) visit(c);
+    };
+    visit(block);
+  }
   let pending: X[] = [];
   for (const b of blocks) {
     if (b.localName === "sectPr") {

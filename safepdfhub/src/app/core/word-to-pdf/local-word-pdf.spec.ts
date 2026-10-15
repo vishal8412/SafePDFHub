@@ -276,8 +276,20 @@ describe("Direct local Word to PDF", () => {
       texts[i].items.filter(
         (x: any) => typeof x.str === "string" && x.str.trim(),
       ) as { str: string; width: number; transform: number[] }[];
-    for (const i of [1, 3, 4, 5])
+    for (const i of [1, 2, 3, 4, 5])
       expect(792 - words(i)[0].transform[5]).toBeLessThan(90);
+    expect(
+      words(1)
+        .map((w) => w.str)
+        .join(" "),
+    ).not.toContain("Tight Text");
+    expect(
+      words(2)
+        .map((w) => w.str)
+        .join(" "),
+    ).toContain("Tight Text Wrapping");
+    expect(figures[2][0].top).toBeGreaterThan(150);
+    expect(figures[2][0].top).toBeLessThan(170);
     const beside = words(1).filter(
       (w) => 792 - w.transform[5] > 160 && 792 - w.transform[5] < 335,
     );
@@ -296,6 +308,125 @@ describe("Direct local Word to PDF", () => {
     ).toContain("After replacing");
     await pdf.destroy();
   });
+
+  it("does not create a blank page by measuring a page-break-only paragraph at the bottom", async () => {
+    const body =
+      '<w:p><w:pPr><w:spacing w:line="1200" w:lineRule="exact" w:after="200"/></w:pPr><w:r><w:t>Page one</w:t></w:r></w:p>' +
+      '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' +
+      p("Page two") +
+      '<w:sectPr><w:pgSz w:w="4000" w:h="4000"/><w:pgMar w:top="1200" w:bottom="1200" w:left="300" w:right="300"/></w:sectPr>';
+    expect(
+      (await convertLocalWord(await fixture(body), assets, () => {})).pages,
+    ).toBe(2);
+  });
+  it("preserves intentional consecutive manual page breaks", async () => {
+    const br = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+    expect(
+      (
+        await convertLocalWord(
+          await fixture(p("First") + br + br + p("Third")),
+          assets,
+          () => {},
+        )
+      ).pages,
+    ).toBe(3);
+  });
+  it("uses saved paragraph-start page hints without duplicating explicit breaks", async () => {
+    const hinted =
+      "<w:p><w:r><w:lastRenderedPageBreak/><w:t>Second</w:t></w:r></w:p>";
+    for (const explicit of [
+      "",
+      '<w:p><w:r><w:br w:type="page"/></w:r></w:p>',
+    ]) {
+      const result = await convertLocalWord(
+        await fixture(p("First") + explicit + hinted),
+        assets,
+        () => {},
+      );
+      expect(result.pages).toBe(2);
+    }
+  });
+  it("inherits list numbering and hanging indents from paragraph styles", async () => {
+    const item = (text: string) =>
+      '<w:p><w:pPr><w:pStyle w:val="Items"/></w:pPr><w:r><w:t>' +
+      text +
+      "</w:t></w:r></w:p>";
+    const result = await convertLocalWord(
+      await fixture(item("Alpha") + item("Beta"), {
+        "word/styles.xml":
+          '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:styleId="Items" w:type="paragraph"><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style></w:styles>',
+        "word/numbering.xml":
+          '<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>',
+      }),
+      assets,
+      () => {},
+    );
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await getDocument({
+      data: Uint8Array.from(result.bytes),
+      disableFontFace: true,
+    }).promise;
+    const items = (await (await pdf.getPage(1)).getTextContent())
+      .items as any[];
+    expect(items.map((i) => i.str).join(" ")).toMatch(
+      /1\.\s+Alpha.*2\.\s+Beta/,
+    );
+    expect(items.find((i) => i.str === "1.").transform[4]).toBeCloseTo(90);
+    expect(items.find((i) => i.str === "Alpha").transform[4]).toBeCloseTo(108);
+    await pdf.destroy();
+  });
+  it("keeps orphan and widow lines together unless explicitly disabled", async () => {
+    for (const enabled of [true, false]) {
+      const body =
+        '<w:p><w:pPr><w:spacing w:line="900" w:lineRule="exact"/></w:pPr><w:r><w:t>First</w:t></w:r></w:p>' +
+        '<w:p><w:pPr><w:spacing w:line="400" w:lineRule="exact"/><w:widowControl w:val="' +
+        (enabled ? "1" : "0") +
+        '"/></w:pPr><w:r><w:t>Alpha bravo charlie delta echo foxtrot golf hotel india juliet</w:t></w:r></w:p>' +
+        '<w:sectPr><w:pgSz w:w="4000" w:h="4000"/><w:pgMar w:top="1200" w:bottom="1200" w:left="500" w:right="500"/></w:sectPr>';
+      const result = await convertLocalWord(
+        await fixture(body),
+        assets,
+        () => {},
+      );
+      const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const pdf = await getDocument({
+        data: Uint8Array.from(result.bytes),
+        disableFontFace: true,
+      }).promise;
+      const text = (await (await pdf.getPage(1)).getTextContent()).items
+        .map((i: any) => i.str)
+        .join(" ");
+      expect(text.includes("Alpha")).toBe(!enabled);
+      await pdf.destroy();
+    }
+  });
+  it("converts the large reference fixture to 49 pages without losing its final content", async () => {
+    const source = Uint8Array.from(
+      readFileSync("src/app/core/word-to-pdf/fixtures/large-pagination.docx"),
+    );
+    const result = await convertLocalWord(
+      new Blob([source.buffer]),
+      assets,
+      () => {},
+    );
+    expect(result.pages).toBe(49);
+    const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdf = await getDocument({
+      data: Uint8Array.from(result.bytes),
+      disableFontFace: true,
+    }).promise;
+    const text = async (n: number) =>
+      (await (await pdf.getPage(n)).getTextContent()).items
+        .map((i: any) => i.str)
+        .join(" ").replace(/\s+/g, " ");
+    expect(await text(3)).not.toContain("1.3 The DOCX Format");
+    expect(await text(4)).toContain("1.3 The DOCX Format");
+    expect(await text(7)).toContain("•");
+    expect(await text(7)).toContain("1.");
+    expect(await text(17)).toContain("Programming Libraries");
+    expect(await text(49)).toContain("This concludes the appendix material");
+    await pdf.destroy();
+  }, 15000);
   it("does not report success after dropping equations or unsupported content", async () => {
     await expect(
       convertLocalWord(

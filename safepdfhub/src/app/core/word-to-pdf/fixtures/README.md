@@ -1,0 +1,3 @@
+Layout regression fixture derived from the user-supplied Sample-Files.com image document. The authored text, dimensions and wrapping remain intact; embedded photographs are replaced with a one-pixel PNG to keep tests small. Document properties and printer settings are omitted. This is a test input, not a conversion template.
+
+`large-pagination.docx` retains the user-supplied Sample-Files.com large document (sample text and tables), with document properties omitted. It reproduces the extra page caused by a break-only paragraph near the bottom margin and verifies the 49-page result, list markers and final content.
