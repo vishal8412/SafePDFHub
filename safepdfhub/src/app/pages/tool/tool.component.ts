@@ -1,6 +1,6 @@
 import { WordToPdfWorkspaceComponent } from '../../features/tools/word-to-pdf/word-to-pdf-workspace.component';
 import { validateWordSelection } from '../../core/word-to-pdf/word-to-pdf.service';
-import { WordGuideComponent } from '../../features/tools/word/word-guide/word-guide.component';
+import { ToolGuideComponent } from '../../shared/components/tool-guide/tool-guide.component';
 import { WordWorkspaceComponent } from '../../features/tools/word/word-workspace.component';
 import { PdfToWordService } from '../../core/word/pdf-to-word.service';
 import { LargeCompressionCapabilityService } from '../../core/compression/large/large-compression-capability.service';
@@ -56,7 +56,7 @@ type WorkflowStep = 'merge' | 'compress' | 'split';
 @Component({
   selector: 'app-tool',
   standalone: true,
-  imports: [WordToPdfWorkspaceComponent, WordGuideComponent, WordWorkspaceComponent, CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
+  imports: [WordToPdfWorkspaceComponent, ToolGuideComponent, WordWorkspaceComponent, CommonModule, MergeWorkspaceComponent, CompressWorkspaceComponent, SplitWorkspaceComponent, SecurityWorkspaceComponent, SignPdfWorkspaceComponent, WatermarkWorkspaceComponent,
     DialogComponent, BottomSheetComponent, ActionPanelComponent, RouterModule],
   templateUrl: './tool.component.html',
   styleUrls: ['./tool.component.scss']

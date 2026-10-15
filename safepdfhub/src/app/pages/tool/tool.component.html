@@ -118,40 +118,7 @@
 
  </div>
 
-  <app-word-guide *ngIf="!isWorkspaceMode && isWordTool && guide" [guide]="guide!" />
-
-  <section class="tool-guide" [class.word-pdf-guide]="isWordToPdfTool" *ngIf="!isWorkspaceMode && !isWordTool && !isCompressTool && guide as help" aria-labelledby="tool-guide-title">
-    <h2 id="tool-guide-title">{{ isWordToPdfTool ? 'How to convert Word to PDF' : isWordTool ? 'How to convert PDF to Word' : 'How to ' + tool.label.toLowerCase() }}</h2>
-    <ol><li *ngFor="let step of help.steps">{{ step }}</li></ol>
-    <h2>Questions about {{ isWordTool ? 'PDF to Word' : tool.label.toLowerCase() }}</h2>
-    <article *ngFor="let item of help.questions">
-      <h3>{{ item.question }}</h3><p>{{ item.answer }}</p>
-    </article>
-    <p>{{ isWordToPdfTool ? 'Word documents are processed in your browser.' : 'Documents are processed in your browser.' }} Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> for help.</p>
-  </section>
-
-  <section class="compress-guide" *ngIf="!isWorkspaceMode && isCompressTool && guide as help" aria-labelledby="compress-guide-title">
-    <header class="compress-guide-heading"><span class="guide-eyebrow">FROM FILE TO FINISHED PDF</span><h2 id="compress-guide-title">How to compress a PDF</h2><p>Three simple steps. Your document stays on your device throughout.</p></header>
-    <ol class="compress-steps">
-      <li *ngFor="let step of help.steps; let i = index" class="compress-step">
-        <div class="step-topline"><span class="step-count">STEP 0{{ i + 1 }}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <g *ngIf="i === 0"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6M8 14h8m-8 3h5"/></g>
-          <g *ngIf="i === 1"><path d="M5 3v5m0 4v9M12 3v11m0 4v3M19 3v2m0 4v12M2 8h6m1 6h6m1-9h6"/><circle cx="5" cy="10" r="2"/><circle cx="12" cy="16" r="2"/><circle cx="19" cy="7" r="2"/></g>
-          <g *ngIf="i === 2"><path d="M12 3v12m-5-5 5 5 5-5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></g>
-        </svg></div>
-        <h3>{{ i === 0 ? 'Select your PDF' : i === 1 ? 'Choose what matters' : 'Review and download' }}</h3><p>{{ step }}</p>
-        <span class="step-footnote">{{ i === 0 ? 'No document upload required' : i === 1 ? 'Quality, smaller size, or a size limit' : 'See the actual size before saving' }}</span>
-      </li>
-    </ol>
-    <div class="guide-tip"><span class="tip-symbol" aria-hidden="true">i</span><p><strong>Not sure where to start?</strong> Try Smart Compression for everyday use. Set a target size when an upload form gives you a file-size limit.</p></div>
-    <div class="compress-faq">
-      <div class="faq-intro"><span class="guide-eyebrow">A LITTLE HELP, WHEN YOU NEED IT</span><h2 id="compress-faq-title">Before you compress</h2><p>Choose the right setting and know what to expect from your result.</p></div>
-      <div class="faq-answers" aria-labelledby="compress-faq-title">
-        <details *ngFor="let item of help.questions; let i = index" class="compress-faq-item" [open]="i === 0"><summary><span>{{ item.question }}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary><p>{{ item.answer }}</p></details>
-      </div>
-    </div>
-    <div class="guide-privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m12 3-8 3v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z"/><path d="m8 12 3 3 5-6"/></svg><p>Processed in your browser. Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> if you need help.</p></div>
-  </section>
+  <app-tool-guide *ngIf="!isWorkspaceMode && guide" [guide]="guide!" [slug]="tool.slug" />
 
   <!-- =====================
        FILE LIST (HORIZONTAL)

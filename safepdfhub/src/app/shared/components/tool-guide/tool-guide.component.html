@@ -1,0 +1,23 @@
+<section class="tool-guide-visual" [attr.aria-labelledby]="slug + '-guide-title'">
+    <header class="guide-heading"><span class="guide-eyebrow">{{ presentation.eyebrow }}</span><h2 [id]="slug + '-guide-title'">{{ presentation.title }}</h2><p>{{ presentation.intro }}</p></header>
+    <ol class="guide-steps">
+      <li *ngFor="let step of guide.steps; let i = index" class="guide-step">
+        <div class="step-topline"><span class="step-count">STEP 0{{ i + 1 }}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <g *ngIf="i === 0"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/><path d="M14 3v6h6M8 14h8m-8 3h5"/></g>
+          <g *ngIf="i === 1"><path d="M5 3v5m0 4v9M12 3v11m0 4v3M19 3v2m0 4v12M2 8h6m1 6h6m1-9h6"/><circle cx="5" cy="10" r="2"/><circle cx="12" cy="16" r="2"/><circle cx="19" cy="7" r="2"/></g>
+          <g *ngIf="i === 2"><path d="M12 3v12m-5-5 5 5 5-5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></g>
+        </svg></div>
+        <h3>{{ presentation.titles[i] }}</h3><p>{{ step }}</p>
+        <span class="step-footnote">{{ presentation.notes[i] }}</span>
+      </li>
+    </ol>
+    <div class="guide-tip"><span class="tip-symbol" aria-hidden="true">i</span><p><strong>{{ presentation.tipLead }}</strong> {{ presentation.tip }}</p></div>
+    <section *ngIf="slug === 'pdf-to-word'" class="output-choices" aria-labelledby="word-output-choices"><h3 id="word-output-choices">Choose the Word document you need</h3><div class="output-choice-grid"><article><span class="choice-symbol" aria-hidden="true">Aa</span><h4>Editable text</h4><p>Keep selectable text in positioned text boxes. For scans, OCR can attempt to read English, Hindi or Marathi. Proofread the result; uncertain pages and scanned tables may remain images.</p><small>Text boxes preserve placement but do not reflow like ordinary paragraphs. Fonts may differ.</small></article><article><span class="choice-symbol" aria-hidden="true">▤</span><h4>Keep page appearance</h4><p>Place each PDF page in Word as an image, keeping its layout, tables, stamps and handwriting visible together.</p><small>Words inside the page image are not editable. The Word file may be larger than your PDF.</small></article></div></section>
+    <div class="guide-faq">
+      <div class="faq-intro"><span class="guide-eyebrow">A LITTLE HELP, WHEN YOU NEED IT</span><h2 [id]="slug + '-faq-title'">{{ presentation.faqTitle }}</h2><p>{{ presentation.faqIntro }}</p></div>
+      <div class="faq-answers" [attr.aria-labelledby]="slug + '-faq-title'">
+        <details *ngFor="let item of guide.questions; let i = index" class="guide-faq-item" [open]="i === 0"><summary><span>{{ item.question }}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary><p>{{ item.answer }}</p></details>
+      </div>
+    </div>
+    <div class="guide-privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m12 3-8 3v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z"/><path d="m8 12 3 3 5-6"/></svg><p>Processed in your browser. Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> if you need help.</p></div>
+  </section>

@@ -1,0 +1,161 @@
+{
+  "results": [
+    {
+      "slug": "compress-pdf",
+      "title": "How to compress a PDF",
+      "stepTitles": [
+        "Select your PDF",
+        "Choose what matters",
+        "Review and download"
+      ],
+      "faqCount": 4,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "merge-pdf",
+      "title": "How to merge PDF files",
+      "stepTitles": [
+        "Select your PDFs",
+        "Set the reading order",
+        "Merge and download"
+      ],
+      "faqCount": 1,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "split-pdf",
+      "title": "How to split a PDF",
+      "stepTitles": [
+        "Select your PDF",
+        "Choose the pages",
+        "Split and download"
+      ],
+      "faqCount": 1,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "protect-pdf",
+      "title": "How to password-protect a PDF",
+      "stepTitles": [
+        "Select your PDF",
+        "Set your protection",
+        "Protect and download"
+      ],
+      "faqCount": 1,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "unlock-pdf",
+      "title": "How to unlock a PDF",
+      "stepTitles": [
+        "Select your PDF",
+        "Enter the password",
+        "Unlock and download"
+      ],
+      "faqCount": 1,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "sign-pdf",
+      "title": "How to sign a PDF",
+      "stepTitles": [
+        "Select your PDF",
+        "Place your signature",
+        "Review and download"
+      ],
+      "faqCount": 1,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "watermark-pdf",
+      "title": "How to watermark a PDF",
+      "stepTitles": [
+        "Select your PDF",
+        "Make your watermark",
+        "Apply and download"
+      ],
+      "faqCount": 1,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "pdf-to-word",
+      "title": "How to convert PDF to Word",
+      "stepTitles": [
+        "Select your PDF",
+        "Choose your Word output",
+        "Review and download"
+      ],
+      "faqCount": 5,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    },
+    {
+      "slug": "word-to-pdf",
+      "title": "How to convert Word to PDF",
+      "stepTitles": [
+        "Select your DOCX",
+        "Convert your document",
+        "Review and download"
+      ],
+      "faqCount": 5,
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "fileChooser": true
+    }
+  ],
+  "pageErrors": [],
+  "build": "passed",
+  "business_logic_unchanged": true,
+  "controller_methods_unchanged": true
+}
