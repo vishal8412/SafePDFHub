@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { indexingDisabled, robotsText, seoRedirect, sitemapXml, discoveryIndexText } from './seo-http';
 import { TOOLS } from '../app/config/tools.config';
 import { SITE_CONFIG } from '../app/config/site.config';
+import { KNOWLEDGE_GUIDES } from '../app/config/knowledge-guides.config';
 
 describe('public SEO HTTP policy', () => {
   it('redirects every implemented legacy tool and normalizes canonical trailing slashes', () => {
@@ -11,6 +12,8 @@ describe('public SEO HTTP policy', () => {
     expect(seoRedirect('/tool/compress-pdf')).toBe('/tools/compress-pdf');
     expect(seoRedirect('/tools/compress-pdf/')).toBe('/tools/compress-pdf');
     expect(seoRedirect('/donate')).toBe('/support');
+    expect(seoRedirect('/guides/')).toBe('/guides');
+    expect(seoRedirect('/guides/compress-scanned-pdf/')).toBe('/guides/compress-scanned-pdf');
   });
   it('does not turn missing tools or pages into homepage redirects', () => {
     for (const path of ['/pdf-to-excel', '/missing', '/tools/missing/', '/tool/missing'])
@@ -40,7 +43,8 @@ describe('public SEO HTTP policy', () => {
   it('includes only the public canonical inventory in the sitemap', () => {
     const xml = sitemapXml();
     expect(xml).toContain('/tools/pdf-to-word</loc>');
-    expect((xml.match(/<loc>/g) ?? []).length).toBe(SITE_CONFIG.staticIndexablePaths.length + TOOLS.length);
+    expect((xml.match(/<loc>/g) ?? []).length).toBe(SITE_CONFIG.staticIndexablePaths.length + TOOLS.length + KNOWLEDGE_GUIDES.length + 1);
+    for (const guide of KNOWLEDGE_GUIDES) expect(xml).toContain(`/guides/${guide.slug}</loc>`);
     expect(xml).toContain('/tools/word-to-pdf</loc>');
     expect(xml).toContain('<loc>https://safepdfhub.com/tools/compress-pdf</loc>');
     for (const excluded of ['/studio', '/__dev', '/pdf-to-excel', '/tool/'])
@@ -61,6 +65,7 @@ describe('public SEO HTTP policy', () => {
   it('keeps the optional public discovery index aligned with every available tool', () => {
     const index = discoveryIndexText();
     for (const tool of TOOLS) expect(index).toContain(`https://safepdfhub.com/tools/${tool.slug}`);
+    for (const guide of KNOWLEDGE_GUIDES) expect(index).toContain(`https://safepdfhub.com/guides/${guide.slug}`);
     expect(index).toContain('/privacy');
     for (const path of ['/studio', '/api/', '/__dev/']) expect(index).not.toContain(path);
   });

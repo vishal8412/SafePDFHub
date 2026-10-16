@@ -1,5 +1,7 @@
 # SafePDFHub: search and AI discovery update
 
+This document describes the initial AEO/GEO update. The current keyword and guide release is documented in README-SEO-GROWTH.md and SEO-GROWTH-VALIDATION.json.
+
 This release improves the public HTML and discovery metadata across all nine implemented tools. It builds on the existing Angular SSR architecture and shared guide design. It does not change the PDF compression, conversion, editing, signing, or download engines.
 
 ## What changed

@@ -51,6 +51,8 @@
 .guide-related .guide-eyebrow { margin-right: auto; }
 .guide-related a { display: inline-flex; align-items: center; gap: 18px; border: 1px solid #315a68; border-radius: 10px; padding: 12px 16px; font-size: 13px; text-decoration: none; }
 .guide-related a:hover { background: #123540; }
+.guide-reading { display:flex; flex-direction:column; align-items:flex-start; gap:14px; margin-top:32px; padding-top:28px; border-top:1px solid #294255; }
+.guide-reading a { font-size:13px; line-height:1.8; }
 @media(max-width:760px) { .tool-overview { margin-bottom: 32px; padding-bottom: 28px; } .tool-facts { grid-template-columns: 1fr; gap: 18px; margin-block: 22px; } .tool-answer { font-size: 14px; } .guide-related .guide-eyebrow { flex-basis: 100%; } }
 .output-choices { margin-top: 32px; }
 .output-choices > h3 { margin: 0 0 16px; font-size: 20px; color: #edf5ff; }

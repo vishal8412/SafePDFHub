@@ -30,7 +30,8 @@ export function buildSitemapXml(siteUrl: string, paths: readonly string[]): stri
 /** Optional public navigation index; it does not replace HTML or guarantee AI inclusion. */
 export function buildDiscoveryIndex(
   site: { name: string; url: string },
-  tools: readonly { slug: string; label: string; description: string; displayOrder: number }[]
+  tools: readonly { slug: string; label: string; description: string; displayOrder: number }[],
+  guides: readonly { slug: string; title: string; description: string }[] = []
 ): string {
   return [
     `# ${site.name}`, '',
@@ -38,6 +39,7 @@ export function buildDiscoveryIndex(
     'This is a public navigation index. Each linked tool page is authoritative for its current workflow, supported formats, device limits, and limitations. User documents and processing results are not public content.', '',
     '## PDF tools',
     ...[...tools].sort((a, b) => a.displayOrder - b.displayOrder).map(tool => `- [${tool.label}](${site.url}/tools/${tool.slug}): ${tool.description}`), '',
+    ...(guides.length ? ['## PDF help guides', `- [Browse PDF guides](${site.url}/guides)`, ...guides.map(guide => `- [${guide.title}](${site.url}/guides/${guide.slug}): ${guide.description}`), ''] : []),
     '## About, privacy, and help',
     `- [About ${site.name}](${site.url}/about): About the project and its approach to document processing.`,
     `- [Privacy policy](${site.url}/privacy): Information handling and third-party services.`,

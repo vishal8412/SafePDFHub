@@ -7,12 +7,15 @@ import { SITE_CONFIG } from '../../config/site.config';
 import { TOOLS, type Tool } from '../../config/tools.config';
 import { TOOL_DISCOVERY } from '../../config/tool-discovery.config';
 import { toolDiscoverySchemas } from './tool-discovery-schema';
+import { GUIDE_HUB, KNOWLEDGE_GUIDES } from '../../config/knowledge-guides.config';
+import { knowledgeArticleSchema, knowledgeHubSchema } from './knowledge-guide-schema';
 
 interface SeoOptions extends PageSeoConfig {
   breadcrumbs?: readonly SeoBreadcrumb[];
   webApplication?: boolean;
   applicationName?: string;
   applicationFeatures?: readonly string[];
+  pageType?: 'website' | 'article';
 }
 
 export interface SeoBreadcrumb {
@@ -48,6 +51,19 @@ export class SeoService {
 
   updateForUrl(url: string): void {
     const path = this.normalizePath(url);
+    if (path === '/guides') {
+      this.update({ title: GUIDE_HUB.seoTitle, description: GUIDE_HUB.description, canonicalPath: path,
+        breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'PDF guides' }], indexable: true });
+      this.setJsonLd('safepdfhub-guide-hub-jsonld', knowledgeHubSchema());
+      return;
+    }
+    const guide = KNOWLEDGE_GUIDES.find(item => path === `/guides/${item.slug}`);
+    if (guide) {
+      this.update({ title: guide.seoTitle, description: guide.description, canonicalPath: path, pageType: 'article',
+        breadcrumbs: [{ name: 'Home', path: '/' }, { name: 'PDF guides', path: '/guides' }, { name: guide.title }], indexable: true });
+      this.setJsonLd('safepdfhub-guide-article-jsonld', knowledgeArticleSchema(guide));
+      return;
+    }
     const config = PAGE_SEO[path] ?? NON_INDEXABLE_PAGE_SEO[path];
 
     if (config) {
@@ -75,6 +91,8 @@ export class SeoService {
     // Route changes must not retain a previous tool's answers or entities.
     this.removeJsonLd('safepdfhub-toolpage-jsonld');
     this.removeJsonLd('safepdfhub-faq-jsonld');
+    this.removeJsonLd('safepdfhub-guide-hub-jsonld');
+    this.removeJsonLd('safepdfhub-guide-article-jsonld');
     this.title.setTitle(options.title);
 
     this.setMeta('description', options.description);
@@ -85,11 +103,9 @@ export class SeoService {
         : 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'
     );
 
-    if (options.keywords) {
-      this.setMeta('keywords', options.keywords);
-    } else {
-      this.removeMeta('keywords');
-    }
+    // Research keywords guide the visible content and intent mapping. Google
+    // does not use the legacy meta-keywords tag for indexing or ranking.
+    this.removeMeta('keywords');
 
     const canonicalUrl = this.absoluteUrl(options.canonicalPath);
     this.setCanonical(canonicalUrl);
@@ -97,7 +113,7 @@ export class SeoService {
     this.setMetaProperty('og:title', options.title);
     this.setMetaProperty('og:description', options.description);
     this.setMetaProperty('og:url', canonicalUrl);
-    this.setMetaProperty('og:type', 'website');
+    this.setMetaProperty('og:type', options.pageType ?? 'website');
     this.setMetaProperty('og:site_name', SITE_CONFIG.name);
 
     this.setMetaName('twitter:card', 'summary');
@@ -346,16 +362,6 @@ export class SeoService {
   }
 
   private getToolDisplayName(tool: Tool): string {
-    const labels: Record<string, string> = {
-      'compress-pdf': 'Compress PDF',
-      'merge-pdf': 'Merge PDF',
-      'split-pdf': 'Split PDF',
-      'pdf-to-word': 'PDF to Word',
-      'word-to-pdf': 'Word to PDF',
-      'protect-pdf': 'Protect PDF',
-      'unlock-pdf': 'Unlock PDF'
-    };
-
-    return labels[tool.slug] ?? tool.title.replace(/\s+(Online|Free).*$/i, '');
+    return tool.label;
   }
 }

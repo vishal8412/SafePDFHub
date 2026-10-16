@@ -80,7 +80,9 @@
     "prewatch": "npm run ocr:assets",
     "test:discovery": "ng test --watch=false --include=src/app/core/services/seo.service.spec.ts --include=src/server/seo-http.spec.ts",
     "aeo:geo:audit": "npm run seo:audit && npm run seo:audit:rendered",
-    "aeo:geo:browser": "node scripts/discovery-browser-check.cjs"
+    "aeo:geo:browser": "node scripts/discovery-browser-check.cjs",
+    "seo:keywords:audit": "node scripts/seo-keyword-audit.mjs",
+    "seo:growth:audit": "npm run seo:audit && npm run seo:keywords:audit && npm run seo:audit:rendered"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

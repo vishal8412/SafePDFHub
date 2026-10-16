@@ -1,0 +1,190 @@
+{
+  "checks": [
+    {
+      "slug": "word-to-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "pdf-to-word",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "compress-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "merge-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "split-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "protect-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "unlock-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "sign-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "watermark-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    }
+  ],
+  "guideChecks": [
+    {
+      "slug": "compress-pdf-to-target-size",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    },
+    {
+      "slug": "compress-scanned-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    },
+    {
+      "slug": "why-pdf-size-is-not-reducing",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    },
+    {
+      "slug": "merge-pdf-files-in-order",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    },
+    {
+      "slug": "extract-pages-from-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    },
+    {
+      "slug": "convert-scanned-pdf-to-word",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    },
+    {
+      "slug": "word-to-pdf-formatting",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    },
+    {
+      "slug": "private-pdf-tools",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "articleSchema": true
+    }
+  ],
+  "guideHub": true,
+  "homepage": true,
+  "guideToToolMetadataCleanup": true,
+  "relatedNavigation": "/tools/protect-pdf",
+  "errors": []
+}

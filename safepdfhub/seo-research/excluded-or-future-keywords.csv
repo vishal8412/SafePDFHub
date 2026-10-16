@@ -1,0 +1,12 @@
+﻿keyword,reason_not_targeted
+pdf to excel,Not implemented as a public conversion tool.
+jpg to pdf,No public JPG-to-PDF tool in the current inventory.
+doc to pdf,"Current converter accepts DOCX, not legacy DOC."
+ocr pdf to searchable pdf,Current OCR produces DOCX; do not advertise a standalone searchable-PDF output.
+unlock pdf without password,The current tool requires a known password.
+remove pdf watermark,Current watermark tool adds watermarks; it does not remove existing watermarks.
+certificate digital signature pdf,Visible signing does not issue a cryptographic signing certificate.
+offline pdf compressor download,Offline installation and first-run offline readiness are not verified.
+pdf editor online,Studio is noindex; a dedicated public editor landing page needs a verified editing capability/quality brief before launch.
+compress any pdf to exact size,No engine can promise every PDF reaches an arbitrary size while preserving readability.
+unlimited pdf compressor 500mb mobile,Capacity depends on device; this is not a supported blanket claim.

@@ -1,0 +1,45 @@
+{
+  "release": "Keyword research and SEO growth",
+  "date": "2026-10-16",
+  "productionBuild": "passed",
+  "discoveryUnitTests": {
+    "passed": 9,
+    "failed": 0
+  },
+  "keywordCandidates": 177,
+  "intentClusters": 24,
+  "keywordCanonicalTargets": 18,
+  "publicRenderedPages": 24,
+  "toolLandingPages": 9,
+  "knowledgeGuides": 8,
+  "guideHub": true,
+  "visibleToolFaqAnswers": 40,
+  "canonicalToolRedirects": 27,
+  "canonicalGuideRedirects": 9,
+  "missingPageChecks": 6,
+  "browserViewportWidths": [
+    1440,
+    768,
+    390,
+    320
+  ],
+  "browserCheckedRoutes": 19,
+  "browserPageErrors": [],
+  "reports": [
+    "release-notes/seo-rendered-fetch-audit.json",
+    "release-notes/seo-growth-browser-checks.json"
+  ],
+  "measurementStatus": {
+    "searchVolume": "not measured",
+    "keywordDifficulty": "not measured",
+    "liveRankings": "not measured",
+    "liveDomain": "not verified from research environment",
+    "competitorPerformance": "not independently benchmarked"
+  },
+  "notes": [
+    "Guide bodies are loaded with the guide route.",
+    "Existing Studio style-budget and CommonJS optimization warnings remain.",
+    "Local tests do not establish live deployment, indexing, rankings, or market leadership."
+  ],
+  "processingSourceFilesUnchanged": 367
+}

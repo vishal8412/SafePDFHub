@@ -1,0 +1,26 @@
+<div class="guides-shell">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a routerLink="/">Home</a><span aria-hidden="true">/</span><a *ngIf="guide(); else currentHub" routerLink="/guides">PDF guides</a><ng-template #currentHub><span aria-current="page">PDF guides</span></ng-template><ng-container *ngIf="guide() as item"><span aria-hidden="true">/</span><span aria-current="page">{{ item.title }}</span></ng-container></nav>
+
+  @if (guide(); as item) {
+    @if (content(); as body) {
+      <article class="knowledge-article">
+        <header class="article-header"><span class="eyebrow">{{ item.category }}</span><h1>{{ item.title }}</h1><p class="article-summary">{{ item.summary }}</p><div class="article-meta"><span>SafePDFHub guides</span><span>{{ readMinutes() }} min read</span><span>Updated <time [attr.datetime]="item.updated">{{ item.updated | date:'longDate' }}</time></span></div><a *ngIf="tools()[0] as tool" class="primary-link" [routerLink]="['/tools', tool.slug]">Open {{ tool.label }} <span aria-hidden="true">↗</span></a></header>
+        <div class="article-layout">
+          <aside class="contents"><nav aria-label="On this page"><span class="eyebrow">ON THIS PAGE</span><a [routerLink]="['/guides', item.slug]" fragment="quick-steps">Start here</a><a *ngFor="let section of body.sections" [routerLink]="['/guides', item.slug]" [fragment]="section.id">{{ section.title }}</a><a [routerLink]="['/guides', item.slug]" fragment="review-checklist">Final checks</a></nav></aside>
+          <div class="article-body">
+            <section id="quick-steps" class="quick-steps" aria-labelledby="quick-steps-heading"><span class="eyebrow">A PRACTICAL START</span><h2 id="quick-steps-heading">Start with these steps</h2><ol><li *ngFor="let step of body.steps">{{ step }}</li></ol></section>
+            <section *ngFor="let section of body.sections" class="guide-section" [id]="section.id" [attr.aria-labelledby]="section.id + '-title'"><h2 [id]="section.id + '-title'">{{ section.title }}</h2><p *ngFor="let paragraph of section.paragraphs">{{ paragraph }}</p><ul *ngIf="section.bullets"><li *ngFor="let bullet of section.bullets">{{ bullet }}</li></ul><p *ngIf="section.table" class="table-hint">Scroll sideways to compare all columns.</p><div *ngIf="section.table as table" class="table-scroll" role="region" tabindex="0" [attr.aria-labelledby]="section.id + '-title'"><table><thead><tr><th *ngFor="let heading of table.headings" scope="col">{{ heading }}</th></tr></thead><tbody><tr *ngFor="let row of table.rows"><td *ngFor="let cell of row">{{ cell }}</td></tr></tbody></table></div></section>
+            <section id="review-checklist" class="review-checklist" aria-labelledby="review-title"><span class="eyebrow">BEFORE YOU SHARE</span><h2 id="review-title">Check the finished file</h2><ul><li *ngFor="let check of body.checklist">{{ check }}</li></ul></section>
+            <section class="workflow-links" aria-labelledby="workflow-title"><h2 id="workflow-title">Tools for this workflow</h2><div><a *ngFor="let tool of tools()" [routerLink]="['/tools', tool.slug]">{{ tool.label }} <span aria-hidden="true">↗</span></a></div><p>Read the tool’s current limits before choosing a file. See our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> for help.</p></section>
+            <section *ngIf="body.sources.length" class="guide-sources" aria-labelledby="sources-title"><h2 id="sources-title">Further reading</h2><ul><li *ngFor="let source of body.sources"><a [href]="source.url">{{ source.label }}</a></li></ul><p>These references explain general document concepts. SafePDFHub’s supported workflow is described on the linked tool pages.</p></section>
+          </div>
+        </div>
+      </article>
+      <section *ngIf="related().length" class="related-guides" aria-labelledby="related-title"><span class="eyebrow">KEEP GOING</span><h2 id="related-title">Related guides</h2><div class="guide-grid"><a *ngFor="let relatedGuide of related()" class="guide-card" [routerLink]="['/guides', relatedGuide.slug]"><span class="eyebrow">{{ relatedGuide.category }}</span><h3>{{ relatedGuide.title }}</h3><p>{{ relatedGuide.description }}</p><span class="read-link">Read guide <span aria-hidden="true">↗</span></span></a></div></section>
+    }
+  } @else {
+    <header class="hub-header"><span class="eyebrow">THE PDF FIELD GUIDE</span><h1>{{ hub.title }}</h1><p>Understand the tradeoffs, choose the right workflow, and check the result. Start with the problem you want to solve.</p><a routerLink="/" fragment="tools" class="text-link">Explore all PDF tools <span aria-hidden="true">↗</span></a></header>
+    <section class="guide-grid hub-grid" aria-label="PDF help guides"><a *ngFor="let item of guides" class="guide-card" [routerLink]="['/guides', item.slug]"><span class="eyebrow">{{ item.category }}</span><h2>{{ item.title }}</h2><p>{{ item.description }}</p><span class="read-link">Read guide <span aria-hidden="true">↗</span></span></a></section>
+    <div class="help-note"><p>Already know what you need? Open a tool from the <a routerLink="/" fragment="tools">PDF toolbox</a>. For a document-specific problem, <a routerLink="/contact">contact support</a> with the feature and error details.</p></div>
+  }
+</div>

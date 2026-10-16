@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { loadDiscoveryConfig } from './load-discovery-config.mjs';
-const [{ TOOLS }, { SITE_CONFIG }, { TOOL_GUIDES }, { TOOL_DISCOVERY }] = await Promise.all([
+const [{ TOOLS }, { SITE_CONFIG }, { TOOL_GUIDES }, { TOOL_DISCOVERY }, { KNOWLEDGE_GUIDES }, { KNOWLEDGE_GUIDE_CONTENT }] = await Promise.all([
   loadDiscoveryConfig('../src/app/config/tools.config.ts'),
   loadDiscoveryConfig('../src/app/config/site.config.ts'),
   loadDiscoveryConfig('../src/app/config/tool-guides.config.ts'),
-  loadDiscoveryConfig('../src/app/config/tool-discovery.config.ts')
+  loadDiscoveryConfig('../src/app/config/tool-discovery.config.ts'),
+  loadDiscoveryConfig('../src/app/config/knowledge-guides.config.ts'),
+  loadDiscoveryConfig('../src/app/config/knowledge-guide-content.config.ts')
 ]);
 async function main() {
 const base = process.env.SEO_AUDIT_BASE_URL;
@@ -23,7 +25,7 @@ assert.match(xmlResponse.headers.get('content-type'), /xml/);
 const xml = await xmlResponse.text();
 assert.equal(xml.replace(/>\s+</g, '><').trim(), (await readFile(new URL('../src/seo/sitemap.xml', import.meta.url), 'utf8')).replace(/>\s+</g, '><').trim());
 const paths = [...xml.matchAll(/<loc>https:\/\/safepdfhub.com([^<]*)<\/loc>/g)].map(match => match[1] || '/');
-assert.equal(paths.length, SITE_CONFIG.staticIndexablePaths.length + TOOLS.length);
+assert.equal(paths.length, SITE_CONFIG.staticIndexablePaths.length + TOOLS.length + KNOWLEDGE_GUIDES.length + 1);
 const titles = new Set(); const descriptions = new Set();
 for (const path of paths) {
   const response = await request(path);
@@ -77,6 +79,30 @@ for (const path of paths) {
       botDom.window.close();
     }
   }
+  if (path === '/guides') {
+    const hub = schemas.find(schema => schema['@type'] === 'CollectionPage');
+    assert.equal(hub.mainEntity.numberOfItems, KNOWLEDGE_GUIDES.length);
+    assert.equal(doc.querySelectorAll('.hub-grid .guide-card').length, KNOWLEDGE_GUIDES.length);
+  }
+  if (path.startsWith('/guides/')) {
+    const guide = KNOWLEDGE_GUIDES.find(guide => path === `/guides/${guide.slug}`);
+    const content = KNOWLEDGE_GUIDE_CONTENT[guide.slug];
+    const article = schemas.find(schema => schema['@type'] === 'Article');
+    assert.equal(article.headline, guide.title);
+    assert.equal(article.dateModified, guide.updated);
+    assert.equal(doc.querySelector('h1').textContent.trim(), guide.title);
+    assert.equal(doc.querySelectorAll('.guide-section').length, content.sections.length);
+    assert.equal(doc.querySelector('.article-summary').textContent.trim(), guide.summary);
+    assert.ok(doc.querySelector('.article-body').textContent.split(/\s+/).length > 300);
+    for (const section of content.sections) assert.ok(doc.getElementById(section.id), `Missing guide section: ${path}#${section.id}`);
+    for (const slug of guide.tools) assert.ok([...doc.querySelectorAll('.workflow-links a')].some(link => link.getAttribute('href') === `/tools/${slug}`));
+    assert.ok(!schemas.some(schema => schema['@type'] === 'WebApplication' || schema['@type'] === 'FAQPage'));
+    const botResponse = await request(path, 'OAI-SearchBot');
+    assert.equal(botResponse.status, 200);
+    const botDom = new JSDOM(await botResponse.text());
+    assert.equal(botDom.window.document.querySelector('.article-summary').textContent.trim(), guide.summary);
+    botDom.window.close();
+  }
   report.pages.push({ path, status: response.status, title, description, canonical, h1: doc.querySelector('h1').textContent.trim(), schemaTypes: schemas.map(schema => schema['@type']) });
   dom.window.close();
 }
@@ -91,6 +117,7 @@ assert.match(discovery.headers.get('content-type'), /text\/plain/);
 const discoveryText = await discovery.text();
 assert.equal(discoveryText, await readFile(new URL('../src/seo/llms.txt', import.meta.url), 'utf8'));
 for (const tool of TOOLS) assert.ok(discoveryText.includes(`/tools/${tool.slug}`));
+for (const guide of KNOWLEDGE_GUIDES) assert.ok(discoveryText.includes(`/guides/${guide.slug}`));
 report.checks.push('Optional discovery index matches generated asset and contains all implemented tools');
 report.checks.push('All tool answers are visible without JavaScript and match FAQ structured data; three AI search user agents receive identical content');
 for (const { slug } of TOOLS) {
@@ -102,14 +129,20 @@ for (const { slug } of TOOLS) {
   }
 }
 report.checks.push(`${TOOLS.length * 3} legacy and trailing-slash redirects return 301 and preserve queries`);
-for (const path of ['/missing-page', '/tools/missing-tool', '/tool/missing-tool', '/unknown/nested', '/pdf-to-excel']) {
+for (const path of ['/missing-page', '/tools/missing-tool', '/tool/missing-tool', '/unknown/nested', '/pdf-to-excel', '/guides/missing-guide']) {
   const response = await request(path); assert.equal(response.status, 404, path);
   const dom = new JSDOM(await response.text());
   assert.match(dom.window.document.querySelector('meta[name="robots"]').content, /noindex/);
   assert.match(dom.window.document.querySelector('h1').textContent, /Page not found/);
   dom.window.close();
 }
-report.checks.push('Five missing URLs render helpful noindex pages with HTTP 404');
+report.checks.push('Six missing URLs render helpful noindex pages with HTTP 404');
+for (const path of ['/guides', ...KNOWLEDGE_GUIDES.map(guide => `/guides/${guide.slug}`)]) {
+  const redirect = await request(`${path}/?ref=guide`);
+  assert.equal(redirect.status, 301, path);
+  assert.equal(new URL(redirect.headers.get('location'), 'https://local.test').pathname, path);
+}
+report.checks.push('Guide hub and all eight full guides render canonical metadata, article content, tool links, search-crawler text, and trailing-slash redirects');
 const studio = await request('/studio');
 assert.equal(studio.status, 200); assert.match(studio.headers.get('x-robots-tag'), /noindex/);
 const studioHtml = await studio.text(); assert.match(studioHtml, /noindex,follow/);

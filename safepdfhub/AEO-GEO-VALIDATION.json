@@ -1,31 +1,5 @@
 {
-  "date": "2026-10-16",
-  "productionBuild": "passed",
-  "discoveryUnitTests": {
-    "passed": 8,
-    "failed": 0
-  },
-  "publicRenderedPages": 15,
-  "toolLandingPages": 9,
-  "visibleFaqAnswers": 40,
-  "searchUserAgents": [
-    "Googlebot",
-    "OAI-SearchBot",
-    "PerplexityBot",
-    "Claude-SearchBot"
-  ],
-  "additionalAiSearchRequests": 27,
-  "canonicalRedirects": 27,
-  "browserViewportWidths": [
-    1440,
-    768,
-    390,
-    320
-  ],
-  "browserPageErrors": [],
-  "reports": [
-    "release-notes/seo-rendered-fetch-audit.json",
-    "release-notes/aeo-geo-browser-checks.json"
-  ],
-  "scope": "Local production build and browser checks. Live deployment, search-console ownership, indexing, ranking, and AI citations were not tested."
+  "status": "Superseded by SEO-GROWTH-VALIDATION.json",
+  "historicalReport": "release-notes/history/aeo-geo-baseline-20261016.json",
+  "currentReport": "SEO-GROWTH-VALIDATION.json"
 }

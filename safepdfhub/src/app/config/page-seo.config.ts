@@ -12,8 +12,8 @@ export interface PageSeoConfig {
  */
 export const PAGE_SEO: Record<string, PageSeoConfig> = {
   '/': {
-    title: 'Free PDF Tools Online — Private & Browser-Based | SafePDFHub',
-    description: 'Free PDF tools to merge, compress, split, protect, sign, and watermark PDFs in your browser. Privacy-first processing with no upload required for local tools.',
+    title: 'Free PDF Tools – Compress, Merge & Convert | SafePDFHub',
+    description: 'Free PDF tools to compress, merge, split, sign, protect, and convert documents locally in your browser. No signup; files stay on your device.',
     canonicalPath: '/',
     keywords: 'PDF tools, private PDF tools, browser PDF tools, PDF editor'
   },

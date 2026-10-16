@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { loadDiscoveryConfig } from './load-discovery-config.mjs';
+const { KNOWLEDGE_GUIDES } = await loadDiscoveryConfig('../src/app/config/knowledge-guides.config.ts');
 
 const root = resolve(import.meta.dirname, '..');
 const failures = [];
@@ -95,7 +97,9 @@ assert(robots.includes('Sitemap: https://safepdfhub.com/sitemap.xml'), 'robots.t
 
 const expectedUrls = [
   ...staticPaths.map(path => `https://safepdfhub.com${path === '/' ? '' : path}`),
-  ...toolSlugs.map(slug => `https://safepdfhub.com/tools/${slug}`)
+  ...toolSlugs.map(slug => `https://safepdfhub.com/tools/${slug}`),
+  'https://safepdfhub.com/guides',
+  ...KNOWLEDGE_GUIDES.map(guide => `https://safepdfhub.com/guides/${guide.slug}`)
 ];
 assert(expectedUrls.length === sitemapLocs.length, 'Static sitemap URL count does not match the SEO inventory.');
 for (const url of expectedUrls) assert(sitemapLocs.includes(url), `Static sitemap is missing '${url}'.`);

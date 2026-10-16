@@ -6,9 +6,9 @@
     <div class="hero-content shell">
       <div class="hero-copy">
         <div class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> Private PDF tools · built for the browser</div>
-        <h1>Your PDFs.<br><span>Your device.<br><em>Your control.</em></span></h1>
+        <h1>Free PDF tools.<br><span>Your device.<br><em>Your control.</em></span></h1>
         <p class="hero-lead">
-          Edit, merge and compress PDFs on your device. Preview Word documents privately and save them as PDF.
+          Compress, merge, split, and convert PDFs on your device. Convert DOCX to PDF or PDF to Word without uploading your documents.
           <strong>Fast processing happens right in your browser.</strong>
         </p>
 
@@ -72,7 +72,7 @@
     <div class="section-intro centered">
       <div class="section-label">THE SAFE PDF DIFFERENCE</div>
       <h2>Privacy isn't a promise.<br><span>It's how we built it.</span></h2>
-      <p>Most PDF tools start by moving your file to their servers. SafePDFHub starts somewhere else: <strong>inside your browser.</strong></p>
+      <p>Use practical PDF tools that process your documents <strong>inside your browser.</strong> Choose the workflow you need and review the result before sharing.</p>
     </div>
     <div class="principle-grid">
       <article class="principle-card featured">
@@ -151,11 +151,17 @@
     </div>
   </section>
 
+  <section class="guides-preview shell" aria-labelledby="home-guides-title">
+    <div class="section-label">THE PDF FIELD GUIDE</div><h2 id="home-guides-title">Make the next step clearer.</h2><p>Practical answers for file-size limits, scanned documents, and choosing a private workflow.</p>
+    <div class="home-guide-grid"><a *ngFor="let guide of featuredGuides" [routerLink]="['/guides', guide.slug]"><span>{{ guide.category }}</span><h3>{{ guide.title }}</h3><p>{{ guide.description }}</p><b>Read guide ↗</b></a></div>
+    <a routerLink="/guides" class="all-guides-link">Browse all PDF guides ↗</a>
+  </section>
+
   <section class="final-cta shell" id="start">
     <div class="cta-glow" aria-hidden="true"></div>
     <div class="section-label">READY WHEN YOU ARE</div>
     <h2>Bring your PDF.<br><span>Keep your privacy.</span></h2>
-    <p>Choose a tool and start working. Word conversion explains its upload requirements before processing.</p>
+    <p>Choose a tool and start working. Each tool explains its supported formats, current limits, and local processing workflow.</p>
     <div class="hero-actions">
       <a routerLink="/studio" class="button button-primary"><span>Open PDF Editor</span><lucide-icon [img]="icons.ArrowRight" size="18" aria-hidden="true"></lucide-icon></a>
       <a href="#tools" class="button button-ghost">Browse all tools</a>

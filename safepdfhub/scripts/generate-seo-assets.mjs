@@ -1,16 +1,17 @@
 import { writeFile } from 'node:fs/promises';
 import { loadDiscoveryConfig } from './load-discovery-config.mjs';
 
-const [{ SITE_CONFIG }, { TOOLS }, assets] = await Promise.all([
+const [{ SITE_CONFIG }, { TOOLS }, { KNOWLEDGE_GUIDES }, assets] = await Promise.all([
   loadDiscoveryConfig('../src/app/config/site.config.ts'),
   loadDiscoveryConfig('../src/app/config/tools.config.ts'),
+  loadDiscoveryConfig('../src/app/config/knowledge-guides.config.ts'),
   loadDiscoveryConfig('../src/app/config/discovery-assets.ts')
 ]);
-const paths = [...SITE_CONFIG.staticIndexablePaths, ...TOOLS.map(tool => `/tools/${tool.slug}`)];
+const paths = [...SITE_CONFIG.staticIndexablePaths, ...TOOLS.map(tool => `/tools/${tool.slug}`), '/guides', ...KNOWLEDGE_GUIDES.map(guide => `/guides/${guide.slug}`)];
 const outputs = {
   'sitemap.xml': assets.buildSitemapXml(SITE_CONFIG.url, paths),
   'robots.txt': assets.buildRobotsText(SITE_CONFIG.url, assets.isIndexingDisabled(process.env)),
-  'llms.txt': assets.buildDiscoveryIndex(SITE_CONFIG, TOOLS)
+  'llms.txt': assets.buildDiscoveryIndex(SITE_CONFIG, TOOLS, KNOWLEDGE_GUIDES)
 };
 for (const [name, content] of Object.entries(outputs)) {
   await writeFile(new URL(`../src/seo/${name}`, import.meta.url), content, 'utf8');

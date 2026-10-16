@@ -26,6 +26,7 @@
         <details *ngFor="let item of guide.questions; let i = index" [id]="slug + '-question-' + (i + 1)" class="guide-faq-item" [open]="i === 0"><summary><span>{{ item.question }}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></summary><p>{{ item.answer }}</p></details>
       </div>
     </div>
-    <nav *ngIf="relatedTools.length" class="guide-related" [attr.aria-label]="'Tools related to ' + presentation.title"><span class="guide-eyebrow">YOUR NEXT STEP</span><a *ngFor="let tool of relatedTools" [routerLink]="['/tools', tool.slug]">{{ tool.label }} <span aria-hidden="true">↗</span></a></nav>
+    <nav class="guide-reading" aria-label="Guides for this tool"><span class="guide-eyebrow">WORK THROUGH THE DETAILS</span><a *ngFor="let item of relatedGuides" [routerLink]="['/guides', item.slug]">{{ item.title }} <span aria-hidden="true">↗</span></a><a routerLink="/guides">Browse all PDF guides</a></nav>
+    <nav *ngIf="relatedTools.length" class="guide-related" aria-label="Related PDF tools"><span class="guide-eyebrow">YOUR NEXT STEP</span><a *ngFor="let tool of relatedTools" [routerLink]="['/tools', tool.slug]">{{ tool.label }} <span aria-hidden="true">↗</span></a></nav>
     <div class="guide-privacy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m12 3-8 3v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z"/><path d="m8 12 3 3 5-6"/></svg><p>Processed in your browser. Read our <a routerLink="/privacy">privacy policy</a> or <a routerLink="/contact">contact support</a> if you need help.</p></div>
   </section>

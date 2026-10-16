@@ -3,6 +3,7 @@ import { Component } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
 import { TOOLS, type Tool } from '../../../config/tools.config';
+import { KNOWLEDGE_GUIDES } from '../../../config/knowledge-guides.config';
 import { AppIcons } from '../../../shared/icons';
 
 @Component({
@@ -14,6 +15,7 @@ import { AppIcons } from '../../../shared/icons';
 })
 export class HomeComponent {
   readonly icons = AppIcons;
+  readonly featuredGuides = KNOWLEDGE_GUIDES.filter(guide => ['compress-pdf-to-target-size', 'convert-scanned-pdf-to-word', 'private-pdf-tools'].includes(guide.slug));
 
   /**
    * The public tool registry is the single source of truth for homepage tools.

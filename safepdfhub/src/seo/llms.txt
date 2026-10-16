@@ -5,15 +5,26 @@
 This is a public navigation index. Each linked tool page is authoritative for its current workflow, supported formats, device limits, and limitations. User documents and processing results are not public content.
 
 ## PDF tools
-- [Compress PDF](https://safepdfhub.com/tools/compress-pdf): Reduce PDF size locally with lossless or image compression, or try a target size in MB. Up to 500 MB on supported desktops; device limits apply.
-- [Merge PDF](https://safepdfhub.com/tools/merge-pdf): Combine multiple PDF files into one. Fast, secure, and works in your browser.
-- [Split PDF](https://safepdfhub.com/tools/split-pdf): Extract pages or split a PDF into separate files locally in your browser. No document upload required.
-- [Protect PDF](https://safepdfhub.com/tools/protect-pdf): Password-protect a PDF locally in your browser with optional permissions.
-- [Unlock PDF](https://safepdfhub.com/tools/unlock-pdf): Remove PDF password protection locally when you know the document password.
-- [Sign PDF](https://safepdfhub.com/tools/sign-pdf): Add a signature, initials, text, dates, and checkboxes to a PDF locally in your browser.
-- [Watermark PDF](https://safepdfhub.com/tools/watermark-pdf): Add text or image watermarks to PDF pages locally in your browser with adjustable opacity, rotation, position, and page range.
-- [PDF to Word](https://safepdfhub.com/tools/pdf-to-word): Convert PDFs to Word DOCX locally. Extract editable text or preserve pages as images. Recognize scanned English, Hindi or Marathi text with local OCR. Up to 200 MB with no fixed page limit.
-- [Word to PDF](https://safepdfhub.com/tools/word-to-pdf): Convert Word DOCX files to downloadable PDFs locally in your browser. Files up to 200 MB; no document uploads or conversion server.
+- [Compress PDF](https://safepdfhub.com/tools/compress-pdf): Compress PDFs in your browser. Choose quality or a target size, review the actual result, and download. Your documents stay on your device.
+- [Merge PDF](https://safepdfhub.com/tools/merge-pdf): Merge two or more PDFs in your chosen order without uploading them. Review the result and download one combined PDF from your browser.
+- [Split PDF](https://safepdfhub.com/tools/split-pdf): Split a PDF or extract selected pages and page ranges locally in your browser. Create new PDF files while keeping your original unchanged.
+- [Protect PDF](https://safepdfhub.com/tools/protect-pdf): Add password protection to a PDF in your browser. Choose your password, review optional permissions, and download a protected copy.
+- [Unlock PDF](https://safepdfhub.com/tools/unlock-pdf): Remove PDF password protection when you know the password. Unlock locally in your browser and download a separate copy without uploading your document.
+- [Sign PDF](https://safepdfhub.com/tools/sign-pdf): Place a visible signature, initials, text, dates, or checkboxes on PDF pages. Review and download the result locally, with no signup.
+- [Watermark PDF](https://safepdfhub.com/tools/watermark-pdf): Add a text or image watermark to selected PDF pages. Adjust position, opacity, and rotation, then download the result from your browser.
+- [PDF to Word](https://safepdfhub.com/tools/pdf-to-word): Convert PDF to Word locally. Choose editable text with English, Hindi or Marathi OCR, or preserve pages as images. Review and download your DOCX.
+- [Word to PDF](https://safepdfhub.com/tools/word-to-pdf): Convert a DOCX to a downloadable PDF in your browser without uploading the document. Review formatting and conversion notes before sharing.
+
+## PDF help guides
+- [Browse PDF guides](https://safepdfhub.com/guides)
+- [How to compress a PDF to a specific size](https://safepdfhub.com/guides/compress-pdf-to-target-size): Set a PDF target size in MB, check the actual result, and decide what to do when a document cannot fit a 1 MB, 2 MB or 5 MB limit.
+- [How to compress a scanned PDF and keep it readable](https://safepdfhub.com/guides/compress-scanned-pdf): Understand image-heavy PDFs, choose a compression mode, and check text, stamps, and diagrams before sharing a smaller scanned document.
+- [Why your PDF is not getting much smaller](https://safepdfhub.com/guides/why-pdf-size-is-not-reducing): Learn why optimized PDFs may shrink very little, how compression modes differ, and which checks to make before trying again.
+- [How to merge PDF files in the right order](https://safepdfhub.com/guides/merge-pdf-files-in-order): Prepare PDF files, arrange their order, merge locally, and check page boundaries, orientation, and file size in the finished document.
+- [How to extract selected pages from a PDF](https://safepdfhub.com/guides/extract-pages-from-pdf): Select PDF pages using workspace positions, avoid printed-page-number confusion, and verify the extracted files before sharing.
+- [How to convert a scanned PDF to Word with OCR](https://safepdfhub.com/guides/convert-scanned-pdf-to-word): Choose editable text or page appearance, select English, Hindi or Marathi OCR, and proofread uncertain words and numbers in the DOCX.
+- [Why Word-to-PDF conversion can change your layout](https://safepdfhub.com/guides/word-to-pdf-formatting): Troubleshoot font substitution, wrapping, spacing, tables, and extra pages when converting a DOCX to PDF in the browser.
+- [How to choose a private PDF workflow](https://safepdfhub.com/guides/private-pdf-tools): Compare local browser and server processing, understand device limits, and check the privacy details of a PDF workflow before selecting a file.
 
 ## About, privacy, and help
 - [About SafePDFHub](https://safepdfhub.com/about): About the project and its approach to document processing.

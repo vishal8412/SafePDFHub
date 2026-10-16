@@ -1,9 +1,13 @@
 import { developmentRoutes } from './app.routes.development';
 import { Routes } from '@angular/router';
 import { TOOLS } from './config/tools.config';
+import { KNOWLEDGE_GUIDES } from './config/knowledge-guides.config';
 
 export const routes: Routes = [
   ...developmentRoutes,
+  { path: 'guides', pathMatch: 'full', loadComponent: () => import('./features/pages/guides/guides.component').then(m => m.GuidesComponent) },
+  { path: 'guides/:slug', canMatch: [(_route, segments) => KNOWLEDGE_GUIDES.some(guide => guide.slug === segments[1]?.path)],
+    loadComponent: () => import('./features/pages/guides/guides.component').then(m => m.GuidesComponent) },
   {
     path: '',
     loadComponent: () =>

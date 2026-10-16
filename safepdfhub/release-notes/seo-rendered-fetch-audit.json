@@ -4,10 +4,10 @@
     {
       "path": "/",
       "status": 200,
-      "title": "Free PDF Tools Online — Private & Browser-Based | SafePDFHub",
-      "description": "Free PDF tools to merge, compress, split, protect, sign, and watermark PDFs in your browser. Privacy-first processing with no upload required for local tools.",
+      "title": "Free PDF Tools – Compress, Merge & Convert | SafePDFHub",
+      "description": "Free PDF tools to compress, merge, split, sign, protect, and convert documents locally in your browser. No signup; files stay on your device.",
       "canonical": "https://safepdfhub.com",
-      "h1": "Your PDFs.Your device.Your control.",
+      "h1": "Free PDF tools.Your device.Your control.",
       "schemaTypes": [
         "Organization",
         "WebSite",
@@ -67,8 +67,8 @@
     {
       "path": "/tools/word-to-pdf",
       "status": 200,
-      "title": "Word to PDF Converter | Convert DOCX to PDF",
-      "description": "Convert Word DOCX files to downloadable PDFs locally in your browser. Files up to 200 MB; no document uploads or conversion server.",
+      "title": "Word to PDF – Convert DOCX in Your Browser | SafePDFHub",
+      "description": "Convert a DOCX to a downloadable PDF in your browser without uploading the document. Review formatting and conversion notes before sharing.",
       "canonical": "https://safepdfhub.com/tools/word-to-pdf",
       "h1": "Convert Word to PDF",
       "schemaTypes": [
@@ -81,8 +81,8 @@
     {
       "path": "/tools/pdf-to-word",
       "status": 200,
-      "title": "PDF to Word Converter | Editable DOCX Online",
-      "description": "Convert PDFs to Word DOCX locally. Extract editable text or preserve pages as images. Recognize scanned English, Hindi or Marathi text with local OCR. Up to 200 MB with no fixed page limit.",
+      "title": "PDF to Word – Convert PDF to DOCX with OCR | SafePDFHub",
+      "description": "Convert PDF to Word locally. Choose editable text with English, Hindi or Marathi OCR, or preserve pages as images. Review and download your DOCX.",
       "canonical": "https://safepdfhub.com/tools/pdf-to-word",
       "h1": "Convert PDF to Word",
       "schemaTypes": [
@@ -95,8 +95,8 @@
     {
       "path": "/tools/compress-pdf",
       "status": 200,
-      "title": "Compress PDF Online Free | Reduce PDF Size",
-      "description": "Reduce PDF size locally with lossless or image compression, or try a target size in MB. Up to 500 MB on supported desktops; device limits apply.",
+      "title": "Compress PDF Online – Reduce PDF Size | SafePDFHub",
+      "description": "Compress PDFs in your browser. Choose quality or a target size, review the actual result, and download. Your documents stay on your device.",
       "canonical": "https://safepdfhub.com/tools/compress-pdf",
       "h1": "Compress PDF files privately",
       "schemaTypes": [
@@ -109,8 +109,8 @@
     {
       "path": "/tools/merge-pdf",
       "status": 200,
-      "title": "Merge PDF Files Online Free",
-      "description": "Combine multiple PDF files into one. Fast, secure, and works in your browser.",
+      "title": "Merge PDF Online – Combine PDF Files | SafePDFHub",
+      "description": "Merge two or more PDFs in your chosen order without uploading them. Review the result and download one combined PDF from your browser.",
       "canonical": "https://safepdfhub.com/tools/merge-pdf",
       "h1": "Merge PDF files privately",
       "schemaTypes": [
@@ -123,8 +123,8 @@
     {
       "path": "/tools/split-pdf",
       "status": 200,
-      "title": "Split PDF Online Free",
-      "description": "Extract pages or split a PDF into separate files locally in your browser. No document upload required.",
+      "title": "Split PDF Online – Extract PDF Pages | SafePDFHub",
+      "description": "Split a PDF or extract selected pages and page ranges locally in your browser. Create new PDF files while keeping your original unchanged.",
       "canonical": "https://safepdfhub.com/tools/split-pdf",
       "h1": "Split and extract PDF pages",
       "schemaTypes": [
@@ -137,8 +137,8 @@
     {
       "path": "/tools/protect-pdf",
       "status": 200,
-      "title": "Protect PDF with Password Online Free",
-      "description": "Password-protect a PDF locally in your browser with optional permissions.",
+      "title": "Protect PDF – Add a Password Online | SafePDFHub",
+      "description": "Add password protection to a PDF in your browser. Choose your password, review optional permissions, and download a protected copy.",
       "canonical": "https://safepdfhub.com/tools/protect-pdf",
       "h1": "Protect your PDF with a password",
       "schemaTypes": [
@@ -151,8 +151,8 @@
     {
       "path": "/tools/unlock-pdf",
       "status": 200,
-      "title": "Unlock PDF Online Free",
-      "description": "Remove PDF password protection locally when you know the document password.",
+      "title": "Unlock PDF – Remove a Known Password | SafePDFHub",
+      "description": "Remove PDF password protection when you know the password. Unlock locally in your browser and download a separate copy without uploading your document.",
       "canonical": "https://safepdfhub.com/tools/unlock-pdf",
       "h1": "Unlock a password-protected PDF",
       "schemaTypes": [
@@ -165,8 +165,8 @@
     {
       "path": "/tools/sign-pdf",
       "status": 200,
-      "title": "Sign PDF Online Free",
-      "description": "Add a signature, initials, text, dates, and checkboxes to a PDF locally in your browser.",
+      "title": "Sign PDF Online – Add a Visible Signature | SafePDFHub",
+      "description": "Place a visible signature, initials, text, dates, or checkboxes on PDF pages. Review and download the result locally, with no signup.",
       "canonical": "https://safepdfhub.com/tools/sign-pdf",
       "h1": "Sign your PDF locally",
       "schemaTypes": [
@@ -179,8 +179,8 @@
     {
       "path": "/tools/watermark-pdf",
       "status": 200,
-      "title": "Watermark PDF Online Free",
-      "description": "Add text or image watermarks to PDF pages locally in your browser with adjustable opacity, rotation, position, and page range.",
+      "title": "Watermark PDF – Add Text or Images | SafePDFHub",
+      "description": "Add a text or image watermark to selected PDF pages. Adjust position, opacity, and rotation, then download the result from your browser.",
       "canonical": "https://safepdfhub.com/tools/watermark-pdf",
       "h1": "Add a watermark to your PDF",
       "schemaTypes": [
@@ -189,6 +189,114 @@
         "WebPage",
         "FAQPage"
       ]
+    },
+    {
+      "path": "/guides",
+      "status": 200,
+      "title": "PDF Guides: Compression, Conversion & Privacy | SafePDFHub",
+      "description": "Practical PDF guides for target file sizes, scanned documents, merging, page extraction, OCR, Word formatting, and private browser processing.",
+      "canonical": "https://safepdfhub.com/guides",
+      "h1": "PDF guides: smaller files, cleaner conversions, fewer surprises",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "CollectionPage"
+      ]
+    },
+    {
+      "path": "/guides/compress-pdf-to-target-size",
+      "status": 200,
+      "title": "Compress PDF to 1 MB, 2 MB or 5 MB: A Guide | SafePDFHub",
+      "description": "Set a PDF target size in MB, check the actual result, and decide what to do when a document cannot fit a 1 MB, 2 MB or 5 MB limit.",
+      "canonical": "https://safepdfhub.com/guides/compress-pdf-to-target-size",
+      "h1": "How to compress a PDF to a specific size",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
+    },
+    {
+      "path": "/guides/compress-scanned-pdf",
+      "status": 200,
+      "title": "Compress a Scanned PDF: Size vs Readability | SafePDFHub",
+      "description": "Understand image-heavy PDFs, choose a compression mode, and check text, stamps, and diagrams before sharing a smaller scanned document.",
+      "canonical": "https://safepdfhub.com/guides/compress-scanned-pdf",
+      "h1": "How to compress a scanned PDF and keep it readable",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
+    },
+    {
+      "path": "/guides/why-pdf-size-is-not-reducing",
+      "status": 200,
+      "title": "PDF Not Compressing? Causes and Next Steps | SafePDFHub",
+      "description": "Learn why optimized PDFs may shrink very little, how compression modes differ, and which checks to make before trying again.",
+      "canonical": "https://safepdfhub.com/guides/why-pdf-size-is-not-reducing",
+      "h1": "Why your PDF is not getting much smaller",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
+    },
+    {
+      "path": "/guides/merge-pdf-files-in-order",
+      "status": 200,
+      "title": "Merge PDFs in the Right Order: Step-by-Step | SafePDFHub",
+      "description": "Prepare PDF files, arrange their order, merge locally, and check page boundaries, orientation, and file size in the finished document.",
+      "canonical": "https://safepdfhub.com/guides/merge-pdf-files-in-order",
+      "h1": "How to merge PDF files in the right order",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
+    },
+    {
+      "path": "/guides/extract-pages-from-pdf",
+      "status": 200,
+      "title": "Extract Pages from a PDF: Ranges Explained | SafePDFHub",
+      "description": "Select PDF pages using workspace positions, avoid printed-page-number confusion, and verify the extracted files before sharing.",
+      "canonical": "https://safepdfhub.com/guides/extract-pages-from-pdf",
+      "h1": "How to extract selected pages from a PDF",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
+    },
+    {
+      "path": "/guides/convert-scanned-pdf-to-word",
+      "status": 200,
+      "title": "Scanned PDF to Word with OCR: A Guide | SafePDFHub",
+      "description": "Choose editable text or page appearance, select English, Hindi or Marathi OCR, and proofread uncertain words and numbers in the DOCX.",
+      "canonical": "https://safepdfhub.com/guides/convert-scanned-pdf-to-word",
+      "h1": "How to convert a scanned PDF to Word with OCR",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
+    },
+    {
+      "path": "/guides/word-to-pdf-formatting",
+      "status": 200,
+      "title": "Word to PDF Formatting Problems: What to Check | SafePDFHub",
+      "description": "Troubleshoot font substitution, wrapping, spacing, tables, and extra pages when converting a DOCX to PDF in the browser.",
+      "canonical": "https://safepdfhub.com/guides/word-to-pdf-formatting",
+      "h1": "Why Word-to-PDF conversion can change your layout",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
+    },
+    {
+      "path": "/guides/private-pdf-tools",
+      "status": 200,
+      "title": "Private PDF Tools: Local vs Cloud Processing | SafePDFHub",
+      "description": "Compare local browser and server processing, understand device limits, and check the privacy details of a PDF workflow before selecting a file.",
+      "canonical": "https://safepdfhub.com/guides/private-pdf-tools",
+      "h1": "How to choose a private PDF workflow",
+      "schemaTypes": [
+        "BreadcrumbList",
+        "Article"
+      ]
     }
   ],
   "checks": [
@@ -196,7 +304,8 @@
     "Optional discovery index matches generated asset and contains all implemented tools",
     "All tool answers are visible without JavaScript and match FAQ structured data; three AI search user agents receive identical content",
     "27 legacy and trailing-slash redirects return 301 and preserve queries",
-    "Five missing URLs render helpful noindex pages with HTTP 404",
+    "Six missing URLs render helpful noindex pages with HTTP 404",
+    "Guide hub and all eight full guides render canonical metadata, article content, tool links, search-crawler text, and trailing-slash redirects",
     "Editor is noindex; OAI-SearchBot receives rendered guidance and clean canonical",
     "Netlify preview context disables indexing and crawling"
   ]
