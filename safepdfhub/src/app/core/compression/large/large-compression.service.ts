@@ -1,3 +1,4 @@
+import { CompressionActivityObserver } from '../compression-activity';
 import { compressionBudget, nativeCompressionLimit, imageQualities, LOSSLESS_ONLY_THRESHOLD } from './large-compression-policy';
 import { CompressionLevel } from '../compression.types';
 import { Injectable } from '@angular/core';
@@ -5,6 +6,7 @@ import { LargeCompressionCapabilityService } from './large-compression-capabilit
 import { CompressionCancelledError, throwIfCompressionCancelled } from '../compression-cancellation';
 @Injectable({ providedIn: 'root' })
 export class LargeCompressionService {
+  private activityObserver?: CompressionActivityObserver;
   private stop: (() => void) | null = null;
   private outputDirectory: string | null = null;
   private running = false;
@@ -45,9 +47,10 @@ export class LargeCompressionService {
     if (delay) setTimeout(() => { void remove(); }, delay);
     else await remove();
   }
-  async compress(file: File, signal: AbortSignal, progress: (n: number) => void, options: { level?: CompressionLevel; targetBytes?: number } = {}): Promise<{file: File; pages: number; strategy: 'safe' | 'smart' | 'strong'; note: string}> {
+  async compress(file: File, signal: AbortSignal, progress: (n: number) => void, options: { level?: CompressionLevel; targetBytes?: number } = {}, onActivity?: CompressionActivityObserver): Promise<{file: File; pages: number; strategy: 'safe' | 'smart' | 'strong'; note: string}> {
     if (this.running) throw new Error('A large PDF is already being processed.');
     this.running = true;
+    this.activityObserver = onActivity;
     try {
       this.capability.assertFile(file);
       const level = options.level ?? 'light';
@@ -84,14 +87,14 @@ export class LargeCompressionService {
           let firstFailed = false;
           let pages: number;
           try {
-            pages = await this.runWorker(file, directory, signal, n => progress(Math.round(n * 0.4)),
+            pages = await this.runWorker(file, directory, signal, n => progress(Math.round(n * (native ? 0.95 : 0.4))),
               { outputName: 'output.pdf', nativeOptions: native ? options : undefined, quality: firstQuality, timeoutMs: Math.max(1, Math.min(native ? 240_000 : 300_000, deadline - Date.now())) });
           } catch (error) {
             throwIfCompressionCancelled(signal);
             if ((!native && firstQuality === undefined) || error instanceof CompressionCancelledError || Date.now() >= deadline) throw error;
             native = false; firstQuality = undefined; firstFailed = true;
             await this.removeTemporaryEntry(directory, 'output.pdf');
-            pages = await this.runWorker(file, directory, signal, n => progress(Math.round(n * 0.4)),
+            pages = await this.runWorker(file, directory, signal, n => progress(Math.round(n * (native ? 0.95 : 0.4))),
               { outputName: 'output.pdf', timeoutMs: Math.max(1, deadline - Date.now()) });
           }
           throwIfCompressionCancelled(signal);
@@ -140,7 +143,7 @@ export class LargeCompressionService {
           }
         }
       });
-    } finally { this.running = false; }
+    } finally { this.running = false; this.activityObserver = undefined; }
   }
   // Terminating a worker does not synchronously release its OPFS access handles.
   // Retain the directory lease while retrying transient lock errors.
@@ -172,6 +175,7 @@ export class LargeCompressionService {
       signal.addEventListener('abort', abort, { once: true });
       worker.onmessage = ({ data }) => {
         if (settled) return;
+        if (data.type === 'activity') this.activityObserver?.(data.activity);
         if (data.type === 'progress') progress(data.value);
         if (data.type === 'done') finish(undefined, data.pages);
         if (data.type === 'error') finish(new Error(data.message));

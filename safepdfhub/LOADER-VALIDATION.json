@@ -1,0 +1,57 @@
+{
+  "build": "passed",
+  "focused_tests": 71,
+  "test_files": 9,
+  "real_output_bytes": 17484831,
+  "input_bytes": 39514672,
+  "pages": 201,
+  "structural_verification": "All pages: boxes, rotations, drawing streams and metadata retained",
+  "browser_checks": [
+    "actual image inventory progress",
+    "monotonic displayed percentage",
+    "elapsed timer reset",
+    "keyboard cancel focus",
+    "completion and download",
+    "cancellation and usable workspace afterward"
+  ],
+  "viewport_widths": [
+    1440,
+    390,
+    320
+  ],
+  "progress_meaning": "Weighted processing estimate, not remaining time; page/image counts reflect reported work",
+  "visual_refresh": {
+    "scope": "loader HTML and SCSS only",
+    "build": "passed",
+    "loader_tests": 5,
+    "browser_completion_download_cancellation": "passed",
+    "responsive_visual_review": [
+      1440,
+      390,
+      320
+    ],
+    "design": "Open branded loader with the official SafePDFHub shield mark in an animated cyan ring; no wordmark or card",
+    "landscape_visual_review": [
+      740,
+      360
+    ],
+    "animation_and_reduced_motion": "passed",
+    "official_brand_mark": "assets/brand/safepdfhub-mark.svg",
+    "verified_checks": [
+      "official brand mark loaded in loader",
+      "full wordmark removed",
+      "rotating ring",
+      "reduced motion",
+      "desktop and mobile layout",
+      "real compression download",
+      "cancellation"
+    ]
+  },
+  "completion_progress_fix": {
+    "cause": "Progress polling caps in-flight value at 99; success set 100 then hid loader immediately, allowing browser to skip painting the completion frame.",
+    "behavior": "Publish explicit 100% completion state; show it for 600 ms before revealing results; disable cancellation after compression succeeds.",
+    "production_build": "passed",
+    "focused_tests": 15,
+    "browser_replay": "not run: local Chromium executable crashes at startup"
+  }
+}

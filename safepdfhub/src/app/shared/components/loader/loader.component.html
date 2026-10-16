@@ -1,49 +1,22 @@
 <div class="app-loader" *ngIf="loader.loading()">
-  <div class="bg-glow"></div>
-
-  <div class="loader-content">
-    <img
-      class="logo-image"
-      src="assets/brand/safepdfhub-logo-primary.svg"
-      alt="SafePDFHub — Private PDF tools. Built for you."
-      width="390"
-      height="88"
-      decoding="async"
-    />
-
-    <div class="progress-wrapper">
-      <div
-        class="progress-bar"
-        role="progressbar"
-        aria-label="Processing progress"
-        aria-valuemin="0"
-        aria-valuemax="100"
-        [attr.aria-valuenow]="loader.determinate() ? loader.progress() : null"
-      >
-        <div class="progress-fill" [class.indeterminate]="!loader.determinate()" [style.width.%]="loader.progress()"></div>
-      </div>
+  <div #panel class="loader-content" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="loader-heading" aria-describedby="loader-advice">
+    <div class="activity-indicator" aria-hidden="true">
+      <span class="activity-orbit"></span>
+      <img class="activity-mark" src="assets/brand/safepdfhub-mark.svg" alt="" aria-hidden="true" width="48" height="48" decoding="async" />
     </div>
-
-    <p class="status-text" role="status" aria-live="polite">
-      {{ loader.text() }}
-      <span class="typing"></span>
-    </p>
-
-    @if (loader.page(); as page) {
-      <p class="page-progress">Page {{ page.current }} of {{ page.total }}</p>
-    }
-    @if (loader.determinate()) {
-      <p class="page-progress">{{ loader.progress() | number: '1.0-0' }}%</p>
-    }
-    @if (loader.cancellationAvailable()) {
-      <button
-        type="button"
-        class="loader-cancel-button"
-        (click)="loader.cancelActiveTask()"
-        aria-label="Cancel current operation"
-      >
-        Cancel
-      </button>
-    }
+    <h2 id="loader-heading" class="status-text" role="status" aria-live="polite">{{ loader.text() }}</h2>
+    <div class="progress-heading">
+      <span>{{ loader.determinate() ? (loader.estimated() ? 'Estimated progress' : 'Progress') : 'Processing your file' }}</span>
+      <strong *ngIf="loader.determinate()">{{ loader.progress() | number:'1.0-0' }}<span>%</span></strong>
+      <span *ngIf="!loader.determinate()" class="working-label">In progress</span>
+    </div>
+    <div class="progress-bar" role="progressbar" aria-label="Processing progress" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="loader.determinate() ? loader.progress() : null"><div class="progress-fill" [class.indeterminate]="!loader.determinate()" [style.width.%]="loader.determinate() ? loader.progress() : 35"></div></div>
+    <div class="loader-details">
+      <div class="elapsed-time"><span>Time elapsed</span><strong>{{ elapsedLabel }}</strong></div>
+      @if (loader.page(); as page) { <div class="page-progress"><span>Pages processed</span><strong>{{ page.current }} / {{ page.total }}</strong></div> }
+      @if (loader.work(); as work) { <div class="work-progress"><span>Images checked</span><strong>{{ work.current }} / {{ work.total }}</strong><small *ngIf="work.passes && work.passes > 1">Pass {{ work.pass }} of up to {{ work.passes }}</small></div> }
+    </div>
+    <p id="loader-advice">Keep this tab open.</p>
+    @if (loader.cancellationAvailable()) { <button type="button" class="loader-cancel-button" (click)="loader.cancelActiveTask()" aria-label="Cancel current operation">Cancel</button> }
   </div>
 </div>

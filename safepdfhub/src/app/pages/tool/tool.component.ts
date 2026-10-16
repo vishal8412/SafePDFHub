@@ -1518,8 +1518,13 @@ export class ToolComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.loader.show();
-    this.loader.setText('Optimizing PDF...');
+    this.loader.show('Preparing your PDF', { determinate: true, estimated: true });
+    let shownProgress = 0;
+    const syncProgress = () => {
+      shownProgress = Math.max(shownProgress, Math.min(99, this.compressionState.progress));
+      this.loader.setProgress(shownProgress);
+    };
+    const progressTimer = setInterval(syncProgress, 200);
     this.unregisterLoaderCancellation?.();
     this.unregisterLoaderCancellation = this.loader.registerCancellationHandler(() => {
       this.compressionFacade.cancel();
@@ -1527,8 +1532,22 @@ export class ToolComponent implements OnInit, OnDestroy {
 
     this.workspace.loading = true;
     try {
-      await this.compressionFacade.compress(this.workspace.files[0]);
-      this.loader.setText('Done ✨');
+      await this.compressionFacade.compress(this.workspace.files[0], activity => {
+        const labels = { reading: 'Reading your PDF', optimizing: 'Reducing file size', writing: 'Preparing the compressed PDF', checking: 'Checking the result' };
+        this.loader.setText(labels[activity.stage]);
+        this.loader.setWork(activity.current !== undefined && activity.total
+          ? { current: activity.current, total: activity.total, pass: activity.pass, passes: activity.passes } : null);
+        syncProgress();
+      });
+      clearInterval(progressTimer);
+      this.unregisterLoaderCancellation?.();
+      this.unregisterLoaderCancellation = null;
+      this.loader.setWork(null);
+      this.loader.complete('Compression complete');
+      // Give the 100% state and its final progress-bar transition time to paint
+      // before exposing the result page. Otherwise the loader can disappear
+      // directly from its last polled value (often around 75–99%).
+      await new Promise<void>(resolve => setTimeout(resolve, 600));
       this.toast.show('Optimization completed', 'success');
       this.compressionState.showResult = true;
       this.compressionState.showCompressResult = true;
@@ -1544,6 +1563,7 @@ export class ToolComponent implements OnInit, OnDestroy {
       }
     }
     finally {
+      clearInterval(progressTimer);
       this.unregisterLoaderCancellation?.();
       this.unregisterLoaderCancellation = null;
       this.loader.hide();

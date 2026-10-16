@@ -1,3 +1,4 @@
+import { CompressionActivity, CompressionActivityObserver } from './compression-activity';
 import { recompressFlateStreams } from './pdf-stream-compression';
 import { extractJpegBytes } from './pdf-jpeg-stream';
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFObject, PDFRawStream, PDFRef, PDFStreamWriter, decodePDFRawStream } from 'pdf-lib';
@@ -7,7 +8,18 @@ import { CompressionLevel } from './compression.types';
 export interface NativeOptimizationOptions { level?: CompressionLevel; targetBytes?: number; retainOnlyBest?: boolean; maxImagePixels?: number; }
 
 /** Each candidate still requires final semantic and visual certification. */
-export async function optimizeNativeCandidates(bytes: Uint8Array, options: NativeOptimizationOptions = {}, onSourceFacts?: (facts: PdfDocumentFacts) => void): Promise<Uint8Array[]> {
+export async function optimizeNativeCandidates(bytes: Uint8Array, options: NativeOptimizationOptions = {}, onSourceFacts?: (facts: PdfDocumentFacts) => void, onActivity?: CompressionActivityObserver): Promise<Uint8Array[]> {
+  let lastActivityAt = -Infinity;
+  const report = (activity: CompressionActivity) => {
+    if (!onActivity) return;
+    const now = performance.now();
+    // Keep tiny/unsupported image inventories from flooding the UI thread.
+    if (activity.current === undefined || activity.current === 0 || activity.current === activity.total || now - lastActivityAt >= 80) {
+      lastActivityAt = now;
+      onActivity(activity);
+    }
+  };
+  report({ stage: 'reading' });
   const pdf = await PDFDocument.load(bytes, { updateMetadata: false, parseSpeed: Infinity });
   if (pdf.isEncrypted) return [];
   onSourceFacts?.(captureDocumentFacts(pdf));
@@ -17,6 +29,7 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
     object.get(PDFName.of('FT')) === PDFName.of('Sig') || object.has(PDFName.of('ByteRange'))
   ))) return [];
 
+  report({ stage: 'optimizing' });
   // The parser retains obsolete incremental-update objects. Keep everything
   // reachable from all trailer roots, including forms, attachments and metadata.
   const reachable = new Set<PDFRef>();
@@ -89,6 +102,7 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
     await pdf.flush();
     return PDFStreamWriter.forContext(pdf.context, Infinity, true, 1500).serializeToBuffer();
   };
+  report({ stage: 'writing' });
   const lossless = await save();
   const candidates = lossless.length < bytes.length ? [lossless] : [];
   let target = options.targetBytes;
@@ -123,14 +137,19 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
     maxEdge = capTargetEdge(maxEdge, edges);
   }
   let best = lossless;
-  for (const quality of qualities) {
+  for (const [passIndex, quality] of qualities.entries()) {
+    let checked = 0;
+    report({ stage: 'optimizing', current: 0, total: images.length, pass: passIndex + 1, passes: qualities.length });
     for (const [ref, original] of images) {
       try {
         const replacement = await recompressImage(pdf, original, quality, maxEdge, maxPixels);
         // Every pass starts from the original image, avoiding generational loss.
         pdf.context.assign(ref, replacement ?? original);
       } catch { pdf.context.assign(ref, original); }
+      checked++;
+      report({ stage: 'optimizing', current: checked, total: images.length, pass: passIndex + 1, passes: qualities.length });
     }
+    report({ stage: 'writing' });
     const candidate = await save();
     if (candidate.length < best.length) {
       best = candidate;

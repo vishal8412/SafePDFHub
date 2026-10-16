@@ -1,0 +1,22 @@
+{
+  "build": "passed",
+  "focused_tests": 7,
+  "policy": "8-128 characters; no mandatory categories; confirmation, nonblank and control-character rules retained",
+  "browser_checks": [
+    "lowercase accepted",
+    "numeric-only protection",
+    "download",
+    "unlock round trip",
+    "mismatch blocks submit",
+    "show/hide",
+    "permission toggle",
+    "768/390/320px no overflow"
+  ],
+  "download_validation": {
+    "encryption_bits": 256,
+    "wrong_password_rejected": true,
+    "numeric_password_accepted": true,
+    "page_text_preserved": true,
+    "unlock_output_unencrypted": true
+  }
+}

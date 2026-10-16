@@ -10,6 +10,7 @@ import { MAX_COMPRESSION_BYTES, LOSSLESS_ONLY_THRESHOLD } from './large-compress
 self.onmessage = async ({ data }: MessageEvent) => {
   let disk: any;
   try {
+    postMessage({ type: 'activity', activity: { stage: 'reading' } });
     const { file, directory, jsUrl, wasmUrl, budget, quality, nativeOptions } = data;
     const outputName = data.outputName ?? 'output.pdf';
     if (!/^output(?:-\d+)?\.pdf$/.test(outputName)) throw new Error('Invalid output name.');
@@ -65,7 +66,10 @@ self.onmessage = async ({ data }: MessageEvent) => {
         postMessage({ type: 'phase', operation: ['native-optimization'] });
         let sourceFacts: unknown;
         let bytes = new Uint8Array(await file.arrayBuffer());
-        const candidates = await optimizeNativeCandidates(bytes, { ...nativeOptions, retainOnlyBest: true, maxImagePixels: memoryMiB >= 512 ? 32_000_000 : 12_000_000 }, facts => { sourceFacts = facts; });
+        const candidates = await optimizeNativeCandidates(bytes, { ...nativeOptions, retainOnlyBest: true, maxImagePixels: memoryMiB >= 512 ? 32_000_000 : 12_000_000 }, facts => { sourceFacts = facts; }, activity => {
+          postMessage({ type: 'activity', activity });
+          if (activity.current !== undefined && activity.total) postMessage({ type: 'progress', value: 20 + 50 * (((activity.pass ?? 1) - 1 + activity.current / activity.total) / (activity.passes ?? 1)) });
+        });
         let best: Uint8Array = bytes;
         for (const candidate of candidates) if (candidate.length < best.length) best = candidate;
         candidates.length = 0;
@@ -82,10 +86,12 @@ self.onmessage = async ({ data }: MessageEvent) => {
         disk.flush();
       })();
     } else {
+      postMessage({ type: 'activity', activity: { stage: 'optimizing' } });
       const code = run(['--suppress-recovery', '--object-streams=generate', '--compress-streams=y',
         '--decode-level=generalized', '--compression-level=6', ...imageOptions, '/input/source.pdf', '/output.pdf']);
       if (code !== 0) throw new Error('Large PDF compression stopped because the PDF was invalid or exceeded the worker memory budget.');
     }
+    postMessage({ type: 'activity', activity: { stage: 'checking' } });
     postMessage({ type: 'progress', value: 80 });
     if (run(['--suppress-recovery', '--check', '/output.pdf']) !== 0) throw new Error('The compressed PDF failed structural validation.');
     if (run(['--show-npages', '/output.pdf']) !== 0 || Number(lines.find(line => /^\d+$/.test(line.trim()))) !== pages) throw new Error('The compressed PDF page count changed.');
@@ -94,6 +100,7 @@ self.onmessage = async ({ data }: MessageEvent) => {
       if (originalImages.length !== outputImages.length || originalImages.some((shape, i) => shape !== outputImages[i])) throw new Error('Image dimensions or placements changed during compression.');
     }
     disk.flush(); disk.close(); disk = null;
+    postMessage({ type: 'progress', value: 99 });
     postMessage({ type: 'done', pages, heapBytes: module.getCompressionHeapBytes() });
   } catch (error) {
     postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Large-file compression failed. Try a smaller PDF.' });

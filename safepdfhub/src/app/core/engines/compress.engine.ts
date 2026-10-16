@@ -1,3 +1,4 @@
+import { CompressionActivityObserver } from '../compression/compression-activity';
 import { LARGE_COMPRESSION_THRESHOLD } from '../compression/large/large-compression-policy';
 import { PdfNativeOptimizationService } from '../compression/pdf-native-optimization.service';
 import { Injectable } from '@angular/core';
@@ -64,6 +65,7 @@ export class CompressEngine {
     plan: CompressionPlan,
     cachedAnalysis: PdfFileAnalysis,
     onProgress?: (p: number) => void,
+    onActivity?: CompressionActivityObserver,
   ): Promise<File> {
     if (file.size > LARGE_COMPRESSION_THRESHOLD) throw new Error('Use the disk-backed compression path for this large PDF.');
     this.cancel();
@@ -136,6 +138,7 @@ export class CompressEngine {
       // final-integrity gate as every other candidate path. A smaller safe
       // output is never selected merely because the planner classified the
       // source as already compressed.
+      onActivity?.({ stage: 'checking' });
       const certification = await this.candidateCertification.certifySmallest(
         file,
         [output],
@@ -364,7 +367,10 @@ export class CompressEngine {
     const strategyCandidates: File[] = [];
     if (file.size <= budget.maxFileBytes && cachedAnalysis.pages <= budget.maxPages) {
       const nativeStartedAt = performance.now();
-      const nativeCandidates = await this.nativeOptimizer.optimizeCandidates(file, signal, { level, targetBytes: plan.targetBytes });
+      const nativeCandidates = await this.nativeOptimizer.optimizeCandidates(file, signal, { level, targetBytes: plan.targetBytes }, activity => {
+        if (activity.current !== undefined && activity.total) emitProgress(45 + 35 * (((activity.pass ?? 1) - 1 + activity.current / activity.total) / (activity.passes ?? 1)));
+        onActivity?.(activity);
+      });
       for (const nativeCandidate of nativeCandidates) {
       this.nativeMetadataPreserved.add(nativeCandidate);
       throwIfCompressionCancelled(signal);
@@ -383,6 +389,7 @@ export class CompressEngine {
     const strategyProgressShare = 50 / Math.max(1, strategySources.length);
     const budgetFallback = cachedAnalysis.pages > budget.maxPages || file.size > budget.maxFileBytes;
 
+    if (strategySources.length) onActivity?.({ stage: 'optimizing' });
     for (let strategyIndex = 0; strategyIndex < strategySources.length; strategyIndex += 1) {
       throwIfCompressionCancelled(signal);
       const strategySource = strategySources[strategyIndex];
@@ -464,6 +471,7 @@ export class CompressEngine {
       telemetryParentByCandidate,
       signal,
     );
+    onActivity?.({ stage: 'checking' });
     const certification = await this.candidateCertification.certifySmallest(
       file,
       candidatesForCertification,

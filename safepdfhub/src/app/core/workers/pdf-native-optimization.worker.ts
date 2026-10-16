@@ -4,7 +4,7 @@ import { optimizeNativeCandidates, NativeOptimizationOptions } from '../compress
 addEventListener('message', async ({ data }: MessageEvent<{ file: File; options: NativeOptimizationOptions }>) => {
   try {
     let facts: PdfDocumentFacts | undefined;
-    const candidates = await optimizeNativeCandidates(new Uint8Array(await data.file.arrayBuffer()), data.options, value => { facts = value; });
+    const candidates = await optimizeNativeCandidates(new Uint8Array(await data.file.arrayBuffer()), data.options, value => { facts = value; }, activity => postMessage({ type: 'activity', activity }));
     const buffers = candidates.map(bytes => new Uint8Array(bytes).buffer);
     postMessage({ buffers, facts }, buffers);
   } catch { postMessage({ buffers: [] }); }

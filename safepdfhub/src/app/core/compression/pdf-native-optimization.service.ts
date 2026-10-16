@@ -1,3 +1,4 @@
+import { CompressionActivity, CompressionActivityObserver } from './compression-activity';
 import { PdfDocumentFacts, rememberSourceFacts } from './pdf-document-facts';
 import { NativeOptimizationOptions } from './pdf-native-optimization';
 import { Injectable } from '@angular/core';
@@ -9,7 +10,7 @@ export class PdfNativeOptimizationService {
     return (await this.optimizeCandidates(file, signal))[0] ?? null;
   }
 
-  optimizeCandidates(file: File, signal?: AbortSignal, options: NativeOptimizationOptions = {}): Promise<File[]> {
+  optimizeCandidates(file: File, signal?: AbortSignal, options: NativeOptimizationOptions = {}, onActivity?: CompressionActivityObserver): Promise<File[]> {
     throwIfCompressionCancelled(signal);
     if (typeof Worker === 'undefined') return Promise.resolve([]);
     let worker: Worker;
@@ -27,7 +28,8 @@ export class PdfNativeOptimizationService {
       const onAbort = () => { cleanup(); reject(new CompressionCancelledError()); };
       const timeout = setTimeout(() => { cleanup(); resolve([]); }, 120_000);
       signal?.addEventListener('abort', onAbort, { once: true });
-      worker.onmessage = ({ data }: MessageEvent<{ buffers: ArrayBuffer[]; facts?: PdfDocumentFacts }>) => {
+      worker.onmessage = ({ data }: MessageEvent<{ buffers: ArrayBuffer[]; facts?: PdfDocumentFacts; type?: string; activity?: CompressionActivity }>) => {
+        if (data.type === 'activity') { if (!signal?.aborted && data.activity) onActivity?.(data.activity); return; }
         cleanup();
         if (signal?.aborted) { reject(new CompressionCancelledError()); return; }
         if (data.facts) rememberSourceFacts(file, data.facts);

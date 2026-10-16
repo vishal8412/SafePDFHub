@@ -7,6 +7,13 @@ export class LoaderService {
   private _progress = signal(0);
   private _page = signal<{ current: number; total: number } | null>(null);
   private _determinate = signal(false);
+  private _elapsedSeconds = signal(0);
+  private _estimated = signal(false);
+  private _work = signal<{current: number; total: number; pass?: number; passes?: number} | null>(null);
+  elapsedSeconds = this._elapsedSeconds.asReadonly();
+  estimated = this._estimated.asReadonly();
+  work = this._work.asReadonly();
+  private elapsedInterval?: ReturnType<typeof setInterval>;
   loading = this._loading.asReadonly();
   text = this._text.asReadonly();
   progress = this._progress.asReadonly();
@@ -29,12 +36,17 @@ export class LoaderService {
   ];
 
   /** Existing tools retain their loader; determinate tools supply real progress and page data. */
-  show(customText?: string, options: { determinate?: boolean } = {}) {
+  show(customText?: string, options: { determinate?: boolean; estimated?: boolean } = {}) {
     this.activeTasks++;
     if (this.activeTasks !== 1) return;
     this.generation++;
     this.stopProgress();
     this.startTime = Date.now();
+    clearInterval(this.elapsedInterval);
+    this._elapsedSeconds.set(0);
+    this._estimated.set(!!options.estimated);
+    this._work.set(null);
+    this.elapsedInterval = setInterval(() => this._elapsedSeconds.set(Math.floor((Date.now() - this.startTime) / 1000)), 1000);
     this._loading.set(true);
     this._progress.set(0);
     this._page.set(null);
@@ -59,6 +71,8 @@ export class LoaderService {
   hide() {
     if (!this.activeTasks) return;
     if (--this.activeTasks) return;
+    clearInterval(this.elapsedInterval);
+    this.elapsedInterval = undefined;
     this.stopProgress();
     const generation = this.generation;
     setTimeout(
@@ -67,6 +81,7 @@ export class LoaderService {
         this._loading.set(false);
         this._progress.set(0);
         this._page.set(null);
+        this._work.set(null);
       },
       Math.max(600 - (Date.now() - this.startTime), 0),
     );
@@ -105,7 +120,30 @@ export class LoaderService {
     this._determinate.set(false);
     this._progress.set(35);
   }
+  /** Publish a completed state before the owning operation hides the loader. */
+  complete(text = 'Complete') {
+    this.stopProgress();
+    this._determinate.set(true);
+    this._estimated.set(false);
+    this._progress.set(100);
+    this.setText(text);
+  }
+  setWork(work: { current: number; total: number; pass?: number; passes?: number } | null) {
+    this._work.set(work && Number.isFinite(work.current) && Number.isFinite(work.total) && work.total > 0
+      ? { ...work, current: Math.min(work.total, Math.max(0, Math.floor(work.current))), total: Math.floor(work.total) } : null);
+    this._page.set(null);
+  }
   setPage(current?: number, total?: number) {
-    this._page.set(current && total ? { current, total } : null);
+    this._work.set(null);
+    if (!Number.isFinite(current) || !Number.isFinite(total) || total! <= 0 || current! < 0) {
+      this._page.set(null);
+      return;
+    }
+    const pageTotal = Math.floor(total!);
+    if (pageTotal <= 0) {
+      this._page.set(null);
+      return;
+    }
+    this._page.set({ current: Math.min(pageTotal, Math.floor(current!)), total: pageTotal });
   }
 }

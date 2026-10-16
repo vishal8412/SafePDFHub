@@ -1,3 +1,4 @@
+import { CompressionActivityObserver } from './compression-activity';
 import { LargeCompressionService } from './large/large-compression.service';
 import { LARGE_COMPRESSION_THRESHOLD } from './large/large-compression-policy';
 import { Injectable, isDevMode, Optional } from '@angular/core';
@@ -70,7 +71,7 @@ export class CompressionFacade {
     }
   }
 
-  async compress(file: File): Promise<File> {
+  async compress(file: File, onActivity?: CompressionActivityObserver): Promise<File> {
     // Snapshot settings before any asynchronous work. A run owns its settings.
     const targetMB = this.state.targetSizeMB;
     if (targetMB !== null && (!Number.isFinite(targetMB) || targetMB <= 0 || targetMB > 10000)) {
@@ -87,11 +88,12 @@ export class CompressionFacade {
     this.state.compressing = true;
     this.state.progress = 0;
 
+    onActivity?.({ stage: 'reading' });
     try {
       if (file.size > LARGE_COMPRESSION_THRESHOLD) {
         if (!this.large) throw new Error('Large-file compression is unavailable.');
         this.state.stage = 'optimization';
-        const output = await this.large.compress(file, analysisController.signal, n => { if (!analysisController.signal.aborted) this.state.progress = n; }, { level, targetBytes });
+        const output = await this.large.compress(file, analysisController.signal, n => { if (!analysisController.signal.aborted) this.state.progress = n; }, { level, targetBytes }, onActivity);
         throwIfCompressionCancelled(analysisController.signal);
         const compressed = output.file;
         this.state.compressedFile = compressed;
@@ -125,6 +127,7 @@ export class CompressionFacade {
       this.state.progress = 0;
       plan.targetBytes = targetBytes;
       this.state.stage = 'optimization';
+      onActivity?.({ stage: 'optimizing' });
 
       try {
         const compressed = await this.compressEngine.compress(
@@ -135,6 +138,7 @@ export class CompressionFacade {
           (progress) => {
             if (!analysisController.signal.aborted) this.state.progress = progress;
           },
+          onActivity,
         );
 
         throwIfCompressionCancelled(analysisController.signal);

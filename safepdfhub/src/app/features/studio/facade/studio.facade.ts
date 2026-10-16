@@ -330,9 +330,7 @@ export class StudioFacade {
         );
       }
 
-      this.loader.setText(
-        'PDF ready'
-      );
+      await this.finishLoader('PDF ready');
 
       this.toast.show(
         `${file.name} opened successfully.`,
@@ -426,9 +424,7 @@ export class StudioFacade {
 
     this.securityDialogBusy.set(true);
     this.securityDialogError.set(null);
-    this.loader.show('Applying PDF security...');
-    this.loader.setProgress?.(0);
-    this.loader.setText('Preparing PDF security operation...');
+    this.loader.show('Preparing PDF security operation...');
 
     try {
       if (request.mode !== 'protect' && document.sourceWasProtected) {
@@ -474,6 +470,7 @@ export class StudioFacade {
       }
 
       if (this.document() !== document) throw new Error('The PDF changed. Export the current document again.');
+      await this.finishLoader('PDF security complete');
       saveAs(outputFile, request.mode === 'protect'
         ? outputFile.name
         : this.securityOutputName(document.file.name, request.mode));
@@ -2495,7 +2492,7 @@ async exportPdf(): Promise<void> {
   const document = this.document()!;
   const started = performance.now();
   try {
-    this.loader.show('Preparing your edited PDF...');
+    this.loader.show('Preparing your edited PDF...', { determinate: false });
     // Give the browser a chance to paint the processing state before parsing.
     await new Promise<void>(resolve => setTimeout(resolve, 0));
     this.flushTextDraft?.();
@@ -2503,6 +2500,10 @@ async exportPdf(): Promise<void> {
     const file = await this.exportCurrentDocumentFile();
     if (request !== this.exportRequest || this.document() !== document) return;
     this.exportedRevision = revision;
+    // The result view must not replace Studio until the shared loader has
+    // visibly reached its completed state.
+    await this.finishLoader('Edited PDF is ready');
+    if (request !== this.exportRequest || this.document() !== document) return;
     this.exportResult.set({file,originalName:document.name,pageCount:this.pageCount(),durationMs:performance.now()-started});
   } catch (error: unknown) {
     if (request === this.exportRequest) this.toast.show(
@@ -2648,12 +2649,9 @@ async extractPages(
         : `Extracting ${pageNumbers.length} pages...`;
 
     this.loader.show(
-      'Preparing extracted pages...'
+      'Preparing extracted pages...', { determinate: false }
     );
-
-    this.loader.setText(
-      extractionLabel
-    );
+    this.loader.setText(extractionLabel);
 
     await this.pdfExportService.extractPagesAndDownload(
       document.file,
@@ -2662,13 +2660,10 @@ async extractPages(
       this.createExtractedPagesFileName(
         document.file.name,
         pageNumbers
-      )
-    );
-
-    this.loader.setText(
-      pageNumbers.length === 1
+      ),
+      async () => this.finishLoader(pageNumbers.length === 1
         ? 'Page extracted successfully'
-        : 'Pages extracted successfully'
+        : 'Pages extracted successfully')
     );
 
     this.toast.show(
@@ -3631,9 +3626,15 @@ async applySigningObjectToPages(
   const pages = [...new Set(pageNumbers)].filter(page => page >= 1 && page <= this.pages().length);
   if (!pages.length) return false;
 
-  this.loader.show(`Applying ${this.signingLabel(source.signing.kind)} to ${pages.length.toLocaleString()} pages…`);
-  this.loader.setProgress(2);
-  this.loader.setText('Preparing signing pages…');
+  const cancellation = new AbortController();
+  this.loader.show(`Applying ${this.signingLabel(source.signing.kind)} to ${pages.length.toLocaleString()} pages…`, { determinate: true });
+  this.loader.setProgress(0);
+  this.loader.setPage(0, pages.length);
+  this.loader.setText(`Applying ${this.signingLabel(source.signing.kind)} to selected pages…`);
+  let unregisterCancellation = this.loader.registerCancellationHandler(() => {
+    cancellation.abort();
+    this.loader.setText('Cancelling page updates…');
+  });
 
   try {
     const before = this.captureHistorySnapshot();
@@ -3650,6 +3651,7 @@ async applySigningObjectToPages(
     }];
     const total = pages.length;
     for (let index = 0; index < total; index += 1) {
+      if (cancellation.signal.aborted) throw new Error('STUDIO_OPERATION_CANCELLED');
       const pageNumber = pages[index];
       const bounds = this.positionSigningBounds(source.bounds, position);
       const existing = existingByPage.get(pageNumber);
@@ -3684,25 +3686,39 @@ async applySigningObjectToPages(
 
       if ((index + 1) % 32 === 0 || index === total - 1) {
         this.loader.setProgress(5 + ((index + 1) / total) * 88);
-        this.loader.setText(`Preparing page ${(index + 1).toLocaleString()} of ${total.toLocaleString()}…`);
-        if (index !== total - 1) await this.yieldToBrowser();
+        this.loader.setPage(index + 1, total);
+        if (index !== total - 1) {
+          await this.yieldToBrowser();
+          if (cancellation.signal.aborted) throw new Error('STUDIO_OPERATION_CANCELLED');
+        }
       }
     }
 
+    // From this point the edit is committed as one history mutation; cancellation
+    // is removed before touching document state so a partial batch cannot remain.
+    unregisterCancellation();
+    unregisterCancellation = () => {};
+    if (cancellation.signal.aborted) throw new Error('STUDIO_OPERATION_CANCELLED');
     this.objectService.addMany(changes);
     this.loader.setProgress(94);
     this.loader.setText('Saving this change to Undo history…');
     await this.yieldToBrowser();
     this.commitHistoryMutation('Apply signing field to pages', before);
-    this.loader.setProgress(100);
-    this.loader.setText(`Applied to ${total.toLocaleString()} pages ✓`);
+    await this.finishLoader(`Applied to ${total.toLocaleString()} pages`);
     return true;
   } catch (error) {
+    if (cancellation.signal.aborted) {
+      this.loader.setText('Page updates cancelled');
+      this.toast.show('Page updates cancelled.', 'info');
+      return false;
+    }
     console.error('[SafePDFHub Studio] Bulk signing apply failed:', error);
     this.toast.show('Could not apply the signing field to all selected pages.', 'error');
     this.loader.setText('Applying signing field failed');
     return false;
   } finally {
+    unregisterCancellation();
+    this.loader.setPage();
     this.loader.hide();
   }
 }
@@ -3715,6 +3731,12 @@ private signingLabel(kind: StudioSignatureObject['signing']['kind']): string {
     case 'initials': return 'initials';
     default: return 'signature';
   }
+}
+
+private async finishLoader(message: string): Promise<void> {
+  this.loader.complete(message);
+  // Let the final 100% state paint before the shared overlay is dismissed.
+  await new Promise<void>(resolve => setTimeout(resolve, 600));
 }
 
 private yieldToBrowser(): Promise<void> {

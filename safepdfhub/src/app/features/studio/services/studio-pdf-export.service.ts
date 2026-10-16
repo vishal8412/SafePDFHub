@@ -814,7 +814,8 @@ export class StudioPdfExportService {
     sourceFile: File,
     objects: readonly StudioObject[],
     logicalPages: readonly StudioPage[],
-    outputFileName: string
+    outputFileName: string,
+    onReady?: () => Promise<void>
   ): Promise<void> {
     if (logicalPages.length === 0) {
       throw new Error(
@@ -828,6 +829,11 @@ export class StudioPdfExportService {
         objects,
         logicalPages
       );
+
+    // Allow the caller to display the common loader's completed state before
+    // starting the browser download. Without this handoff the download begins
+    // while the UI still claims that extraction is processing.
+    await onReady?.();
 
     saveAs(
       blob,
