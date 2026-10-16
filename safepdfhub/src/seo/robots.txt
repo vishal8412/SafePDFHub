@@ -8,4 +8,14 @@ Allow: /
 Disallow: /__dev/
 Disallow: /api/
 
+User-agent: PerplexityBot
+Allow: /
+Disallow: /__dev/
+Disallow: /api/
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /__dev/
+Disallow: /api/
+
 Sitemap: https://safepdfhub.com/sitemap.xml

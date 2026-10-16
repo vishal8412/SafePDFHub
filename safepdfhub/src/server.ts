@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { loadEnvFile } from 'node:process';
 
 import { SITE_CONFIG } from './app/config/site.config';
-import { indexingDisabled, robotsText, seoRedirect, sitemapXml } from './server/seo-http';
+import { indexingDisabled, robotsText, seoRedirect, sitemapXml, discoveryIndexText } from './server/seo-http';
 import { createContactResponse } from './server/contact-request';
 
 try {
@@ -64,6 +64,9 @@ app.post('/api/contact', async (req, res) => {
  */
 app.get('/robots.txt', (_req, res) => {
   res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robotsText(indexingDisabled(process.env)));
+});
+app.get('/llms.txt', (_req, res) => {
+  res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(discoveryIndexText());
 });
 app.get('/sitemap.xml', (_req, res) => {
   res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml());
@@ -152,6 +155,9 @@ async function handleNetlifyRequest(request: Request): Promise<Response> {
   }
   if (pathname === '/robots.txt') {
     return new Response(robotsText(indexingDisabled(process.env)), { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  }
+  if (pathname === '/llms.txt') {
+    return new Response(discoveryIndexText(), { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
   }
   if (pathname === '/sitemap.xml') {
     return new Response(sitemapXml(), { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });

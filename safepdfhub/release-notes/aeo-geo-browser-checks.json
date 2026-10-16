@@ -1,0 +1,105 @@
+{
+  "checks": [
+    {
+      "slug": "word-to-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "pdf-to-word",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "compress-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "merge-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "split-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "protect-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "unlock-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "sign-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    },
+    {
+      "slug": "watermark-pdf",
+      "widths": [
+        1440,
+        768,
+        390,
+        320
+      ],
+      "keyboardFaq": true,
+      "uploadInput": true
+    }
+  ],
+  "relatedNavigation": "/tools/protect-pdf",
+  "errors": []
+}

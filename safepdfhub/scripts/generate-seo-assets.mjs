@@ -1,44 +1,18 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { loadDiscoveryConfig } from './load-discovery-config.mjs';
 
-const root = resolve(import.meta.dirname, '..');
-const siteConfigPath = resolve(root, 'src/app/config/site.config.ts');
-const toolsConfigPath = resolve(root, 'src/app/config/tools.config.ts');
-const seoDir = resolve(root, 'src/seo');
-
-const siteConfig = await readFile(siteConfigPath, 'utf8');
-const toolsConfig = await readFile(toolsConfigPath, 'utf8');
-
-const siteUrl = siteConfig.match(/url:\s*'([^']+)'/)?.[1];
-if (!siteUrl) throw new Error('Unable to read SITE_CONFIG.url');
-
-const staticBlock = siteConfig.match(/staticIndexablePaths:\s*\[([\s\S]*?)\]\s*as const/);
-if (!staticBlock) throw new Error('Unable to read SITE_CONFIG.staticIndexablePaths');
-
-const staticPaths = [...staticBlock[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
-const toolSlugs = [...toolsConfig.matchAll(/\bslug:\s*'([^']+)'/g)].map(match => match[1]);
-const urls = [...new Set([...staticPaths, ...toolSlugs.map(slug => `/tools/${slug}`)])];
-
-const xml = [
-  '<?xml version="1.0" encoding="UTF-8"?>',
-  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-  ...urls.map(path => `  <url><loc>${siteUrl}${path === '/' ? '' : path}</loc></url>`),
-  '</urlset>',
-  ''
-].join('\n');
-
-const disableIndexing = process.env.INDEXING_DISABLED === 'true' || ['deploy-preview', 'branch-deploy'].includes(process.env.CONTEXT ?? '');
-const robots = disableIndexing ? 'User-agent: *\nDisallow: /\n' : [
-  'User-agent: *',
-  'Allow: /',
-  'Disallow: /__dev/',
-  'Disallow: /api/',
-  '',
-  `Sitemap: ${siteUrl}/sitemap.xml`,
-  ''
-].join('\n');
-
-await writeFile(resolve(seoDir, 'sitemap.xml'), xml, 'utf8');
-await writeFile(resolve(seoDir, 'robots.txt'), robots, 'utf8');
-
-console.log(`Generated SEO assets for ${urls.length} indexable URLs.`);
+const [{ SITE_CONFIG }, { TOOLS }, assets] = await Promise.all([
+  loadDiscoveryConfig('../src/app/config/site.config.ts'),
+  loadDiscoveryConfig('../src/app/config/tools.config.ts'),
+  loadDiscoveryConfig('../src/app/config/discovery-assets.ts')
+]);
+const paths = [...SITE_CONFIG.staticIndexablePaths, ...TOOLS.map(tool => `/tools/${tool.slug}`)];
+const outputs = {
+  'sitemap.xml': assets.buildSitemapXml(SITE_CONFIG.url, paths),
+  'robots.txt': assets.buildRobotsText(SITE_CONFIG.url, assets.isIndexingDisabled(process.env)),
+  'llms.txt': assets.buildDiscoveryIndex(SITE_CONFIG, TOOLS)
+};
+for (const [name, content] of Object.entries(outputs)) {
+  await writeFile(new URL(`../src/seo/${name}`, import.meta.url), content, 'utf8');
+}
+console.log(`Generated sitemap, robots policy, and public discovery index for ${new Set(paths).size} canonical URLs.`);

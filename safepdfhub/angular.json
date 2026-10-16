@@ -36,6 +36,11 @@
                 "output": "assets/qpdf/"
               },
               {
+                "glob": "llms.txt",
+                "input": "src/seo",
+                "output": "/"
+              },
+              {
                 "glob": "robots.txt",
                 "input": "src/seo",
                 "output": "/"
@@ -137,7 +142,12 @@
                   "output": "assets/qpdf/"
                 },
                 {
-                  "glob": "robots.txt",
+                  "glob": "llms.txt",
+                "input": "src/seo",
+                "output": "/"
+              },
+              {
+                "glob": "robots.txt",
                   "input": "src/seo",
                   "output": "/"
                 },

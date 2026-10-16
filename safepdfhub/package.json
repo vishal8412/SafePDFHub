@@ -77,7 +77,10 @@
     "seo:audit:rendered": "node scripts/seo-rendered-audit.mjs",
     "ocr:assets": "node scripts/prepare-ocr-assets.mjs",
     "prestart": "npm run ocr:assets",
-    "prewatch": "npm run ocr:assets"
+    "prewatch": "npm run ocr:assets",
+    "test:discovery": "ng test --watch=false --include=src/app/core/services/seo.service.spec.ts --include=src/server/seo-http.spec.ts",
+    "aeo:geo:audit": "npm run seo:audit && npm run seo:audit:rendered",
+    "aeo:geo:browser": "node scripts/discovery-browser-check.cjs"
   },
   "private": true,
   "packageManager": "npm@10.9.7",

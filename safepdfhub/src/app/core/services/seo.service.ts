@@ -4,11 +4,15 @@ import { Meta, Title } from '@angular/platform-browser';
 
 import { PAGE_SEO, NON_INDEXABLE_PAGE_SEO, type PageSeoConfig } from '../../config/page-seo.config';
 import { SITE_CONFIG } from '../../config/site.config';
-import type { Tool } from '../../config/tools.config';
+import { TOOLS, type Tool } from '../../config/tools.config';
+import { TOOL_DISCOVERY } from '../../config/tool-discovery.config';
+import { toolDiscoverySchemas } from './tool-discovery-schema';
 
 interface SeoOptions extends PageSeoConfig {
   breadcrumbs?: readonly SeoBreadcrumb[];
   webApplication?: boolean;
+  applicationName?: string;
+  applicationFeatures?: readonly string[];
 }
 
 export interface SeoBreadcrumb {
@@ -33,8 +37,13 @@ export class SeoService {
         { name: this.getToolDisplayName(tool) }
       ],
       webApplication: true,
+      applicationName: tool.label,
+      applicationFeatures: TOOL_DISCOVERY[tool.slug].facts.map(fact => `${fact.label}: ${fact.value}`),
       indexable: true
     });
+    const schemas = toolDiscoverySchemas(tool);
+    this.setJsonLd('safepdfhub-toolpage-jsonld', schemas.page);
+    this.setJsonLd('safepdfhub-faq-jsonld', schemas.faq);
   }
 
   updateForUrl(url: string): void {
@@ -63,6 +72,9 @@ export class SeoService {
   }
 
   private update(options: SeoOptions): void {
+    // Route changes must not retain a previous tool's answers or entities.
+    this.removeJsonLd('safepdfhub-toolpage-jsonld');
+    this.removeJsonLd('safepdfhub-faq-jsonld');
     this.title.setTitle(options.title);
 
     this.setMeta('description', options.description);
@@ -106,8 +118,10 @@ export class SeoService {
     // page because Google uses it to determine the preferred site name.
     if (canonicalPath === '/') {
       this.setJsonLd('safepdfhub-website-jsonld', this.websiteSchema());
+      this.setJsonLd('safepdfhub-tool-list-jsonld', this.toolDirectorySchema());
     } else {
       this.removeJsonLd('safepdfhub-website-jsonld');
+      this.removeJsonLd('safepdfhub-tool-list-jsonld');
     }
 
     if (canonicalPath === '/about') {
@@ -131,7 +145,7 @@ export class SeoService {
     if (options.webApplication) {
       this.setJsonLd(
         'safepdfhub-webapplication-jsonld',
-        this.webApplicationSchema(canonicalUrl, options.title, options.description)
+        this.webApplicationSchema(canonicalUrl, options.applicationName ?? options.title, options.description, options.applicationFeatures)
       );
     } else {
       this.removeJsonLd('safepdfhub-webapplication-jsonld');
@@ -140,7 +154,7 @@ export class SeoService {
     if (options.breadcrumbs && options.breadcrumbs.length >= 2) {
       this.setJsonLd(
         'safepdfhub-breadcrumb-jsonld',
-        this.breadcrumbSchema(options.breadcrumbs)
+        this.breadcrumbSchema(options.breadcrumbs, canonicalUrl)
       );
     } else {
       this.removeJsonLd('safepdfhub-breadcrumb-jsonld');
@@ -176,6 +190,18 @@ export class SeoService {
     };
   }
 
+  private toolDirectorySchema(): Record<string, unknown> {
+    return {
+      '@context': 'https://schema.org', '@type': 'ItemList',
+      '@id': `${SITE_CONFIG.url}/#tools`, name: 'SafePDFHub PDF tools',
+      numberOfItems: TOOLS.length,
+      itemListElement: [...TOOLS].sort((a, b) => a.displayOrder - b.displayOrder).map((tool, index) => ({
+        '@type': 'ListItem', position: index + 1, name: tool.label,
+        url: `${SITE_CONFIG.url}/tools/${tool.slug}`
+      }))
+    };
+  }
+
   private aboutPageSchema(canonicalUrl: string): Record<string, unknown> {
     return {
       '@context': 'https://schema.org',
@@ -206,7 +232,8 @@ export class SeoService {
   private webApplicationSchema(
     canonicalUrl: string,
     name: string,
-    description: string
+    description: string,
+    features?: readonly string[]
   ): Record<string, unknown> {
     return {
       '@context': 'https://schema.org',
@@ -214,6 +241,7 @@ export class SeoService {
       '@id': `${canonicalUrl}#application`,
       name,
       description,
+      ...(features?.length ? { featureList: [...features] } : {}),
       url: canonicalUrl,
       inLanguage: 'en',
       isAccessibleForFree: true,
@@ -225,11 +253,13 @@ export class SeoService {
   }
 
   private breadcrumbSchema(
-    breadcrumbs: readonly SeoBreadcrumb[]
+    breadcrumbs: readonly SeoBreadcrumb[],
+    canonicalUrl: string
   ): Record<string, unknown> {
     return {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
+      '@id': `${canonicalUrl}#breadcrumbs`,
       itemListElement: breadcrumbs.map((breadcrumb, index) => {
         const item: Record<string, unknown> = {
           '@type': 'ListItem',

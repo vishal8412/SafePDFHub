@@ -1,27 +1,27 @@
 # SafePDFHub
 
-> Privacy-first PDF tools that process documents locally in your browser.
+> Browser-based PDF tools and DOCX conversion.
 
-SafePDFHub is a browser-based PDF toolkit. Processing is local for tools that support local processing; see each tool page for its workflow and limits.
+This is a public navigation index. Each linked tool page is authoritative for its current workflow, supported formats, device limits, and limitations. User documents and processing results are not public content.
 
 ## PDF tools
-- [PDF to Word](https://safepdfhub.com/tools/pdf-to-word): Convert PDFs to Word documents
-- [Compress PDF](https://safepdfhub.com/tools/compress-pdf): Reduce PDF file size
-- [Merge PDF](https://safepdfhub.com/tools/merge-pdf): Combine multiple PDFs
-- [Split PDF](https://safepdfhub.com/tools/split-pdf): Extract pages from a PDF
-- [Protect PDF](https://safepdfhub.com/tools/protect-pdf): Add password protection
-- [Unlock PDF](https://safepdfhub.com/tools/unlock-pdf): Remove password protection
-- [Sign PDF](https://safepdfhub.com/tools/sign-pdf): Add a signature and fill fields
-- [Watermark PDF](https://safepdfhub.com/tools/watermark-pdf): Add text or image watermark
+- [Compress PDF](https://safepdfhub.com/tools/compress-pdf): Reduce PDF size locally with lossless or image compression, or try a target size in MB. Up to 500 MB on supported desktops; device limits apply.
+- [Merge PDF](https://safepdfhub.com/tools/merge-pdf): Combine multiple PDF files into one. Fast, secure, and works in your browser.
+- [Split PDF](https://safepdfhub.com/tools/split-pdf): Extract pages or split a PDF into separate files locally in your browser. No document upload required.
+- [Protect PDF](https://safepdfhub.com/tools/protect-pdf): Password-protect a PDF locally in your browser with optional permissions.
+- [Unlock PDF](https://safepdfhub.com/tools/unlock-pdf): Remove PDF password protection locally when you know the document password.
+- [Sign PDF](https://safepdfhub.com/tools/sign-pdf): Add a signature, initials, text, dates, and checkboxes to a PDF locally in your browser.
+- [Watermark PDF](https://safepdfhub.com/tools/watermark-pdf): Add text or image watermarks to PDF pages locally in your browser with adjustable opacity, rotation, position, and page range.
+- [PDF to Word](https://safepdfhub.com/tools/pdf-to-word): Convert PDFs to Word DOCX locally. Extract editable text or preserve pages as images. Recognize scanned English, Hindi or Marathi text with local OCR. Up to 200 MB with no fixed page limit.
+- [Word to PDF](https://safepdfhub.com/tools/word-to-pdf): Convert Word DOCX files to downloadable PDFs locally in your browser. Files up to 200 MB; no document uploads or conversion server.
 
-## Public pages
-- [Free PDF Tools Online — Private & Browser-Based | SafePDFHub](https://safepdfhub.com): Free PDF tools to merge, compress, split, protect, sign, and watermark PDFs in your browser. Privacy-first processing with no upload required for local tools.
-- [Support SafePDFHub — Help Keep PDFs Private](https://safepdfhub.com/support): Support SafePDFHub and help us keep building useful, privacy-first PDF tools.
-- [About SafePDFHub — Privacy-First PDF Tools](https://safepdfhub.com/about): Learn why SafePDFHub is building practical PDF tools around browser-based processing and document privacy.
-- [Contact SafePDFHub — PDF Tools & Privacy Questions](https://safepdfhub.com/contact): Contact SafePDFHub with questions, product feedback, support issues, privacy questions, or partnership enquiries.
-- [Privacy Policy — SafePDFHub](https://safepdfhub.com/privacy): Read the SafePDFHub privacy policy covering browser-based PDF processing, information handling, and third-party services.
-- [Terms of Service — SafePDFHub](https://safepdfhub.com/terms): Read the SafePDFHub Terms of Service for use of its PDF tools, browser editor, and related website services.
+## About, privacy, and help
+- [About SafePDFHub](https://safepdfhub.com/about): About the project and its approach to document processing.
+- [Privacy policy](https://safepdfhub.com/privacy): Information handling and third-party services.
+- [Contact](https://safepdfhub.com/contact): Product support, feedback, and privacy questions.
+- [Terms of service](https://safepdfhub.com/terms): Conditions for using the tools.
+- [Support the project](https://safepdfhub.com/support): Help maintain and improve the tools.
 
-## Sitemap
-
+## Discovery
+- [Tool directory](https://safepdfhub.com/#tools)
 - [XML sitemap](https://safepdfhub.com/sitemap.xml)
