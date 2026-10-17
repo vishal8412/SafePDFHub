@@ -76,9 +76,9 @@ function positionedPage(p: WordPage, pageIndex: number): string {
   ) =>
     `<w:r><w:pict><v:shape id="${id}" style="position:absolute;margin-left:${x.toFixed(3)}pt;margin-top:${y.toFixed(3)}pt;width:${width.toFixed(3)}pt;height:${height.toFixed(3)}pt;z-index:${z};mso-position-horizontal-relative:page;mso-position-vertical-relative:page" stroked="f" filled="f" o:allowincell="f" o:insetmode="custom">${body}</v:shape></w:pict></w:r>`;
   const pictures = p.images
-    .map((im) =>
+    .map((im, i) =>
       anchor(
-        `image${im.id}`,
+        `artwork${pageIndex + 1}_${i + 1}`,
         im.x,
         im.y,
         im.width,

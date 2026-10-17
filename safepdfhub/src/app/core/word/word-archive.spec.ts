@@ -99,4 +99,117 @@ describe("Streaming Word archive", () => {
       name: "AbortError",
     });
   });
+  it("reuses identical media across pages while keeping geometry and shape IDs independent", async () => {
+    const archive = new WordArchive(new AbortController().signal);
+    for (let i = 1; i <= 3; i++)
+      await archive.addPage({
+        ...page,
+        positioned: true,
+        images: [
+          {
+            id: i,
+            format: "png",
+            bytes: new Uint8Array([1, 2, 3]),
+            x: i * 10,
+            y: 0,
+            width: i * 40,
+            height: 100,
+          },
+        ],
+      });
+    const zip = await JSZip.loadAsync(
+      await read(await archive.finish(() => {})),
+    );
+    expect(
+      Object.keys(zip.files).filter((n) => n.startsWith("word/media/")),
+    ).toEqual(["word/media/image1.png"]);
+    const xml = await zip.file("word/document.xml")!.async("string");
+    expect(xml.match(/r:id="img1"/g)?.length).toBe(3);
+    expect(xml).toContain("margin-left:30.000pt");
+    expect(xml).toContain("width:120.000pt");
+    expect(xml).toContain('id="artwork3_1"');
+    expect(
+      (await zip.file("word/_rels/document.xml.rels")!.async("string")).match(
+        /Id="img/g,
+      )?.length,
+    ).toBe(1);
+    archive.dispose();
+  });
+  it("never merges different bytes or formats", async () => {
+    const archive = new WordArchive(new AbortController().signal);
+    for (let i = 1; i <= 3; i++)
+      await archive.addPage({
+        ...page,
+        images: [
+          {
+            id: i,
+            format: i === 3 ? "png" : "jpg",
+            bytes: new Uint8Array(i === 2 ? [3, 2, 1] : [1, 2, 3]),
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+          },
+        ],
+      });
+    const zip = await JSZip.loadAsync(
+      await read(await archive.finish(() => {})),
+    );
+    expect(
+      Object.keys(zip.files).filter((n) => n.startsWith("word/media/")).length,
+    ).toBe(3);
+    archive.dispose();
+  });
+  it("compares bytes even when two different images have the same fingerprint", async () => {
+    const archive = new WordArchive(new AbortController().signal);
+    const collision = [
+      [30, 66, 2, 184, 49, 235, 102, 42],
+      [75, 247, 39, 124, 208, 142, 226, 13],
+    ];
+    for (let i = 0; i < collision.length; i++)
+      await archive.addPage({
+        ...page,
+        images: [
+          {
+            id: i + 1,
+            bytes: new Uint8Array(collision[i]),
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+          },
+        ],
+      });
+    const zip = await JSZip.loadAsync(
+      await read(await archive.finish(() => {})),
+    );
+    expect(
+      await zip.file("word/media/image1.jpg")!.async("uint8array"),
+    ).toEqual(new Uint8Array(collision[0]));
+    expect(
+      await zip.file("word/media/image2.jpg")!.async("uint8array"),
+    ).toEqual(new Uint8Array(collision[1]));
+    archive.dispose();
+  });
+  it("cancels while comparing media without writing another page", async () => {
+    const controller = new AbortController();
+    const archive = new WordArchive(controller.signal);
+    const images = [
+      {
+        id: 1,
+        bytes: new Uint8Array([1, 2, 3]),
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+      },
+    ];
+    await archive.addPage({ ...page, images });
+    const pending = archive.addPage({
+      ...page,
+      images: [{ ...images[0], id: 2 }],
+    });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
 });

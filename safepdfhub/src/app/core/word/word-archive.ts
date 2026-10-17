@@ -16,6 +16,7 @@ export class WordArchive {
   private outputBytes = 0;
   private entries = 0;
   private zip: Zip;
+  private media = new Map<string, { id: number; blob: Blob }[]>();
   private readonly abort = () => this.dispose();
   constructor(private signal: AbortSignal) {
     this.zip = new Zip((error, data, final) => {
@@ -52,7 +53,43 @@ export class WordArchive {
   }
   async addPage(page: WordPage) {
     this.check();
-    const xml = documentXml([page], this.pageIndex++);
+    // Deduplicate encoded content, not PDF object IDs: merged documents often
+    // contain thousands of separately numbered copies of the same artwork.
+    const images: WordPage["images"] = [];
+    for (const image of page.images) {
+      this.check();
+      const format = image.format ?? "jpg";
+      let hash = 2166136261;
+      for (const byte of image.bytes) hash = Math.imul(hash ^ byte, 16777619);
+      const key = `${format}:${image.bytes.length}:${hash >>> 0}`;
+      const candidates = this.media.get(key) ?? [];
+      let match: (typeof candidates)[number] | undefined;
+      for (const candidate of candidates) {
+        // Hashes only find candidates. Compare bytes to prevent collisions from
+        // substituting another page's content. Retain Blobs, not decoded arrays.
+        const bytes = new Uint8Array(await candidate.blob.arrayBuffer());
+        this.check();
+        if (bytes.every((byte, i) => byte === image.bytes[i])) {
+          match = candidate;
+          break;
+        }
+      }
+      if (match) images.push({ ...image, id: match.id });
+      else {
+        this.entry(`word/media/image${image.id}.${format}`, image.bytes);
+        candidates.push({
+          id: image.id,
+          blob: new Blob([image.bytes as Uint8Array<ArrayBuffer>]),
+        });
+        this.media.set(key, candidates);
+        this.relationships.push(
+          `<Relationship Id="img${image.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${image.id}.${format}"/>`,
+        );
+        images.push(image);
+      }
+    }
+    this.check();
+    const xml = documentXml([{ ...page, images }], this.pageIndex++);
     const start = xml.indexOf("<w:body>") + "<w:body>".length;
     const section = xml.lastIndexOf("<w:sectPr>");
     if (!this.xmlParts.length)
@@ -65,15 +102,6 @@ export class WordArchive {
       );
     this.xmlParts.push(new Blob([xml.slice(start, section)]));
     this.lastSection = xml.slice(section, xml.indexOf("</w:body>"));
-    for (const image of page.images) {
-      this.entry(
-        `word/media/image${image.id}.${image.format ?? "jpg"}`,
-        image.bytes,
-      );
-      this.relationships.push(
-        `<Relationship Id="img${image.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${image.id}.${image.format ?? "jpg"}"/>`,
-      );
-    }
   }
   async finish(progress: (percent: number) => void): Promise<Blob> {
     this.check();
@@ -106,6 +134,7 @@ export class WordArchive {
     this.xmlParts = [];
     this.lastSection = "";
     await this.blobEntry("word/document.xml", document, progress);
+    this.media.clear();
     this.zip.end();
     this.check();
     if (!this.ended)
@@ -120,7 +149,7 @@ export class WordArchive {
     blob: Blob,
     progress: (percent: number) => void,
   ) {
-    const entry = new ZipDeflate(name, { level: 1 });
+    const entry = new ZipDeflate(name, { level: 6 });
     this.checkEntryCount();
     this.zip.add(entry);
     const chunkSize = 256 * 1024;
@@ -148,5 +177,6 @@ export class WordArchive {
     this.chunks = [];
     this.xmlParts = [];
     this.relationships = [];
+    this.media.clear();
   }
 }

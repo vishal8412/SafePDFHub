@@ -2,7 +2,7 @@ import { Injectable, inject } from "@angular/core";
 import { PdfJsLoaderService } from "../pdf/pdfjs-loader.service";
 import { LocalProcessingCapabilityService } from "../capacity/local-processing-capability.service";
 import { DOCX_MIME, WordPage, WordImage } from "./word-document";
-import { groupText, safeWordName, TextFragment } from "./word-layout";
+import { safeWordName, TextFragment } from "./word-layout";
 import { assessOcr, containsRuledTable } from "./ocr-quality";
 import { WordArchive } from "./word-archive";
 import {
@@ -13,6 +13,7 @@ import {
   abortable,
 } from "./word-ocr";
 import { textPaints, positionedText, graphicsContext } from "./pdf-text-style";
+import { wordImage } from "./word-image";
 import { pdfFileRange } from "./pdf-file-range";
 import type { PDFPageProxy } from "pdfjs-dist";
 type SourceImageBox = Omit<WordImage, "id" | "bytes"> & { sourceDpi?: number };
@@ -347,29 +348,17 @@ export class PdfToWordService {
               output.lines = [];
               imagePages.push(n);
             }
-            if (output.visual && canvas) {
-              addImage({
-                id: ++imageId,
-                bytes: await this.png(canvas),
-                format: "png",
-                x: 0,
-                y: 0,
-                width: viewport.width,
-                height: viewport.height,
-              });
-            } else if (canvas && !needsOcr) {
-              // One text-free artwork layer retains rules, shaded columns, icons,
-              // paths and photographs in their original positions. Cropping from
-              // a fully rendered page used to duplicate text over images.
-              addImage({
-                id: ++imageId,
-                bytes: await this.png(canvas),
-                format: "png",
-                x: 0,
-                y: 0,
-                width: viewport.width,
-                height: viewport.height,
-              });
+            if (canvas && (output.visual || !needsOcr)) {
+              const image = await wordImage(canvas, check);
+              if (image)
+                addImage({
+                  id: ++imageId,
+                  ...image,
+                  x: 0,
+                  y: 0,
+                  width: viewport.width,
+                  height: viewport.height,
+                });
             }
           } finally {
             if (canvas) canvas.width = canvas.height = 0;
@@ -434,7 +423,7 @@ export class PdfToWordService {
       canvas = document.createElement("canvas");
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context)
       throw new Error(
         "Your browser could not allocate an image canvas. Try fewer pages.",
@@ -456,32 +445,6 @@ export class PdfToWordService {
     } finally {
       signal.removeEventListener("abort", abort);
     }
-  }
-  private png(canvas: HTMLCanvasElement): Promise<Uint8Array> {
-    return new Promise((resolve, reject) =>
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          reject(new Error("Unable to preserve the source page image."));
-          return;
-        }
-        blob.arrayBuffer().then((b) => resolve(new Uint8Array(b)), reject);
-      }, "image/png"),
-    );
-  }
-  private jpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
-    return new Promise((resolve, reject) =>
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            reject(new Error("Unable to encode a PDF image."));
-            return;
-          }
-          blob.arrayBuffer().then((b) => resolve(new Uint8Array(b)), reject);
-        },
-        "image/jpeg",
-        0.9,
-      ),
-    );
   }
   private async imageBoxes(
     page: PDFPageProxy,
