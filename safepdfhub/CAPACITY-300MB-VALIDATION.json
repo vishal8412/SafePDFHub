@@ -1,0 +1,604 @@
+{
+  "release": "300 MB compressor capacity",
+  "basedOnArtifactVersion": 19,
+  "validatedAtUTC": "2026-10-17T07:13:18.284220+00:00",
+  "maximumInputBytes": 300000000,
+  "oldLosslessOnlyThresholdRemoved": true,
+  "qualityModesAvailableThroughMaximum": true,
+  "build": "passed",
+  "targetedUnitTests": {
+    "files": 27,
+    "passed": 166
+  },
+  "seoArchitectureAudit": "passed",
+  "existingBuildWarnings": [
+    "Studio stylesheet exceeds its budget by 1.34 kB",
+    "CommonJS optimization warnings"
+  ],
+  "browser": {
+    "engine": "Chromium 153 headless",
+    "profiles": "Reported memory and device identity simulated in desktop Chromium; not physical mobile/tablet tests.",
+    "cases": [
+      {
+        "name": "desktop8-265-target20",
+        "source": "265MB-scans.pdf",
+        "inputBytes": 265380000,
+        "bytes": 13965556,
+        "elapsedMs": 8868,
+        "targetMet": true,
+        "text": "COMPRESSION COMPLETE\nYour PDF is ready\n\nTarget met. Requested maximum: 20.00 MB. Download size: 13.97 MB (13,965,556 bytes).\n\n265MB-scans-compressed.pdf\nCompressed PDF \u202213.97 MB\nReady\nPROCESSED\nOn this device\nPROCESSING TIME\n7.2 s\nORIGINAL FILE\n265MB-scans.pdf\nYour PDF stayed on this device.\nPRIVATE BY DESIGN\nSafePDFHub did not upload or receive your document.\nLOCAL\nDownload compressed PDF\nSave your optimized PDF to your device\nBack to compression settings\nCompress another PDF\n\nYour document was processed on this device. Nothing was uploaded to a server.",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 265380000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 512,
+                "maxPages": 40000,
+                "maxImagePixels": 16000000,
+                "inspectionBytes": 8000000
+              },
+              "native": true
+            }
+          ],
+          "done": [
+            {
+              "pages": 22,
+              "heapBytes": 25165824
+            }
+          ],
+          "phases": [
+            [
+              "--is-encrypted",
+              "/input/source.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--show-npages"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "native-optimization"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "--show-npages",
+              "/output.pdf"
+            ]
+          ],
+          "terminated": 1
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop8-300-target20",
+        "source": "300MB-scans.pdf",
+        "inputBytes": 300000000,
+        "bytes": 14248863,
+        "elapsedMs": 9416,
+        "targetMet": true,
+        "text": "COMPRESSION COMPLETE\nYour PDF is ready\n\nTarget met. Requested maximum: 20.00 MB. Download size: 14.25 MB (14,248,863 bytes).\n\n300MB-scans-compressed.pdf\nCompressed PDF \u202214.25 MB\nReady\nPROCESSED\nOn this device\nPROCESSING TIME\n7.8 s\nORIGINAL FILE\n300MB-scans.pdf\nYour PDF stayed on this device.\nPRIVATE BY DESIGN\nSafePDFHub did not upload or receive your document.\nLOCAL\nDownload compressed PDF\nSave your optimized PDF to your device\nBack to compression settings\nCompress another PDF\n\nYour document was processed on this device. Nothing was uploaded to a server.",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 300000000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 512,
+                "maxPages": 40000,
+                "maxImagePixels": 16000000,
+                "inspectionBytes": 8000000
+              },
+              "native": true
+            }
+          ],
+          "done": [
+            {
+              "pages": 25,
+              "heapBytes": 25165824
+            }
+          ],
+          "phases": [
+            [
+              "--is-encrypted",
+              "/input/source.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--show-npages"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "native-optimization"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "--show-npages",
+              "/output.pdf"
+            ]
+          ],
+          "terminated": 1
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop8-300-maximum",
+        "source": "300MB-scans.pdf",
+        "inputBytes": 300000000,
+        "bytes": 7983142,
+        "elapsedMs": 7257,
+        "text": "COMPRESSION COMPLETE\nYour PDF is ready\n\nDownload size: 7.98 MB (7,983,142 bytes). Saved 97.34% from the original.\n\n300MB-scans-compressed.pdf\nCompressed PDF \u20227.98 MB\nReady\nPROCESSED\nOn this device\nPROCESSING TIME\n6.5 s\nORIGINAL FILE\n300MB-scans.pdf\nYour PDF stayed on this device.\nPRIVATE BY DESIGN\nSafePDFHub did not upload or receive your document.\nLOCAL\nDownload compressed PDF\nSave your optimized PDF to your device\nBack to compression settings\nCompress another PDF\n\nYour document was processed on this device. Nothing was uploaded to a server.",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 300000000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 512,
+                "maxPages": 40000,
+                "maxImagePixels": 16000000,
+                "inspectionBytes": 8000000
+              },
+              "native": true
+            }
+          ],
+          "done": [
+            {
+              "pages": 25,
+              "heapBytes": 25165824
+            }
+          ],
+          "phases": [
+            [
+              "--is-encrypted",
+              "/input/source.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--show-npages"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "native-optimization"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "--show-npages",
+              "/output.pdf"
+            ]
+          ],
+          "terminated": 1
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop4-300-maximum",
+        "source": "300MB-scans.pdf",
+        "inputBytes": 300000000,
+        "bytes": 19359520,
+        "elapsedMs": 15879,
+        "text": "COMPRESSION COMPLETE\nYour PDF is ready\n\nDownload size: 19.36 MB (19,359,520 bytes). Saved 93.55% from the original.\n\n300MB-scans-compressed.pdf\nCompressed PDF \u202219.36 MB\nReady\nPROCESSED\nOn this device\nPROCESSING TIME\n14.2 s\nORIGINAL FILE\n300MB-scans.pdf\nYour PDF stayed on this device.\nPRIVATE BY DESIGN\nSafePDFHub did not upload or receive your document.\nLOCAL\nDownload compressed PDF\nSave your optimized PDF to your device\nBack to compression settings\nCompress another PDF\n\nYour document was processed on this device. Nothing was uploaded to a server.",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 300000000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 384,
+                "maxPages": 40000,
+                "maxImagePixels": 12000000,
+                "inspectionBytes": 8000000
+              },
+              "native": false,
+              "quality": 55
+            }
+          ],
+          "done": [
+            {
+              "pages": 25,
+              "heapBytes": 30212096
+            }
+          ],
+          "phases": [
+            [
+              "--is-encrypted",
+              "/input/source.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--show-npages"
+            ],
+            [
+              "--suppress-recovery",
+              "--json"
+            ],
+            [
+              "--suppress-recovery",
+              "--object-streams=generate"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "--show-npages",
+              "/output.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--json"
+            ]
+          ],
+          "terminated": 1
+        },
+        "errors": []
+      },
+      {
+        "name": "tablet8-300-maximum",
+        "source": "300MB-scans.pdf",
+        "inputBytes": 300000000,
+        "bytes": 19359520,
+        "elapsedMs": 15202,
+        "text": "COMPRESSION COMPLETE\nYour PDF is ready\n\nDownload size: 19.36 MB (19,359,520 bytes). Saved 93.55% from the original.\n\n300MB-scans-compressed.pdf\nCompressed PDF \u202219.36 MB\nReady\nPROCESSED\nOn this device\nPROCESSING TIME\n14.4 s\nORIGINAL FILE\n300MB-scans.pdf\nYour PDF stayed on this device.\nPRIVATE BY DESIGN\nSafePDFHub did not upload or receive your document.\nLOCAL\nDownload compressed PDF\nSave your optimized PDF to your device\nBack to compression settings\nCompress another PDF\n\nYour document was processed on this device. Nothing was uploaded to a server.",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 300000000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 384,
+                "maxPages": 15000,
+                "maxImagePixels": 12000000,
+                "inspectionBytes": 2000000
+              },
+              "native": false,
+              "quality": 55
+            }
+          ],
+          "done": [
+            {
+              "pages": 25,
+              "heapBytes": 30212096
+            }
+          ],
+          "phases": [
+            [
+              "--is-encrypted",
+              "/input/source.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--show-npages"
+            ],
+            [
+              "--suppress-recovery",
+              "--json"
+            ],
+            [
+              "--suppress-recovery",
+              "--object-streams=generate"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "--show-npages",
+              "/output.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--json"
+            ]
+          ],
+          "terminated": 1
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop8-over-limit",
+        "status": "rejected-before-processing",
+        "qa": {
+          "largeReads": [],
+          "workers": [],
+          "done": [],
+          "phases": [],
+          "terminated": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "phone8-300-rejected",
+        "status": "rejected-before-processing",
+        "qa": {
+          "largeReads": [],
+          "workers": [],
+          "done": [],
+          "phases": [],
+          "terminated": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "no-opfs-300-rejected",
+        "status": "rejected-before-processing",
+        "qa": {
+          "largeReads": [],
+          "workers": [],
+          "done": [],
+          "phases": [],
+          "terminated": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop8-storage-rejected",
+        "status": "storage-guard-passed",
+        "qa": {
+          "largeReads": [],
+          "workers": [],
+          "done": [],
+          "phases": [],
+          "terminated": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop8-cancel",
+        "status": "cancelled-without-result",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 300000000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 512,
+                "maxPages": 40000,
+                "maxImagePixels": 16000000,
+                "inspectionBytes": 8000000
+              },
+              "native": true
+            }
+          ],
+          "done": [],
+          "phases": [],
+          "terminated": 1
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop8-300-high-quality",
+        "source": "300MB-scans.pdf",
+        "inputBytes": 300000000,
+        "bytes": 237109513,
+        "elapsedMs": 18466,
+        "text": "COMPRESSION COMPLETE\nYour PDF is ready\n\nDownload size: 237.11 MB (237,109,513 bytes). Saved 20.96% from the original. This file used lossless compression.\n\n300MB-scans-compressed.pdf\nCompressed PDF \u2022237.11 MB\nReady\nPROCESSED\nOn this device\nPROCESSING TIME\n17.5 s\nORIGINAL FILE\n300MB-scans.pdf\nYour PDF stayed on this device.\nPRIVATE BY DESIGN\nSafePDFHub did not upload or receive your document.\nLOCAL\nDownload compressed PDF\nSave your optimized PDF to your device\nBack to compression settings\nCompress another PDF\n\nYour document was processed on this device. Nothing was uploaded to a server.",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 300000000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 512,
+                "maxPages": 40000,
+                "maxImagePixels": 16000000,
+                "inspectionBytes": 8000000
+              },
+              "native": false
+            }
+          ],
+          "done": [
+            {
+              "pages": 25,
+              "heapBytes": 46989312
+            }
+          ],
+          "phases": [
+            [
+              "--is-encrypted",
+              "/input/source.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--show-npages"
+            ],
+            [
+              "--suppress-recovery",
+              "--object-streams=generate"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "--show-npages",
+              "/output.pdf"
+            ]
+          ],
+          "terminated": 1
+        },
+        "errors": []
+      },
+      {
+        "name": "desktop8-300-smart",
+        "source": "300MB-scans.pdf",
+        "inputBytes": 300000000,
+        "bytes": 14248863,
+        "elapsedMs": 8166,
+        "text": "COMPRESSION COMPLETE\nYour PDF is ready\n\nDownload size: 14.25 MB (14,248,863 bytes). Saved 95.25% from the original.\n\n300MB-scans-compressed.pdf\nCompressed PDF \u202214.25 MB\nReady\nPROCESSED\nOn this device\nPROCESSING TIME\n7.5 s\nORIGINAL FILE\n300MB-scans.pdf\nYour PDF stayed on this device.\nPRIVATE BY DESIGN\nSafePDFHub did not upload or receive your document.\nLOCAL\nDownload compressed PDF\nSave your optimized PDF to your device\nBack to compression settings\nCompress another PDF\n\nYour document was processed on this device. Nothing was uploaded to a server.",
+        "qa": {
+          "largeReads": [],
+          "workers": [
+            {
+              "bytes": 300000000,
+              "budget": {
+                "maxFileBytes": 300000000,
+                "memoryMiB": 512,
+                "maxPages": 40000,
+                "maxImagePixels": 16000000,
+                "inspectionBytes": 8000000
+              },
+              "native": true
+            }
+          ],
+          "done": [
+            {
+              "pages": 25,
+              "heapBytes": 25165824
+            }
+          ],
+          "phases": [
+            [
+              "--is-encrypted",
+              "/input/source.pdf"
+            ],
+            [
+              "--suppress-recovery",
+              "--show-npages"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "native-optimization"
+            ],
+            [
+              "--suppress-recovery",
+              "--check"
+            ],
+            [
+              "--show-npages",
+              "/output.pdf"
+            ]
+          ],
+          "terminated": 1
+        },
+        "errors": []
+      }
+    ],
+    "viewportWidthsChecked": [
+      1440,
+      768,
+      390,
+      320
+    ],
+    "timingScope": "Compress click to saved browser download; environment-specific, not a speed guarantee."
+  },
+  "independentPdfChecks": [
+    {
+      "case": "desktop8-265-target20",
+      "pages": 22,
+      "textMatched": true,
+      "geometryMatched": true,
+      "pageInstructionsMatched": true,
+      "metadataMatched": true,
+      "renderedPages": 22
+    },
+    {
+      "case": "desktop8-300-target20",
+      "pages": 25,
+      "textMatched": true,
+      "geometryMatched": true,
+      "pageInstructionsMatched": true,
+      "metadataMatched": true,
+      "renderedPages": 25
+    },
+    {
+      "case": "desktop8-300-maximum",
+      "pages": 25,
+      "textMatched": true,
+      "geometryMatched": true,
+      "pageInstructionsMatched": true,
+      "metadataMatched": true,
+      "renderedPages": 25
+    },
+    {
+      "case": "desktop4-300-maximum",
+      "pages": 25,
+      "textMatched": true,
+      "geometryMatched": true,
+      "pageInstructionsMatched": true,
+      "metadataMatched": true,
+      "renderedPages": 25
+    },
+    {
+      "case": "tablet8-300-maximum",
+      "pages": 25,
+      "textMatched": true,
+      "geometryMatched": true,
+      "pageInstructionsMatched": true,
+      "metadataMatched": true,
+      "renderedPages": 25
+    },
+    {
+      "case": "desktop8-300-high-quality",
+      "pages": 25,
+      "textMatched": true,
+      "geometryMatched": true,
+      "pageInstructionsMatched": true,
+      "metadataMatched": true,
+      "renderedPages": 25,
+      "losslessImageBytesMatched": true
+    },
+    {
+      "case": "desktop8-300-smart",
+      "pages": 25,
+      "textMatched": true,
+      "geometryMatched": true,
+      "pageInstructionsMatched": true,
+      "metadataMatched": true,
+      "renderedPages": 25,
+      "byteIdenticalTo": "desktop8-300-target20"
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "300MB-scans.pdf",
+      "inputBytes": 300000000,
+      "pages": 25,
+      "imageDataBytes": 299850000
+    },
+    {
+      "name": "265MB-scans.pdf",
+      "inputBytes": 265380000,
+      "pages": 22,
+      "imageDataBytes": 263868000
+    }
+  ],
+  "fixtureDescription": "Generated unique noisy RGB scan images with visible text and separate selectable text. Almost all input bytes are actual image streams; small padding ensures exact decimal boundaries.",
+  "limits": [
+    "The screenshot document itself was not available; its compression ratio was not measured.",
+    "300 MB is the maximum on eligible devices, not a guarantee for every PDF or every device.",
+    "Phones, lower-memory tablets, unknown-memory browsers and browsers without disk-worker features retain lower limits.",
+    "JavaScript native image optimization is limited to high-memory desktops for large inputs. Lower-memory eligible devices use a bounded disk worker.",
+    "Reported worker heapBytes measures the qpdf WebAssembly heap only, not total browser or JavaScript memory.",
+    "Pixel, storage, page-count, validation and time limits can retain lossless output or reject unsupported files.",
+    "Generated test inputs, output PDFs and screenshots are excluded from the source ZIP."
+  ]
+}

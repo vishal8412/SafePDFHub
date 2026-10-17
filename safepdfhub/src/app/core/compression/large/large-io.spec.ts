@@ -25,7 +25,7 @@ describe('bounded large-file IO', () => {
   });
   it('rejects incomplete inventories and device-ineligible whole-file parsing', () => {
     expect(()=>new StreamedInventory(100,10,1000).finish()).toThrow(/Incomplete/);
-    expect(nativeCompressionLimit(compressionBudget(8,'desktop',true))).toBe(200000000);
+    expect(nativeCompressionLimit(compressionBudget(8,'desktop',true))).toBe(300000000);
     expect(nativeCompressionLimit(compressionBudget(4,'desktop',true))).toBe(64000000);
     expect(nativeCompressionLimit(compressionBudget(8,'mobile',true))).toBe(0);
     expect(nativeCompressionLimit(compressionBudget(null,'desktop',true))).toBe(0);

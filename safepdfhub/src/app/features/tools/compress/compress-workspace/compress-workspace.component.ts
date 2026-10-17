@@ -1,4 +1,4 @@
-import { LARGE_COMPRESSION_THRESHOLD, LOSSLESS_ONLY_THRESHOLD } from '../../../../core/compression/large/large-compression-policy';
+import { LARGE_COMPRESSION_THRESHOLD } from '../../../../core/compression/large/large-compression-policy';
 import {
   Component,
   Input,
@@ -43,13 +43,13 @@ export class CompressWorkspaceComponent {
   }
 
   retryWithGrayscale(): void {
-    if (this.loading || this.compressing || this.largeFileMode) return;
+    if (this.loading || this.compressing) return;
     this.allowGrayscaleChange.emit(true);
     this.compress.emit();
   }
 
   retryWithSizePriority(): void {
-    if (this.loading || this.compressing || this.largeFileMode) return;
+    if (this.loading || this.compressing) return;
     this.sizePriorityChange.emit(true);
     this.compress.emit();
   }
@@ -70,7 +70,7 @@ export class CompressWorkspaceComponent {
     if (note.includes('resource or validation limit') || note.includes('could not be validated')) {
       return ' A device resource or validation limit stopped further compression. The best validated result was retained.';
     }
-    return this.largeFileMode ? ' This file used lossless compression.' : '';
+    return note.includes('lossless') ? ' This file used lossless compression.' : '';
   }
 
   get limitedReduction(): boolean {
@@ -86,7 +86,7 @@ export class CompressWorkspaceComponent {
     if (result?.targetBytes !== undefined) {
       return result.targetMet
         ? `Target met. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Download size: ${actual}.`
-        : `Target not reached. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Smallest validated result: ${actual}. Further reduction may soften small text. ${!result.grayscaleRequested && !this.largeFileMode ? 'Try grayscale if you do not need colour, or choose a larger limit.' : 'Choose a larger limit, or split the PDF if multiple files are accepted.'}`;
+        : `Target not reached. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Smallest validated result: ${actual}. Further reduction may soften small text. ${!result.grayscaleRequested ? 'Try grayscale if you do not need colour, or choose a larger limit.' : 'Choose a larger limit, or split the PDF if multiple files are accepted.'}`;
     }
     if (this.limitedReduction) return `Only a small reduction was possible. Download size: ${actual}. Some images may already be optimized or require a format this device cannot recompress safely.`;
     return result?.returnedOriginal
@@ -95,7 +95,6 @@ export class CompressWorkspaceComponent {
   }
 
   @Input() files: File[] = [];
-  get largeFileMode(): boolean { return (this.files[0]?.size ?? 0) > LOSSLESS_ONLY_THRESHOLD; }
   get diskBackedMode(): boolean { return (this.files[0]?.size ?? 0) > LARGE_COMPRESSION_THRESHOLD; }
   @Input() previews: string[] = [];
   @Input() pageCounts: number[] = [];

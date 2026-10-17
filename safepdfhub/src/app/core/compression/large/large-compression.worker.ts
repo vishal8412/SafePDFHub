@@ -6,7 +6,7 @@ import { captureDocumentFacts } from '../pdf-document-facts';
 import { nativeCompressionLimit } from './large-compression-policy';
 import { attachDiskOutput } from './opfs-output';
 import { StreamedInventory } from './streamed-inventory';
-import { MAX_COMPRESSION_BYTES, LOSSLESS_ONLY_THRESHOLD } from './large-compression-policy';
+import { MAX_COMPRESSION_BYTES } from './large-compression-policy';
 self.onmessage = async ({ data }: MessageEvent) => {
   let disk: any;
   try {
@@ -15,8 +15,9 @@ self.onmessage = async ({ data }: MessageEvent) => {
     const outputName = data.outputName ?? 'output.pdf';
     if (!/^output(?:-\d+)?\.pdf$/.test(outputName)) throw new Error('Invalid output name.');
     const memoryMiB = [128, 192, 256, 384, 512].includes(budget?.memoryMiB) ? budget.memoryMiB : 192;
-    if (quality !== undefined && (file.size > LOSSLESS_ONLY_THRESHOLD || ![5, 20, 45, 55, 65, 82].includes(quality))) throw new Error('Invalid image compression policy.');
-    if (!(file instanceof File) || file.size > MAX_COMPRESSION_BYTES || file.size < 1) throw new Error('Invalid large PDF size.');
+    if (!(file instanceof File) || !Number.isSafeInteger(file.size) || file.size > Math.min(MAX_COMPRESSION_BYTES, budget?.maxFileBytes ?? 0) || file.size < 1) throw new Error('This PDF exceeds the compression limit for this device (maximum 300 MB).');
+    if (nativeOptions !== undefined && file.size > nativeCompressionLimit({ ...budget, memoryMiB })) throw new Error('Native compression exceeds the device budget.');
+    if (quality !== undefined && (file.size > MAX_COMPRESSION_BYTES || ![5, 20, 45, 55, 65, 82].includes(quality))) throw new Error('Invalid image compression policy.');
     const header = new TextDecoder().decode(await file.slice(0, 1024).arrayBuffer());
     if (!header.includes('%PDF-')) throw new Error('This file does not contain a PDF header.');
     try {

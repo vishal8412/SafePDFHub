@@ -1,7 +1,6 @@
 /** Disk routing and image-quality policy are separate; sizes are decimal MB. */
 export const LARGE_COMPRESSION_THRESHOLD = 32_000_000;
-export const LOSSLESS_ONLY_THRESHOLD = 200_000_000;
-export const MAX_COMPRESSION_BYTES = 500_000_000;
+export const MAX_COMPRESSION_BYTES = 300_000_000;
 export type CompressionDevice = 'desktop' | 'tablet' | 'mobile';
 export interface CompressionDeviceBudget {
   maxFileBytes: number;
@@ -22,10 +21,10 @@ export function compressionBudget(memoryGiB: number | null, device: CompressionD
     mb = device === 'desktop' ? 300 : device === 'tablet' ? 200 : 150;
     heap = device === 'desktop' ? 384 : device === 'tablet' ? 256 : 192;
   } else {
-    mb = device === 'desktop' ? 500 : device === 'tablet' ? 300 : 200;
+    mb = device === 'mobile' ? 200 : 300;
     heap = device === 'desktop' ? 512 : device === 'tablet' ? 384 : 256;
   }
-  return { maxFileBytes: mb * 1_000_000, memoryMiB: heap,
+  return { maxFileBytes: Math.min(MAX_COMPRESSION_BYTES, mb * 1_000_000), memoryMiB: heap,
     maxPages: device === 'desktop' ? 40_000 : device === 'tablet' ? 15_000 : 8_000,
     maxImagePixels: (heap === 128 ? 2 : heap === 192 ? 4 : heap === 256 ? 8 : heap === 384 ? 12 : 16) * 1_000_000,
     inspectionBytes: device === 'desktop' ? 8_000_000 : 2_000_000 };
@@ -36,7 +35,7 @@ export function compressionDevice(ua: string, platform: string, touchPoints: num
   return detected === 'tablet' ? 'tablet' : 'desktop';
 }
 export function imageQualities(fileBytes: number, level: 'light' | 'recommended' | 'strong', losslessBytes: number, targetBytes?: number, sizePriority = false): number[] {
-  if (fileBytes > LOSSLESS_ONLY_THRESHOLD || (targetBytes !== undefined && losslessBytes <= targetBytes)) return [];
+  if (fileBytes > MAX_COMPRESSION_BYTES || (targetBytes !== undefined && losslessBytes <= targetBytes)) return [];
   if (targetBytes !== undefined) {
     const gap = 1 - targetBytes / losslessBytes;
     // JPEG size is not strictly monotonic across different encoder settings.
@@ -53,5 +52,5 @@ export function requiredScratchBytes(inputBytes: number, imageSearch = false): n
 
 /** Only known higher-memory devices may parse a whole PDF in the native worker. */
 export function nativeCompressionLimit(budget: CompressionDeviceBudget): number {
-  return budget.memoryMiB >= 512 ? LOSSLESS_ONLY_THRESHOLD : budget.memoryMiB >= 384 ? 64_000_000 : 0;
+  return budget.memoryMiB >= 512 ? MAX_COMPRESSION_BYTES : budget.memoryMiB >= 384 ? 64_000_000 : 0;
 }

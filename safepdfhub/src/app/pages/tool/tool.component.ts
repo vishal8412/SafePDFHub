@@ -4,7 +4,7 @@ import { ToolGuideComponent } from '../../shared/components/tool-guide/tool-guid
 import { WordWorkspaceComponent } from '../../features/tools/word/word-workspace.component';
 import { PdfToWordService } from '../../core/word/pdf-to-word.service';
 import { LargeCompressionCapabilityService } from '../../core/compression/large/large-compression-capability.service';
-import { LARGE_COMPRESSION_THRESHOLD, LOSSLESS_ONLY_THRESHOLD } from '../../core/compression/large/large-compression-policy';
+import { LARGE_COMPRESSION_THRESHOLD, MAX_COMPRESSION_BYTES } from '../../core/compression/large/large-compression-policy';
 import { Component, OnInit, ChangeDetectorRef, OnDestroy, Inject, PLATFORM_ID, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -361,7 +361,9 @@ export class ToolComponent implements OnInit, OnDestroy {
   get capacitySummary(): string {
     if (this.isWordToPdfTool) return 'DOCX up to 200 MB · Convert and download locally';
     if (this.isWordTool) return `Up to ${this.pdfToWord.limits.bytes / 1_000_000} MB · No fixed page limit`;
-    if (this.isCompressTool) return `Up to ${this.maxFileMB} MB on this device • up to 500 MB on supported desktops`;
+    if (this.isCompressTool) return this.compressionCapability.maxFileBytes === MAX_COMPRESSION_BYTES
+      ? `Up to ${this.maxFileMB} MB per PDF • processed on this device`
+      : `Up to ${this.maxFileMB} MB on this device • up to ${MAX_COMPRESSION_BYTES / 1_000_000} MB on supported desktops`;
     if (this.isSecurityTool && this.largePdfSecurityCapability.supported) {
       return 'Up to 1 GB per file • processed locally';
     }
@@ -383,9 +385,7 @@ export class ToolComponent implements OnInit, OnDestroy {
     const assessment = this.workloadAssessment;
     if (!assessment || !this.workspace.files.length) return '';
     if (this.isSecurityTool && !assessment.workload.knownPageCount) return 'Ready for local PDF security processing; large files use the dedicated browser engine.';
-    if (this.isCompressTool && this.workspace.files[0]?.size > LARGE_COMPRESSION_THRESHOLD) return this.workspace.files[0].size > LOSSLESS_ONLY_THRESHOLD
-      ? 'Above 200 MB: lossless compression with temporary disk storage. Previews are disabled.'
-      : 'Disk-backed compression: all modes are available. Previews are disabled to conserve memory.';
+    if (this.isCompressTool && this.workspace.files[0]?.size > LARGE_COMPRESSION_THRESHOLD) return 'Large-file compression uses temporary browser storage. Image reduction depends on your device and the PDF. Previews are disabled to conserve memory.';
     if (!assessment.workload.knownPageCount) return 'Checking PDF workload; page limits will be verified before processing.';
     if (assessment.risk === 'blocked') return assessment.reasons[0] ?? 'This workload cannot be processed locally on this device.';
     if (assessment.risk === 'large' || assessment.risk === 'high-risk') {

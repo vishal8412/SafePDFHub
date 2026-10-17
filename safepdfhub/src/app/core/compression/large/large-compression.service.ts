@@ -1,5 +1,5 @@
 import { CompressionActivityObserver } from '../compression-activity';
-import { compressionBudget, nativeCompressionLimit, imageQualities, LOSSLESS_ONLY_THRESHOLD } from './large-compression-policy';
+import { compressionBudget, nativeCompressionLimit, imageQualities, MAX_COMPRESSION_BYTES } from './large-compression-policy';
 import { CompressionLevel } from '../compression.types';
 import { Injectable } from '@angular/core';
 import { LargeCompressionCapabilityService } from './large-compression-capability.service';
@@ -55,7 +55,7 @@ export class LargeCompressionService {
       this.capability.assertFile(file);
       const level = options.level ?? 'light';
       const deadline = Date.now() + 300_000;
-      const wantImages = file.size <= LOSSLESS_ONLY_THRESHOLD && (level !== 'light' || options.targetBytes !== undefined);
+      const wantImages = file.size <= MAX_COMPRESSION_BYTES && (level !== 'light' || options.targetBytes !== undefined);
       return await navigator.locks.request('safepdfhub-large-compression', { ifAvailable: true }, async lock => {
         if (!lock) throw new Error('Another tab is compressing a large PDF. Wait for it to finish.');
         throwIfCompressionCancelled(signal);
@@ -81,7 +81,8 @@ export class LargeCompressionService {
         let keep = false;
         try {
           const directory = await root.getDirectoryHandle(name, { create: true });
-          let native = file.size <= nativeCompressionLimit(this.capability.budget ?? compressionBudget(null, 'desktop', true));
+          // Lossless-only jobs use disk IO directly and avoid whole-file JS parsing.
+          let native = wantImages && file.size <= nativeCompressionLimit(this.capability.budget ?? compressionBudget(null, 'desktop', true));
           const requestedQualities = native ? [] : imageQualities(file.size, level, file.size, options.targetBytes, options.sizePriority);
           let firstQuality = requestedQualities.shift();
           let firstFailed = false;
@@ -155,7 +156,7 @@ export class LargeCompressionService {
             ? 'Disk-backed processing retained a lossless result.'
             : `Disk-backed image compression used JPEG quality ${selectedQuality}.`) +
             (options.allowGrayscale && native ? ' Grayscale was allowed for supported images; review fine text and coloured markings.' : options.allowGrayscale ? ' Grayscale was unavailable on this device; colour was retained.' : '') +
-            (file.size > LOSSLESS_ONLY_THRESHOLD ? ' Inputs above 200 MB use lossless compression only.' : '') + fallback;
+            fallback;
           if (stored.size >= file.size) return { file, pages, strategy: 'safe' as const, note: 'The original PDF was retained because no smaller validated output was produced.' + fallback };
           const result = new File([stored], file.name.replace(/\.pdf$/i, '') + '-compressed.pdf', { type: 'application/pdf' });
           this.outputDirectory = name; keep = true;

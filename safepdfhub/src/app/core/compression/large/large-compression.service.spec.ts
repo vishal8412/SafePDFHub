@@ -126,8 +126,29 @@ describe('direct download lifetime', () => {
   });
 });
 
-describe('200 MB native routing and fallback', () => {
-  for (const bytes of [150_000_000, 200_000_000, 200_000_001]) {
+describe('lossless routing at the 300 MB boundary', () => {
+  it('uses the disk worker instead of parsing the whole file into JavaScript', async () => {
+    const source = new File(['pdf'], 'input.pdf'); Object.defineProperty(source, 'size', { value: 300_000_000 });
+    const dir = { getFileHandle: async () => ({ getFile: async () => new File(['smaller'], 'output.pdf') }) };
+    const root = { entries: async function* () {}, getDirectoryHandle: async () => dir, removeEntry: vi.fn() };
+    vi.stubGlobal('navigator', { storage: { getDirectory: async () => root }, locks: {
+      query: async () => ({ held: [] }), request: (_name: string, ...args: any[]) => args.at(-1)({}) } });
+    try {
+      const checkStorage = vi.fn();
+      const service = new LargeCompressionService({ assertFile: vi.fn(), checkStorage, budget: { memoryMiB: 512 } } as never);
+      const run = vi.spyOn(service as any, 'runWorker').mockResolvedValue(25);
+      const result = await service.compress(source, new AbortController().signal, () => {}, { level: 'light' });
+      expect((run.mock.calls[0][4] as any).nativeOptions).toBeUndefined();
+      expect((run.mock.calls[0][4] as any).quality).toBeUndefined();
+      expect(checkStorage).toHaveBeenCalledWith(source, false);
+      expect(result.strategy).toBe('safe');
+      await service.release();
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+describe('300 MB native routing and fallback', () => {
+  for (const bytes of [200_000_000, 265_380_000, 300_000_000]) {
     it(`routes ${bytes} bytes with a reserved fallback budget`, async () => {
       const f = new File(['pdf'], 'test.pdf'); Object.defineProperty(f, 'size', { value: bytes });
       const dir = { removeEntry: vi.fn(), getFileHandle: async () => ({ getFile: async () => new File(['smaller'], 'output.pdf') }) };
@@ -137,7 +158,7 @@ describe('200 MB native routing and fallback', () => {
       try {
         const service = new LargeCompressionService({ assertFile: vi.fn(), checkStorage: vi.fn(), budget: { memoryMiB: 512 } } as never);
         const run = vi.spyOn(service as any, 'runWorker');
-        const native = bytes <= 200_000_000;
+        const native = bytes <= 300_000_000;
         if (native) run.mockRejectedValueOnce(new Error('Native memory limit'));
         run.mockResolvedValue(1);
         const result = await service.compress(f, new AbortController().signal, () => {}, { level: 'strong', targetBytes: 20_000_000 });
