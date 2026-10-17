@@ -64,38 +64,49 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
     if (compressed.getContents().length + 32 < raw.length) pdf.context.assign(ref, compressed);
   }
   await recompressFlateStreams(pdf);
-  // Share only byte-identical streams with identical dictionaries. Resolve
-  // every reference to the canonical stream before deleting its duplicate.
-  const canonical = new Map<string, PDFRef>();
-  const aliases = new Map<PDFRef, PDFRef>();
-  for (const [ref, object] of pdf.context.enumerateIndirectObjects()) {
-    if (!(object instanceof PDFRawStream) || object.getContents().length > 16_000_000) continue;
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(object.getContents())));
-    const key = object.dict.toString() + ':' + Array.from(digest, n => n.toString(16).padStart(2, '0')).join('');
-    const prior = canonical.get(key);
-    if (prior) aliases.set(ref, prior); else canonical.set(key, ref);
-  }
-  if (aliases.size) {
-    const seen = new Set<PDFObject>();
-    const queue = pdf.context.enumerateIndirectObjects().map(([, object]) => object);
-    while (queue.length) {
-      const object = queue.pop()!;
-      if (seen.has(object)) continue;
-      seen.add(object);
-      if (object instanceof PDFRawStream) queue.push(object.dict);
-      else if (object instanceof PDFDict) {
-        for (const [key, value] of object.entries()) {
-          if (value instanceof PDFRef && aliases.has(value)) object.set(key, aliases.get(value)!);
-          else if (!(value instanceof PDFRef)) queue.push(value);
-        }
-      } else if (object instanceof PDFArray) {
-        object.asArray().forEach((value, index) => {
-          if (value instanceof PDFRef && aliases.has(value)) object.set(index, aliases.get(value)!);
-          else if (!(value instanceof PDFRef)) queue.push(value);
-        });
+  // A child stream (ICC profile, mask, etc.) can be consolidated only after
+  // its parent image was visited. Repeat after rewriting references so that
+  // byte-identical parents become visible. Keep dictionaries/colors unchanged.
+  // Cache payload hashes: later rounds inspect dictionaries, not image bytes.
+  const streamHashes = new WeakMap<PDFRawStream, string>();
+  for (let round = 0; round < 4; round++) {
+    const canonical = new Map<string, PDFRef>();
+    const aliases = new Map<PDFRef, PDFRef>();
+    for (const [ref, object] of pdf.context.enumerateIndirectObjects()) {
+      if (!(object instanceof PDFRawStream) || object.getContents().length > 16_000_000) continue;
+      let hash = streamHashes.get(object);
+      if (!hash) {
+        const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(object.getContents())));
+        hash = Array.from(digest, n => n.toString(16).padStart(2, '0')).join('');
+        streamHashes.set(object, hash);
       }
+      const key = object.dict.toString() + ':' + hash;
+      const prior = canonical.get(key);
+      if (prior) aliases.set(ref, prior); else canonical.set(key, ref);
     }
-    for (const [ref] of aliases) pdf.context.delete(ref);
+    if (!aliases.size) break;
+    if (aliases.size) {
+      const seen = new Set<PDFObject>();
+      const queue = pdf.context.enumerateIndirectObjects().map(([, object]) => object);
+      while (queue.length) {
+        const object = queue.pop()!;
+        if (seen.has(object)) continue;
+        seen.add(object);
+        if (object instanceof PDFRawStream) queue.push(object.dict);
+        else if (object instanceof PDFDict) {
+          for (const [key, value] of object.entries()) {
+            if (value instanceof PDFRef && aliases.has(value)) object.set(key, aliases.get(value)!);
+            else if (!(value instanceof PDFRef)) queue.push(value);
+          }
+        } else if (object instanceof PDFArray) {
+          object.asArray().forEach((value, index) => {
+            if (value instanceof PDFRef && aliases.has(value)) object.set(index, aliases.get(value)!);
+            else if (!(value instanceof PDFRef)) queue.push(value);
+          });
+        }
+      }
+      for (const [ref] of aliases) pdf.context.delete(ref);
+    }
   }
   // This function runs in a terminable worker. Avoid thousands of timer yields
   // and tiny object streams; retain every object, including accessibility tags.

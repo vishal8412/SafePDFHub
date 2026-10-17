@@ -50,6 +50,46 @@ describe('Native document graph optimization', () => {
   });
 });
 
+describe('Dependent stream consolidation', () => {
+  async function parents(profiles: string[], nested = false) {
+    const pdf = await PDFDocument.create({ updateMetadata: false });
+    for (const profile of profiles) {
+      // Assign the profile last: its parent must be encountered first.
+      const imageRef = pdf.context.nextRef();
+      const childRef = pdf.context.nextRef();
+      const profileRef = nested ? pdf.context.nextRef() : childRef;
+      pdf.context.assign(imageRef, pdf.context.stream(new Uint8Array(300).fill(17), {
+        Type: 'XObject', Subtype: 'Image', Width: 10, Height: 10,
+        BitsPerComponent: 8, ColorSpace: ['ICCBased', childRef], Filter: 'DCTDecode',
+      }));
+      if (nested) pdf.context.assign(childRef, pdf.context.stream(new Uint8Array([4, 5]), { Child: profileRef }));
+      pdf.context.assign(profileRef, pdf.context.stream(new Uint8Array(new TextEncoder().encode(profile)), { N: 3 }));
+      pdf.addPage().node.set(PDFName.of('Resources'), pdf.context.obj({ XObject: { Im: imageRef } }));
+    }
+    const source = await pdf.save({ useObjectStreams: false });
+    const output = await optimizeNativePdf(source);
+    expect(output).not.toBeNull();
+    const result = await PDFDocument.load(output!, { updateMetadata: false });
+    const references = result.getPages().map(page =>
+      (page.node.Resources()!.lookup(PDFName.of('XObject')) as any).get(PDFName.of('Im')).toString());
+    return { result, references };
+  }
+  it('shares identical image streams after identical ICC profile references converge', async () => {
+    const { result, references } = await parents(['same ICC bytes', 'same ICC bytes']);
+    expect(result.getPageCount()).toBe(2);
+    expect(new Set(references).size).toBe(1);
+  });
+  it('retains different colour profiles even when encoded image payloads match', async () => {
+    const { references } = await parents(['colour profile A', 'colour profile B']);
+    expect(new Set(references).size).toBe(2);
+  });
+  it('resolves more than one dependency level without merging pages', async () => {
+    const { result, references } = await parents(['same deepest bytes', 'same deepest bytes'], true);
+    expect(new Set(references).size).toBe(1);
+    expect(result.getPage(0).ref).not.toEqual(result.getPage(1).ref);
+  });
+});
+
 describe('Target byte-budget search', () => {
   it('avoids redundant whole-document writes when the requested image saving is large', () => {
     expect(targetQualityLadder(5_558_121, 1_098_792, 5_000_000)).toEqual([0.45]);
