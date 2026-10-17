@@ -3,6 +3,7 @@ import { CompressionFacade } from './compress.facade';
 import { CompressionState } from './compression.state';
 import { CompressionPlan } from './compression-plan';
 import { PdfFileAnalysis } from './pdf-analysis.models';
+import { CompressionCancelledError } from './compression-cancellation';
 
 const plan: CompressionPlan = {
   strategy: 'smart',
@@ -34,6 +35,22 @@ function makeFile(name = 'input.pdf', size = 100_000): File {
 }
 
 describe('CompressionFacade — C6', () => {
+  it('snapshots grayscale consent and only forwards it for a target-size run', async () => {
+    for (const target of [null, 1]) {
+      const state = new CompressionState();
+      state.targetSizeMB = target; state.allowGrayscale = true;
+      const engine = { cancel: vi.fn(), compress: vi.fn(async (_file: File, _level: string, runPlan: CompressionPlan) => {
+        expect(runPlan.allowGrayscale).toBe(target !== null);
+        state.allowGrayscale = false;
+        return makeFile('result.pdf', 60_000);
+      }) };
+      const facade = new CompressionFacade({ analyzeFile: async () => analysis } as never, engine as never,
+        { createPlan: () => ({ ...plan }) } as never, state);
+      await facade.compress(makeFile());
+      expect(state.compressionResult?.grayscaleRequested).toBe(target !== null);
+    }
+  });
+
   it('caches file analysis and reuses it for the compression call', async () => {
     const analyzer = {
       analyzeFile: vi.fn(async () => analysis),
@@ -210,9 +227,59 @@ describe('CompressionFacade operation ownership', () => {
 });
 
 describe('Target-size runs', () => {
+  it('snapshots size priority for the selected target and resets it for a new file', async () => {
+    const state = new CompressionState(); state.targetSizeMB = 2; state.sizePriority = true;
+    const engine = { cancel: vi.fn(), compress: vi.fn(async (_file: File, _level: string, runPlan: CompressionPlan) => {
+      expect(runPlan.sizePriority).toBe(true);
+      state.sizePriority = false;
+      return makeFile('result.pdf', 1_900_000);
+    }) };
+    const facade = new CompressionFacade({ analyzeFile: async () => analysis } as never, engine as never,
+      { createPlan: () => ({ ...plan }) } as never, state);
+    await facade.compress(makeFile('source.pdf', 3_000_000));
+    expect(state.compressionResult?.sizePriorityRequested).toBe(true);
+    state.sizePriority = true; facade.reset(); expect(state.sizePriority).toBe(false);
+  });
+
+  it('propagates cancellation during Maximum Reduction comparison instead of returning an earlier candidate', async () => {
+    const state = new CompressionState(); state.targetSizeMB = 1;
+    const engine = { cancel: vi.fn(), compress: vi.fn(async (_source: File, _level: string, runPlan: CompressionPlan) => {
+      if (runPlan.targetBytes === undefined) throw new CompressionCancelledError();
+      return makeFile('targeted.pdf', 1_200_000);
+    }) };
+    const facade = new CompressionFacade({ analyzeFile: async () => analysis } as never, engine as never,
+      { createPlan: () => ({ ...plan }) } as never, state);
+    await expect(facade.compress(makeFile('input.pdf', 3_000_000))).rejects.toBeInstanceOf(CompressionCancelledError);
+    expect(state.compressedFile).toBeNull();
+    expect(state.compressing).toBe(false);
+  });
+
+  for (const maximumSize of [800_000, 1_300_000]) {
+    it(`compares a missed target against Maximum Reduction (${maximumSize} bytes) and keeps the right telemetry`, async () => {
+      const state = new CompressionState(); state.targetSizeMB = 1;
+      const input = makeFile('input.pdf', 3_000_000);
+      const targeted = makeFile('targeted.pdf', 1_200_000), maximum = makeFile('maximum.pdf', maximumSize);
+      const firstTelemetry = { finalDecision: 'targeted' }, nextTelemetry = { finalDecision: 'maximum' };
+      const engine = { cancel: vi.fn(), lastExecutionTelemetry: undefined as unknown,
+        compress: vi.fn(async (source: File, _level: string, runPlan: CompressionPlan) => {
+          expect(source).toBe(input);
+          if (runPlan.targetBytes !== undefined) { engine.lastExecutionTelemetry = firstTelemetry; return targeted; }
+          expect(runPlan.allowGrayscale).toBe(false); engine.lastExecutionTelemetry = nextTelemetry; return maximum;
+        }) };
+      const facade = new CompressionFacade({ analyzeFile: async () => analysis } as never, engine as never,
+        { createPlan: () => ({ ...plan }) } as never, state);
+      const result = await facade.compress(input);
+      expect(engine.compress).toHaveBeenCalledTimes(2);
+      expect(result).toBe(maximumSize < targeted.size ? maximum : targeted);
+      expect(state.compressionResult?.targetMet).toBe(maximumSize <= 1_000_000);
+      expect(state.compressionResult?.telemetry).toBe(maximumSize < targeted.size ? nextTelemetry : firstTelemetry);
+    });
+  }
+
   it('uses decimal bytes, snapshots settings and reports a missed target from the actual file', async () => {
     const state = new CompressionState(); state.targetSizeMB = 1;
     const engine = { cancel: vi.fn(), compress: vi.fn(async (_file, level, executionPlan) => {
+      if (executionPlan.targetBytes === undefined) return makeFile('maximum.pdf', 1_100_000);
       expect(level).toBe('strong'); expect(executionPlan.targetBytes).toBe(1_000_000);
       state.targetSizeMB = 5;
       return makeFile('actual.pdf', 1_000_001);

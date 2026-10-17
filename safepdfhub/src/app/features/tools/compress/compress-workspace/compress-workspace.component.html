@@ -5,8 +5,8 @@
     [originalFileName]="originalFileName"
     [durationMs]="durationMs"
     [eyebrow]="compressionResult?.returnedOriginal ? 'ORIGINAL RETAINED' : limitedReduction ? 'LIMITED REDUCTION' : 'COMPRESSION COMPLETE'"
-    [title]="compressionResult?.targetMet === false ? 'Target size not reached' : compressionResult?.returnedOriginal ? 'Original PDF retained' : 'Your PDF is ready'"
-    [description]="resultDescription + (compressionResult?.processingNote ? ' ' + compressionResult?.processingNote : '')"
+    [title]="compressionResult?.targetMet === false ? 'Above your requested size' : compressionResult?.returnedOriginal ? 'Original PDF retained' : 'Your PDF is ready'"
+    [description]="resultDescription + grayscaleNotice + sizePriorityNotice + processingNotice"
     [operationLabel]="compressionResult?.returnedOriginal ? 'Original PDF' : 'Compressed PDF'"
     [statusLabel]="compressionResult?.targetMet === false ? 'Above target' : 'Ready'"
     icon="compress"
@@ -22,6 +22,13 @@
     (processAnother)="processAnother.emit()"
   />
 
+  <aside *ngIf="resultFile && compressionResult?.targetMet === false && !largeFileMode && (!compressionResult?.grayscaleRequested || !compressionResult?.sizePriorityRequested)" class="target-retry" aria-label="Try a smaller result">
+    <div><strong>Need a smaller file?</strong><p *ngIf="!compressionResult?.grayscaleRequested">Grayscale removes colour from supported images.</p><p *ngIf="!compressionResult?.sizePriorityRequested">Size priority allows much lower image resolution. Fine text may become unreadable; keep your original.</p></div>
+    <div class="target-retry-actions">
+      <button *ngIf="!compressionResult?.grayscaleRequested" type="button" [disabled]="loading || compressing" (click)="retryWithGrayscale()">Try grayscale</button>
+      <button *ngIf="!compressionResult?.sizePriorityRequested" type="button" [disabled]="loading || compressing" (click)="retryWithSizePriority()">Try size priority</button>
+    </div>
+  </aside>
   <ng-container *ngIf="!resultFile">
     <aside class="document-card" aria-labelledby="document-heading">
       <div class="section-caption"><span class="step-number">1</span><h2 id="document-heading">Your PDF</h2><span class="ready-label">{{ loading ? 'Preparing' : 'Selected' }}</span></div>
@@ -65,7 +72,15 @@
           <label for="compression-target">Maximum file size</label>
           <div class="target-input-wrap"><input id="compression-target" type="number" min="0.001" max="10000" step="any" [ngModel]="targetSizeMB" (ngModelChange)="setTarget($event === null ? 0 : $event)" [disabled]="loading || compressing" [attr.aria-invalid]="targetInvalid" aria-describedby="target-help target-error" /><span>MB</span></div>
           <div class="target-presets" aria-label="Common file size limits"><button type="button" *ngFor="let size of [1, 2, 5, 10, 20]" (click)="setTarget(size)" [disabled]="loading || compressing" [class.active]="targetSizeMB === size" [attr.aria-pressed]="targetSizeMB === size">{{ size }} MB</button></div>
-          <p id="target-help">{{ largeFileMode ? 'This file uses lossless compression only.' : 'Image quality may be reduced to approach your limit.' }} The result will confirm whether the target was reached.</p>
+          <label *ngIf="!largeFileMode" class="grayscale-choice" for="allow-grayscale">
+            <input id="allow-grayscale" type="checkbox" [checked]="allowGrayscale" (change)="allowGrayscaleChange.emit($any($event.target).checked)" [disabled]="loading || compressing" aria-describedby="grayscale-help" />
+            <span><strong>Allow grayscale for a smaller file</strong><small id="grayscale-help">Supported images lose colour. Useful for scanned text; review stamps, signatures and small text after compression. Availability depends on your device.</small></span>
+          </label>
+          <label *ngIf="!largeFileMode" class="grayscale-choice" for="size-priority">
+            <input id="size-priority" type="checkbox" [checked]="sizePriority" (change)="sizePriorityChange.emit($any($event.target).checked)" [disabled]="loading || compressing" aria-describedby="size-priority-help" />
+            <span><strong>Prioritise my file-size limit</strong><small id="size-priority-help">Allow much lower image resolution for tight limits such as 1 MB or 2 MB. Small scanned text may become unreadable. Keep your original and inspect the result.</small></span>
+          </label>
+          <p id="target-help">{{ largeFileMode ? 'This file uses lossless compression only.' : 'Image quality may be reduced to approach your limit.' }} The final download is checked against your limit. Very small targets may not be achievable without losing readability.</p>
           <p id="target-error" class="input-error" [hidden]="!targetInvalid" role="alert">Enter a size greater than 0 and no more than 10,000 MB.</p>
         </div>
       </div>

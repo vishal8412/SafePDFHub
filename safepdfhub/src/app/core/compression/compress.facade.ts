@@ -79,6 +79,8 @@ export class CompressionFacade {
     }
     const targetBytes = targetMB === null ? undefined : Math.floor(targetMB * 1_000_000);
     if (targetBytes !== undefined && targetBytes < 1) throw new Error('Target size is too small.');
+    const allowGrayscale = targetBytes !== undefined && this.state.allowGrayscale;
+    const sizePriority = targetBytes !== undefined && this.state.sizePriority;
     const level = targetBytes ? 'strong' : this.state.compressionLevel;
     const startedAt = performance.now();
     this.cancel();
@@ -93,7 +95,7 @@ export class CompressionFacade {
       if (file.size > LARGE_COMPRESSION_THRESHOLD) {
         if (!this.large) throw new Error('Large-file compression is unavailable.');
         this.state.stage = 'optimization';
-        const output = await this.large.compress(file, analysisController.signal, n => { if (!analysisController.signal.aborted) this.state.progress = n; }, { level, targetBytes }, onActivity);
+        const output = await this.large.compress(file, analysisController.signal, n => { if (!analysisController.signal.aborted) this.state.progress = n; }, { level, targetBytes, allowGrayscale, sizePriority }, onActivity);
         throwIfCompressionCancelled(analysisController.signal);
         const compressed = output.file;
         this.state.compressedFile = compressed;
@@ -103,7 +105,7 @@ export class CompressionFacade {
         this.state.reduction = Math.round(this.state.reductionBytes / file.size * 10000) / 100;
         this.state.durationMs = performance.now() - startedAt;
         this.state.duration = `${(this.state.durationMs / 1000).toFixed(1)}s`;
-        this.state.compressionResult = { file: compressed, targetBytes,
+        this.state.compressionResult = { file: compressed, targetBytes, grayscaleRequested: allowGrayscale, sizePriorityRequested: sizePriority,
           targetMet: targetBytes === undefined ? undefined : compressed.size <= targetBytes,
           originalSize: file.size, finalSize: compressed.size, reductionBytes: this.state.reductionBytes,
           reduction: this.state.reduction, duration: this.state.duration, durationMs: this.state.durationMs,
@@ -126,11 +128,13 @@ export class CompressionFacade {
       this.state.compressing = true;
       this.state.progress = 0;
       plan.targetBytes = targetBytes;
+      plan.allowGrayscale = allowGrayscale;
+      plan.sizePriority = sizePriority;
       this.state.stage = 'optimization';
       onActivity?.({ stage: 'optimizing' });
 
       try {
-        const compressed = await this.compressEngine.compress(
+        let compressed = await this.compressEngine.compress(
           file,
           level,
           plan,
@@ -142,6 +146,25 @@ export class CompressionFacade {
         );
 
         throwIfCompressionCancelled(analysisController.signal);
+        let executionTelemetry = this.compressEngine.lastExecutionTelemetry;
+        let comparisonNote: string | undefined;
+        if (targetBytes !== undefined && compressed.size > targetBytes) {
+          const maximumPlan = { ...this.compressionPlanner.createPlan(result.analysis, result.pages, 'strong'),
+            targetBytes: undefined, allowGrayscale: false, sizePriority: false };
+          try {
+            const maximum = await this.compressEngine.compress(file, 'strong', maximumPlan, result,
+              progress => { if (!analysisController.signal.aborted) this.state.progress = Math.max(this.state.progress, progress); }, onActivity);
+            throwIfCompressionCancelled(analysisController.signal);
+            if (maximum.size < compressed.size) {
+              compressed = maximum;
+              executionTelemetry = this.compressEngine.lastExecutionTelemetry;
+            }
+          } catch (error) {
+            throwIfCompressionCancelled(analysisController.signal);
+            if (this.isCancellation(error)) throw error;
+            comparisonNote = 'Further compression stopped at a device resource or validation limit; the best validated result was retained.';
+          }
+        }
         this.state.compressedFile = compressed;
         this.state.originalSize = file.size;
         this.state.finalSize = compressed.size;
@@ -156,6 +179,8 @@ export class CompressionFacade {
         const compressionResult: CompressionResult = {
           file: compressed,
           targetBytes,
+          grayscaleRequested: allowGrayscale,
+          sizePriorityRequested: sizePriority,
           targetMet: targetBytes === undefined ? undefined : compressed.size <= targetBytes,
           originalSize: file.size,
           finalSize: compressed.size,
@@ -166,7 +191,8 @@ export class CompressionFacade {
           strategy: plan.strategy,
           returnedOriginal: compressed === file,
           pagesTotal: result.pages,
-          telemetry: this.compressEngine.lastExecutionTelemetry ?? undefined,
+          telemetry: executionTelemetry ?? undefined,
+          processingNote: comparisonNote,
         };
 
         this.state.reductionBytes = reductionBytes;

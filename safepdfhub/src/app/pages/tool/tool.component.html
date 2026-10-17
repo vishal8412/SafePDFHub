@@ -243,6 +243,10 @@
 
   [compressionLevel]="compressionState.compressionLevel"
   [targetSizeMB]="compressionState.targetSizeMB"
+  [allowGrayscale]="compressionState.allowGrayscale"
+  [sizePriority]="compressionState.sizePriority"
+  (sizePriorityChange)="compressionState.sizePriority = $event"
+  (allowGrayscaleChange)="compressionState.allowGrayscale = $event"
   [compressionResult]="compressionState.compressionResult"
   (targetSizeMBChange)="compressionState.targetSizeMB = $event"
   [loading]="workspace.loading"

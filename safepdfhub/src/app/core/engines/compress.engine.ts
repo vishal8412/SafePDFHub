@@ -367,7 +367,7 @@ export class CompressEngine {
     const strategyCandidates: File[] = [];
     if (file.size <= budget.maxFileBytes && cachedAnalysis.pages <= budget.maxPages) {
       const nativeStartedAt = performance.now();
-      const nativeCandidates = await this.nativeOptimizer.optimizeCandidates(file, signal, { level, targetBytes: plan.targetBytes }, activity => {
+      const nativeCandidates = await this.nativeOptimizer.optimizeCandidates(file, signal, { level, targetBytes: plan.targetBytes, allowGrayscale: plan.allowGrayscale, sizePriority: plan.sizePriority }, activity => {
         if (activity.current !== undefined && activity.total) emitProgress(45 + 35 * (((activity.pass ?? 1) - 1 + activity.current / activity.total) / (activity.passes ?? 1)));
         onActivity?.(activity);
       });
@@ -478,6 +478,7 @@ export class CompressEngine {
       progress => emitProgress(progress),
       signal,
       level,
+      !!plan.targetBytes && !!plan.allowGrayscale,
     );
 
     throwIfCompressionCancelled(signal);

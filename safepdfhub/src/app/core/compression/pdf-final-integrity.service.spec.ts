@@ -61,6 +61,6 @@ describe('Final integrity visual gate', () => {
     const result = await service.certify(source, candidate);
     expect(result.status).toBe('rejected');
     expect(result.reason).toContain('Visual fidelity failed');
-    expect(visual.validateDocuments).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'light', undefined);
+    expect(visual.validateDocuments).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'light', undefined, false);
   });
 });

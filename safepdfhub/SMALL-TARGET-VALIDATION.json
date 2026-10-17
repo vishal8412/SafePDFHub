@@ -1,0 +1,153 @@
+{
+  "release": "Small-target compression update",
+  "basedOnArtifactVersion": 17,
+  "validatedAtUTC": "2026-10-16T18:59:25.858870+00:00",
+  "changes": [
+    "Explicit opt-in size priority enables lower image resolution and JPEG quality for custom targets; default off.",
+    "User-authorized grayscale is validated in 8-bit luminance, with unchanged visual thresholds.",
+    "Rounding at the changed-pixel threshold is deterministic.",
+    "Certification caches separate color and authorized grayscale validation.",
+    "Result target status uses downloaded bytes and settings captured for the run."
+  ],
+  "testSuite": {
+    "testFilesPassed": 25,
+    "testsPassed": 150,
+    "productionBuild": "passed",
+    "existingBuildWarnings": [
+      "Studio stylesheet budget exceeded by 1.34 kB",
+      "CommonJS optimization warnings"
+    ]
+  },
+  "browser": {
+    "engine": "Chromium 153 headless",
+    "deviceMemorySignalGB": 8,
+    "viewportWidthsCheckedForSettings": [
+      1440,
+      768,
+      390,
+      320
+    ],
+    "runtimePageErrors": [],
+    "runs": [
+      {
+        "name": "full-2-priority",
+        "targetMB": 2,
+        "sizePriority": true,
+        "bytes": 1907571,
+        "elapsedMs": 13192,
+        "grayscaleAllowed": true,
+        "targetMet": true
+      },
+      {
+        "name": "full-1-priority",
+        "targetMB": 1,
+        "sizePriority": true,
+        "bytes": 1806457,
+        "elapsedMs": 31487,
+        "grayscaleAllowed": true,
+        "targetMet": false
+      },
+      {
+        "name": "scans24-1-normal",
+        "targetMB": 1,
+        "sizePriority": false,
+        "bytes": 861528,
+        "elapsedMs": 3748,
+        "grayscaleAllowed": true,
+        "targetMet": true
+      },
+      {
+        "name": "scans48-2-normal",
+        "targetMB": 2,
+        "sizePriority": false,
+        "bytes": 11479169,
+        "elapsedMs": 11530,
+        "grayscaleAllowed": true,
+        "targetMet": false
+      },
+      {
+        "name": "scans24-2-normal",
+        "targetMB": 2,
+        "sizePriority": false,
+        "bytes": 1716391,
+        "elapsedMs": 3280,
+        "grayscaleAllowed": true,
+        "targetMet": true
+      }
+    ],
+    "timingScope": "Compress click to saved browser download in this environment; not a performance guarantee."
+  },
+  "suppliedDocument": {
+    "inputBytes": 39514672,
+    "pages": 201,
+    "losslessCandidateBytes": 39503374,
+    "imageStreamBytes": 38197021,
+    "retainedNonImageBytesInCurrentRepresentation": 1306353
+  },
+  "independentPdfChecks": [
+    {
+      "name": "full-2-priority",
+      "pages": 201,
+      "allPageGeometryMatched": true,
+      "allPageTextMatched": true,
+      "allPageDrawingInstructionsMatched": true,
+      "annotationsMatched": true,
+      "metadataMatched": true,
+      "pagesRenderedAtLowResolution": 201,
+      "renderingDoesNotEstablishLegibility": true
+    },
+    {
+      "name": "full-1-priority",
+      "pages": 201,
+      "allPageGeometryMatched": true,
+      "allPageTextMatched": true,
+      "allPageDrawingInstructionsMatched": true,
+      "annotationsMatched": true,
+      "metadataMatched": true,
+      "pagesRenderedAtLowResolution": 201,
+      "renderingDoesNotEstablishLegibility": true
+    },
+    {
+      "name": "scans24-1-normal",
+      "pages": 24,
+      "allPageGeometryMatched": true,
+      "allPageTextMatched": true,
+      "allPageDrawingInstructionsMatched": true,
+      "annotationsMatched": true,
+      "metadataMatched": true,
+      "pagesRenderedAtLowResolution": 24,
+      "renderingDoesNotEstablishLegibility": true
+    },
+    {
+      "name": "scans48-2-normal",
+      "pages": 48,
+      "allPageGeometryMatched": true,
+      "allPageTextMatched": true,
+      "allPageDrawingInstructionsMatched": true,
+      "annotationsMatched": true,
+      "metadataMatched": true,
+      "pagesRenderedAtLowResolution": 48,
+      "renderingDoesNotEstablishLegibility": true
+    },
+    {
+      "name": "scans24-2-normal",
+      "pages": 24,
+      "allPageGeometryMatched": true,
+      "allPageTextMatched": true,
+      "allPageDrawingInstructionsMatched": true,
+      "annotationsMatched": true,
+      "metadataMatched": true,
+      "pagesRenderedAtLowResolution": 24,
+      "renderingDoesNotEstablishLegibility": true
+    }
+  ],
+  "limits": [
+    "The supplied 201-page PDF does not reach 1 MB with the current content-preserving engine.",
+    "Its 2 MB size-priority output meets bytes but scanned fine print is severely blurred and may be unreadable.",
+    "The denser 48-page sample did not meet 2 MB; smaller candidates failed the unchanged visual guard.",
+    "Automated geometry, metadata, text, page-instruction and render checks do not establish scan legibility.",
+    "A representative normal 1 MB sample page was visually reviewed; no universal readability guarantee.",
+    "Device memory, pixel, storage, cancellation, signature and codec guards remain. Files above 200 MB retain existing lossless policy.",
+    "No input PDFs, output test PDFs or screenshots are included in the code archive."
+  ]
+}

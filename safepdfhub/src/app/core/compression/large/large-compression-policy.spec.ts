@@ -20,11 +20,14 @@ describe('large PDF resource boundaries', () => {
     expect(compressionDevice('Android Mobile', 'Linux', 5, true, 'tablet')).toBe('mobile');
   });
   it('keeps quality modes through exactly 200 MB and lossless above it', () => {
+    expect(imageQualities(40_000_000, 'strong', 40_000_000, 1_000_000, true)).toEqual([45, 20, 5, 55]);
+    expect(imageQualities(200_000_001, 'strong', 100_000_000, 1_000_000, true)).toEqual([]);
     expect(imageQualities(200_000_000, 'recommended', 100_000_000)).toEqual([82]);
     expect(imageQualities(200_000_000, 'strong', 100_000_000)).toEqual([55]);
     expect(imageQualities(200_000_001, 'strong', 100_000_000)).toEqual([]);
     expect(imageQualities(200_000_000, 'light', 100_000_000)).toEqual([]);
-    expect(imageQualities(200_000_000, 'strong', 100_000_000, 5_000_000)).toEqual([45, 20]);
+    expect(imageQualities(200_000_000, 'strong', 100_000_000, 5_000_000)).toEqual([45, 20, 55]);
+    expect(imageQualities(40_000_000, 'strong', 40_000_000, 35_000_000)).toEqual([82, 65, 45, 20, 55]);
     expect(imageQualities(200_000_000, 'strong', 4_000_000, 5_000_000)).toEqual([]);
     expect(requiredScratchBytes(200_000_000, true)).toBe(472_000_000);
   });

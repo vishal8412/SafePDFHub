@@ -33,6 +33,7 @@ export class PdfFinalIntegrityService {
     onProgress?: (progress: number) => void,
     signal?: AbortSignal,
     level: 'light' | 'recommended' | 'strong' = 'light',
+    grayscale = false,
   ): Promise<PdfFinalIntegrityResult> {
     const startedAt = performance.now();
     let sourceJs: any = null;
@@ -134,7 +135,7 @@ export class PdfFinalIntegrityService {
         }
 
         throwIfCompressionCancelled(signal);
-        const visual = await this.visualFidelity.validateDocuments(sourceJs, candidateJs, level, signal);
+        const visual = await this.visualFidelity.validateDocuments(sourceJs, candidateJs, level, signal, grayscale);
         if (visual.status !== 'passed') {
           return this.rejected(sourcePageCount, sourcePageCount, true, true, true,
             'Visual fidelity failed: ' + (visual.reason ?? 'validation unavailable'), startedAt);

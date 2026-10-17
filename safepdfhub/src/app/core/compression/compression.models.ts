@@ -4,6 +4,8 @@ export interface CompressionResult {
   processingNote?: string;
   targetBytes?: number;
   targetMet?: boolean;
+  grayscaleRequested?: boolean;
+  sizePriorityRequested?: boolean;
   /** The file selected for the user after candidate comparison. */
   file: File;
   /** Authoritative input size in bytes. */

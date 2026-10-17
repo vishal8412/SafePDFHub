@@ -23,6 +23,10 @@ import { OperationResultComponent } from '../../../../shared/components/operatio
 })
 export class CompressWorkspaceComponent {
 
+  @Input() allowGrayscale = false;
+  @Input() sizePriority = false;
+  @Output() sizePriorityChange = new EventEmitter<boolean>();
+  @Output() allowGrayscaleChange = new EventEmitter<boolean>();
   @Input() targetSizeMB: number | null = null;
   @Input() compressionResult: CompressionResult | null = null;
   @Output() targetSizeMBChange = new EventEmitter<number | null>();
@@ -33,7 +37,40 @@ export class CompressWorkspaceComponent {
 
   setTarget(value: number | null): void {
     if (this.loading || this.compressing) return;
+    if (value === null) this.allowGrayscaleChange.emit(false);
+    if (value === null) this.sizePriorityChange.emit(false);
     this.targetSizeMBChange.emit(value);
+  }
+
+  retryWithGrayscale(): void {
+    if (this.loading || this.compressing || this.largeFileMode) return;
+    this.allowGrayscaleChange.emit(true);
+    this.compress.emit();
+  }
+
+  retryWithSizePriority(): void {
+    if (this.loading || this.compressing || this.largeFileMode) return;
+    this.sizePriorityChange.emit(true);
+    this.compress.emit();
+  }
+
+  get sizePriorityNotice(): string {
+    return this.compressionResult?.sizePriorityRequested
+      ? ' Stronger image reduction was allowed. Small scanned text may be unreadable; compare it with your original.' : '';
+  }
+
+  get grayscaleNotice(): string {
+    return this.compressionResult?.grayscaleRequested && !this.compressionResult.processingNote?.includes('Grayscale was unavailable')
+      ? ' Grayscale was allowed for this run. Review fine text, stamps and signatures before using the file.' : '';
+  }
+
+  get processingNotice(): string {
+    const note = this.compressionResult?.processingNote ?? '';
+    if (note.includes('Grayscale was unavailable')) return ' Grayscale was unavailable for this file on this device; colour was retained.';
+    if (note.includes('resource or validation limit') || note.includes('could not be validated')) {
+      return ' A device resource or validation limit stopped further compression. The best validated result was retained.';
+    }
+    return this.largeFileMode ? ' This file used lossless compression.' : '';
   }
 
   get limitedReduction(): boolean {
@@ -49,7 +86,7 @@ export class CompressWorkspaceComponent {
     if (result?.targetBytes !== undefined) {
       return result.targetMet
         ? `Target met. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Download size: ${actual}.`
-        : `Target not reached. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Smallest validated result: ${actual}. This limit could not be reached with content-preserving compression; consider splitting the PDF.`;
+        : `Target not reached. Requested maximum: ${this.formatFileSize(result.targetBytes)}. Smallest validated result: ${actual}. Further reduction may soften small text. ${!result.grayscaleRequested && !this.largeFileMode ? 'Try grayscale if you do not need colour, or choose a larger limit.' : 'Choose a larger limit, or split the PDF if multiple files are accepted.'}`;
     }
     if (this.limitedReduction) return `Only a small reduction was possible. Download size: ${actual}. Some images may already be optimized or require a format this device cannot recompress safely.`;
     return result?.returnedOriginal
@@ -102,6 +139,8 @@ export class CompressWorkspaceComponent {
 
     if (this.loading || this.compressing) return;
     this.targetSizeMBChange.emit(null);
+    this.allowGrayscaleChange.emit(false);
+    this.sizePriorityChange.emit(false);
     this.compressionLevelChange.emit(level);
   }
 

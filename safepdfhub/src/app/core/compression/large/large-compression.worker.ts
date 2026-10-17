@@ -15,7 +15,7 @@ self.onmessage = async ({ data }: MessageEvent) => {
     const outputName = data.outputName ?? 'output.pdf';
     if (!/^output(?:-\d+)?\.pdf$/.test(outputName)) throw new Error('Invalid output name.');
     const memoryMiB = [128, 192, 256, 384, 512].includes(budget?.memoryMiB) ? budget.memoryMiB : 192;
-    if (quality !== undefined && (file.size > LOSSLESS_ONLY_THRESHOLD || ![20, 45, 55, 65, 82].includes(quality))) throw new Error('Invalid image compression policy.');
+    if (quality !== undefined && (file.size > LOSSLESS_ONLY_THRESHOLD || ![5, 20, 45, 55, 65, 82].includes(quality))) throw new Error('Invalid image compression policy.');
     if (!(file instanceof File) || file.size > MAX_COMPRESSION_BYTES || file.size < 1) throw new Error('Invalid large PDF size.');
     const header = new TextDecoder().decode(await file.slice(0, 1024).arrayBuffer());
     if (!header.includes('%PDF-')) throw new Error('This file does not contain a PDF header.');

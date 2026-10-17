@@ -2,6 +2,33 @@ import { describe, it, expect, vi } from 'vitest';
 import { CompressWorkspaceComponent } from './compress-workspace.component';
 
 describe('Compression workspace', () => {
+  it('requires a separate size-priority retry and blocks it while busy', () => {
+    const ui = new CompressWorkspaceComponent(), events: string[] = [];
+    ui.sizePriorityChange.subscribe(value => events.push(`size:${value}`));
+    ui.compress.subscribe(() => events.push('compress'));
+    ui.retryWithSizePriority();
+    expect(events).toEqual(['size:true', 'compress']);
+    ui.compressing = true; ui.retryWithSizePriority();
+    expect(events).toHaveLength(2);
+  });
+
+  it('explains unavailable grayscale without suggesting it was applied', () => {
+    const ui = new CompressWorkspaceComponent();
+    ui.compressionResult = { grayscaleRequested: true, processingNote: 'Grayscale was unavailable on this device; colour was retained.' } as never;
+    expect(ui.grayscaleNotice).toBe('');
+    expect(ui.processingNotice).toContain('colour was retained');
+  });
+  it('requests grayscale before retrying and blocks a duplicate request while busy', () => {
+    const ui = new CompressWorkspaceComponent();
+    const events: string[] = [];
+    ui.allowGrayscaleChange.subscribe(value => events.push(`gray:${value}`));
+    ui.compress.subscribe(() => events.push('compress'));
+    ui.retryWithGrayscale();
+    expect(events).toEqual(['gray:true', 'compress']);
+    ui.compressing = true; ui.retryWithGrayscale();
+    expect(events).toHaveLength(2);
+  });
+
   it('reports actual byte counts even when rounded MB would hide a missed target', () => {
     const ui = new CompressWorkspaceComponent();
     ui.resultFile = new File([new Uint8Array(1_000_001)], 'result.pdf');

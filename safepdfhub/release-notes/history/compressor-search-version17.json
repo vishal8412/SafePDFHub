@@ -1,0 +1,137 @@
+{
+  "release": "Maximum Reduction comparison and wrapped JPEG budget fix",
+  "baseVersion": 16,
+  "date": "2026-10-16",
+  "reportedCase": {
+    "sourceBytes": 39514672,
+    "targetBytes": 10000000,
+    "reportedTargetOutputBytes": 15134291,
+    "reportedMaximumOutputBytes": 13604662,
+    "source": "User screenshots; original PDF matched by name and exact size"
+  },
+  "rootCauses": [
+    "Wrapped Flate/JPEG image chains were accepted by the decoder but excluded by the image byte-budget eligibility check.",
+    "Target searches and standard Maximum Reduction used independent candidate recipes; missed targets did not compare the normal Maximum Reduction result."
+  ],
+  "changes": [
+    "Shared JPEG filter-chain and DecodeParms validation used by both budgeting and extraction.",
+    "Native large-file missed targets compare a source-based normal Maximum Reduction candidate inside the existing storage lease and deadline.",
+    "Bounded qpdf target quality search includes quality 20 and the standard Maximum Reduction quality 55.",
+    "Regular engine missed targets compare the complete Maximum Reduction pipeline while preserving selected-file telemetry and cancellation."
+  ],
+  "browser": {
+    "name": "Chromium 153 headless",
+    "deviceMemorySignalGiB": 8,
+    "formFactor": "desktop",
+    "cases": [
+      {
+        "case": "muk-maximum",
+        "sourceBytes": 39514672,
+        "targetBytes": null,
+        "downloadedBytes": 8792754,
+        "targetMet": null,
+        "browserActionToSavedDownloadMs": 21501,
+        "integrity": {
+          "pageCount": 201,
+          "pageCountMatches": true,
+          "geometryMatches": true,
+          "selectableTextMatchesEveryPage": true,
+          "metadataMatches": true,
+          "pageInstructionsMatch": true,
+          "allPagesRenderedAtLowResolution": true
+        }
+      },
+      {
+        "case": "muk-target10-gray",
+        "sourceBytes": 39514672,
+        "targetBytes": 10000000,
+        "downloadedBytes": 8789000,
+        "targetMet": true,
+        "browserActionToSavedDownloadMs": 24978,
+        "integrity": {
+          "pageCount": 201,
+          "pageCountMatches": true,
+          "geometryMatches": true,
+          "selectableTextMatchesEveryPage": true,
+          "metadataMatches": true,
+          "pageInstructionsMatch": true,
+          "allPagesRenderedAtLowResolution": true
+        }
+      },
+      {
+        "case": "muk-target5-gray",
+        "sourceBytes": 39514672,
+        "targetBytes": 5000000,
+        "downloadedBytes": 6155852,
+        "targetMet": false,
+        "browserActionToSavedDownloadMs": 48600,
+        "integrity": {
+          "pageCount": 201,
+          "pageCountMatches": true,
+          "geometryMatches": true,
+          "selectableTextMatchesEveryPage": true,
+          "metadataMatches": true,
+          "pageInstructionsMatch": true,
+          "allPagesRenderedAtLowResolution": true
+        }
+      },
+      {
+        "case": "small-maximum",
+        "sourceBytes": 15513995,
+        "targetBytes": null,
+        "downloadedBytes": 5396775,
+        "targetMet": null,
+        "browserActionToSavedDownloadMs": 18773,
+        "integrity": {
+          "pageCount": 842,
+          "pageCountMatches": true,
+          "geometryMatches": true,
+          "selectableTextMatchesEveryPage": true,
+          "metadataMatches": true,
+          "pageInstructionsMatch": true,
+          "allPagesRenderedAtLowResolution": true
+        }
+      },
+      {
+        "case": "small-target1",
+        "sourceBytes": 15513995,
+        "targetBytes": 1000000,
+        "downloadedBytes": 5045792,
+        "targetMet": false,
+        "browserActionToSavedDownloadMs": 37767,
+        "integrity": {
+          "pageCount": 842,
+          "pageCountMatches": true,
+          "geometryMatches": true,
+          "selectableTextMatchesEveryPage": true,
+          "metadataMatches": true,
+          "pageInstructionsMatch": true,
+          "allPagesRenderedAtLowResolution": true
+        }
+      }
+    ],
+    "pageErrors": [],
+    "resultWidthsChecked": [
+      1440,
+      768,
+      390,
+      320
+    ]
+  },
+  "tests": {
+    "filesPassed": 25,
+    "testsPassed": 144
+  },
+  "productionBuild": "passed; existing Studio CSS budget and CommonJS warnings remain",
+  "qualityReview": {
+    "samplePage": 11,
+    "scope": "Representative scan inspected; all-page rendering and text equality do not establish character-level legibility of scanned images."
+  },
+  "limitations": [
+    "The 5 MB request on the 39.51 MB document remains above target.",
+    "Fallback comparison can stop at an existing device, deadline or validation limit; the best validated result is retained with a notice.",
+    "Above-200 MB lossless policy and device memory/pixel limits remain unchanged.",
+    "Runtime measurements cover these files and one desktop configuration only."
+  ],
+  "privacy": "No original PDFs or screenshots are included in this code archive."
+}

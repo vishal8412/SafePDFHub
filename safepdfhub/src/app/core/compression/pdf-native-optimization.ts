@@ -1,11 +1,12 @@
 import { CompressionActivity, CompressionActivityObserver } from './compression-activity';
 import { recompressFlateStreams } from './pdf-stream-compression';
-import { extractJpegBytes } from './pdf-jpeg-stream';
+import { extractJpegBytes, supportedJpegFilterCount } from './pdf-jpeg-stream';
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFObject, PDFRawStream, PDFRef, PDFStreamWriter, decodePDFRawStream } from 'pdf-lib';
 import { captureDocumentFacts, PdfDocumentFacts } from './pdf-document-facts';
+import { allocateImageBudgets, encodeJpegWithinBudget } from './target-image-budget';
 import { CompressionLevel } from './compression.types';
 
-export interface NativeOptimizationOptions { level?: CompressionLevel; targetBytes?: number; retainOnlyBest?: boolean; maxImagePixels?: number; }
+export interface NativeOptimizationOptions { level?: CompressionLevel; targetBytes?: number; retainOnlyBest?: boolean; maxImagePixels?: number; allowGrayscale?: boolean; sizePriority?: boolean; }
 
 /** Each candidate still requires final semantic and visual certification. */
 export async function optimizeNativeCandidates(bytes: Uint8Array, options: NativeOptimizationOptions = {}, onSourceFacts?: (facts: PdfDocumentFacts) => void, onActivity?: CompressionActivityObserver): Promise<Uint8Array[]> {
@@ -125,7 +126,9 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
   const qualities = target ? (options.targetBytes === undefined && level === 'strong' ? [0.55, 0.40] : [0.65, 0.48])
     : [level === 'recommended' ? 0.82 : 0.55];
   const maxPixels = Math.min(32_000_000, options.maxImagePixels ?? 8_000_000);
-  let maxEdge = target ? Math.max(1000, Math.min(2400, Math.round(3200 * Math.cbrt(target / Math.max(lossless.length, 1)))))
+  const sizePriority = options.targetBytes !== undefined && options.sizePriority === true;
+  const minimumEdge = sizePriority ? 320 : 1000;
+  let maxEdge = target ? Math.max(minimumEdge, Math.min(2400, Math.round(3200 * Math.cbrt(target / Math.max(lossless.length, 1)))))
     : level === 'recommended' ? 2400 : 1600;
   if (target) {
     const edges = images.map(([, image]) => {
@@ -136,13 +139,29 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
     }).filter(edge => edge > 0);
     maxEdge = capTargetEdge(maxEdge, edges);
   }
+  const budgetable = images.filter(([, image]) => {
+    const get = (key: string) => pdf.context.lookup(image.dict.get(PDFName.of(key)));
+    const width = (get('Width') as PDFNumber)?.asNumber?.() ?? 0;
+    const height = (get('Height') as PDFNumber)?.asNumber?.() ?? 0;
+    let filter = get('Filter');
+    if (filter instanceof PDFArray && filter.size() === 1) filter = pdf.context.lookup(filter.get(0));
+    return Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0 &&
+      width * height >= 65_536 && width * height <= maxPixels &&
+      [PDFName.of('DeviceRGB'), PDFName.of('DeviceGray')].includes(get('ColorSpace') as PDFName) &&
+      (get('BitsPerComponent') as PDFNumber)?.asNumber?.() === 8 &&
+      !['Decode', 'ImageMask', 'Mask', 'SMask', 'F', 'SMaskInData'].some(key => image.dict.has(PDFName.of(key))) &&
+      (supportedJpegFilterCount(pdf, image) > 0 || ((!filter || filter === PDFName.of('FlateDecode')) && !image.dict.has(PDFName.of('DecodeParms'))));
+  });
+  const budgets = target ? allocateImageBudgets(target, lossless.length, budgetable.map(([, image]) => image.getContents().length)) : null;
+  const imageBudgets = new Map(budgetable.map(([ref], i) => [ref, budgets?.[i]]));
+  const budgetableRefs = new Set(budgetable.map(([ref]) => ref));
   let best = lossless;
   for (const [passIndex, quality] of qualities.entries()) {
     let checked = 0;
     report({ stage: 'optimizing', current: 0, total: images.length, pass: passIndex + 1, passes: qualities.length });
     for (const [ref, original] of images) {
       try {
-        const replacement = await recompressImage(pdf, original, quality, maxEdge, maxPixels);
+        const replacement = await recompressImage(pdf, original, quality, maxEdge, maxPixels, imageBudgets.get(ref) ?? (sizePriority && budgetableRefs.has(ref) ? 512 : undefined), !!options.allowGrayscale && options.targetBytes !== undefined, minimumEdge, sizePriority ? 0.05 : 0.10);
         // Every pass starts from the original image, avoiding generational loss.
         pdf.context.assign(ref, replacement ?? original);
       } catch { pdf.context.assign(ref, original); }
@@ -159,7 +178,10 @@ export async function optimizeNativeCandidates(bytes: Uint8Array, options: Nativ
       }
     }
     if (target && best.length <= target) break;
-    if (target) maxEdge = Math.max(1000, Math.floor(maxEdge * Math.min(0.95, Math.sqrt(target / best.length * 0.95))));
+    // Retained PDF content already exhausts the budget; the minimum image
+    // settings have been tried, so repeating the same pass cannot help.
+    if (sizePriority && !budgets) break;
+    if (target) maxEdge = Math.max(minimumEdge, Math.floor(maxEdge * Math.min(0.95, Math.sqrt(target / best.length * 0.95))));
   }
   return candidates;
 }
@@ -168,12 +190,12 @@ export async function optimizeNativePdf(bytes: Uint8Array): Promise<Uint8Array |
   return (await optimizeNativeCandidates(bytes))[0] ?? null;
 }
 
-async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: number, maxEdge: number, maxPixels: number): Promise<PDFRawStream | null> {
+async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: number, maxEdge: number, maxPixels: number, byteBudget?: number, grayscale = false, minimumEdge = 1000, minimumQuality = 0.10): Promise<PDFRawStream | null> {
   const dict = stream.dict;
   const get = (key: string) => pdf.context.lookup(dict.get(PDFName.of(key)));
   // Preserve masks, color conversion, unusual codecs and tiny line-art exactly.
   if (['Decode', 'ImageMask', 'Mask', 'SMask', 'F', 'SMaskInData'].some(key => dict.has(PDFName.of(key)))) return null;
-  if (get('ColorSpace') !== PDFName.of('DeviceRGB') || (get('BitsPerComponent') as PDFNumber)?.asNumber?.() !== 8) return null;
+  if (![PDFName.of('DeviceRGB'), PDFName.of('DeviceGray')].includes(get('ColorSpace') as PDFName) || (get('BitsPerComponent') as PDFNumber)?.asNumber?.() !== 8) return null;
   const width = (get('Width') as PDFNumber)?.asNumber?.() ?? 0;
   const height = (get('Height') as PDFNumber)?.asNumber?.() ?? 0;
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width * height > maxPixels || width * height < 65_536) return null;
@@ -197,11 +219,12 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
         context.drawImage(bitmap, 0, 0, outputWidth, outputHeight);
       } finally { bitmap.close(); }
     } else {
-      const rgb = decodePDFRawStream(stream).getBytes(width * height * 3 + 1);
-      if (rgb.length !== width * height * 3) return null;
+      const channels = get('ColorSpace') === PDFName.of('DeviceGray') ? 1 : 3;
+      const rgb = decodePDFRawStream(stream).getBytes(width * height * channels + 1);
+      if (rgb.length !== width * height * channels) return null;
       const pixels = context.createImageData(width, height);
-      for (let i = 0, j = 0; i < rgb.length; i += 3, j += 4) {
-        pixels.data[j] = rgb[i]; pixels.data[j + 1] = rgb[i + 1]; pixels.data[j + 2] = rgb[i + 2]; pixels.data[j + 3] = 255;
+      for (let i = 0, j = 0; i < rgb.length; i += channels, j += 4) {
+        pixels.data[j] = rgb[i]; pixels.data[j + 1] = rgb[i + (channels === 1 ? 0 : 1)]; pixels.data[j + 2] = rgb[i + (channels === 1 ? 0 : 2)]; pixels.data[j + 3] = 255;
       }
       if (scale === 1) context.putImageData(pixels, 0, 0);
       else {
@@ -215,11 +238,40 @@ async function recompressImage(pdf: PDFDocument, stream: PDFRawStream, quality: 
         } finally { staging.width = staging.height = 1; }
       }
     }
-    const jpeg = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+    if (grayscale) {
+      const pixels = context.getImageData(0, 0, outputWidth, outputHeight);
+      for (let i = 0; i < pixels.data.length; i += 4) {
+        const luminance = Math.round(0.299 * pixels.data[i] + 0.587 * pixels.data[i + 1] + 0.114 * pixels.data[i + 2]);
+        pixels.data[i] = pixels.data[i + 1] = pixels.data[i + 2] = luminance;
+      }
+      context.putImageData(pixels, 0, 0);
+    }
+    const encode = (q: number) => canvas.convertToBlob({ type: 'image/jpeg', quality: q });
+    let jpeg = byteBudget === undefined ? await encode(quality) : await encodeJpegWithinBudget(encode, byteBudget, 0.85, minimumQuality);
+    if (byteBudget !== undefined && jpeg.size > byteBudget && Math.max(canvas.width, canvas.height) > minimumEdge) {
+      // Keep a bounded snapshot of the decoded pixels, not an encoded JPEG.
+      // Resize only images that cannot fit at the quality floor, instead of
+      // decoding and serializing the entire PDF at several fixed settings.
+      const pixels = await createImageBitmap(canvas);
+      try {
+        for (let attempt = 0; attempt < 4 && jpeg.size > byteBudget; attempt++) {
+          const edge = Math.max(minimumEdge, Math.floor(Math.max(canvas.width, canvas.height) *
+            Math.min(0.9, Math.sqrt(byteBudget / jpeg.size) * 0.96)));
+          const scale = Math.min(1, edge / Math.max(pixels.width, pixels.height));
+          canvas.width = Math.max(1, Math.round(pixels.width * scale));
+          canvas.height = Math.max(1, Math.round(pixels.height * scale));
+          context.imageSmoothingEnabled = true; context.imageSmoothingQuality = 'high';
+          context.drawImage(pixels, 0, 0, canvas.width, canvas.height);
+          jpeg = await encodeJpegWithinBudget(encode, byteBudget, 0.85, minimumQuality);
+          if (edge <= minimumEdge) break;
+        }
+      } finally { pixels.close(); }
+    }
     if (jpeg.type !== 'image/jpeg' || jpeg.size + 32 >= stream.getContents().length) return null;
     const dictionary = dict.clone(pdf.context);
-    dictionary.set(PDFName.of('Width'), PDFNumber.of(outputWidth));
-    dictionary.set(PDFName.of('Height'), PDFNumber.of(outputHeight));
+    dictionary.set(PDFName.of('Width'), PDFNumber.of(canvas.width));
+    dictionary.set(PDFName.of('Height'), PDFNumber.of(canvas.height));
+    dictionary.set(PDFName.of('ColorSpace'), PDFName.of('DeviceRGB'));
     dictionary.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
     dictionary.delete(PDFName.of('DecodeParms'));
     const bytes = new Uint8Array(await jpeg.arrayBuffer());

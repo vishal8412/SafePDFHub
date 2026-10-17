@@ -35,11 +35,15 @@ export function compressionDevice(ua: string, platform: string, touchPoints: num
   if (/iPhone|Mobile/i.test(ua) || mobileHint === true || detected === 'mobile') return 'mobile';
   return detected === 'tablet' ? 'tablet' : 'desktop';
 }
-export function imageQualities(fileBytes: number, level: 'light' | 'recommended' | 'strong', losslessBytes: number, targetBytes?: number): number[] {
+export function imageQualities(fileBytes: number, level: 'light' | 'recommended' | 'strong', losslessBytes: number, targetBytes?: number, sizePriority = false): number[] {
   if (fileBytes > LOSSLESS_ONLY_THRESHOLD || (targetBytes !== undefined && losslessBytes <= targetBytes)) return [];
   if (targetBytes !== undefined) {
     const gap = 1 - targetBytes / losslessBytes;
-    return gap >= 0.4 ? [45, 20] : gap >= 0.2 ? [65, 45, 20] : [82, 65, 45];
+    // JPEG size is not strictly monotonic across different encoder settings.
+    // Include the normal Maximum Reduction setting as an independent source
+    // candidate, and retain the smallest actual validated output.
+    const search = gap >= 0.4 ? [45, 20] : gap >= 0.2 ? [65, 45, 20] : [82, 65, 45, 20];
+    return [...search, ...(sizePriority ? [5] : []), 55];
   }
   return level === 'light' ? [] : [level === 'recommended' ? 82 : 55];
 }

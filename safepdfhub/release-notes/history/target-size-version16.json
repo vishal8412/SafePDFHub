@@ -1,0 +1,113 @@
+{
+  "date": "2026-10-16",
+  "baseRelease": "SafePDFHub-SEO-Growth.zip / version 15",
+  "input": {
+    "bytes": 143288037,
+    "pages": 240,
+    "selectableText": false
+  },
+  "environment": {
+    "browser": "Chromium 153 headless",
+    "formFactor": "desktop",
+    "deviceMemorySignalGiB": 8,
+    "initialViewport": [
+      1440,
+      1000
+    ],
+    "note": "Actual hardware and browser implementations vary; these are not mobile benchmarks."
+  },
+  "browserCases": [
+    {
+      "targetBytes": 10000000,
+      "grayscaleRequested": false,
+      "downloadedBytes": 9696454,
+      "targetMet": true,
+      "uiAndDownloadSizeAgree": true,
+      "browserActionToSavedDownloadMs": 66781,
+      "pageCount": 240,
+      "pageGeometryAndRotationMatch": true,
+      "metadataMatch": true,
+      "decodedPageDrawingInstructionsMatch": true,
+      "allPagesRenderedAtLowResolution": true
+    },
+    {
+      "targetBytes": 10000000,
+      "grayscaleRequested": true,
+      "downloadedBytes": 9692590,
+      "targetMet": true,
+      "uiAndDownloadSizeAgree": true,
+      "browserActionToSavedDownloadMs": 68237,
+      "pageCount": 240,
+      "pageGeometryAndRotationMatch": true,
+      "metadataMatch": true,
+      "decodedPageDrawingInstructionsMatch": true,
+      "allPagesRenderedAtLowResolution": true
+    },
+    {
+      "targetBytes": 5000000,
+      "grayscaleRequested": true,
+      "downloadedBytes": 8535968,
+      "targetMet": false,
+      "uiAndDownloadSizeAgree": true,
+      "browserActionToSavedDownloadMs": 82904,
+      "pageCount": 240,
+      "pageGeometryAndRotationMatch": true,
+      "metadataMatch": true,
+      "decodedPageDrawingInstructionsMatch": true,
+      "allPagesRenderedAtLowResolution": true
+    }
+  ],
+  "ui": {
+    "widths": [
+      1440,
+      768,
+      390,
+      320
+    ],
+    "overflow": false,
+    "grayscaleChoice": true,
+    "consentReset": true,
+    "pageErrors": []
+  },
+  "tests": {
+    "files": 25,
+    "passed": 137,
+    "command": "npm test -- --watch=false --include=src/app/core/compression/**/*.spec.ts --include=src/app/core/engines/compress.engine.spec.ts --include=src/app/features/tools/compress/compress-workspace/compress-workspace.component.spec.ts"
+  },
+  "build": "production build passed; see accompanying build verification",
+  "sourceFilesChanged": [
+    "src/app/core/compression/compress.facade.spec.ts",
+    "src/app/core/compression/compress.facade.ts",
+    "src/app/core/compression/compression-plan.ts",
+    "src/app/core/compression/compression.models.ts",
+    "src/app/core/compression/compression.state.ts",
+    "src/app/core/compression/large/large-compression.service.ts",
+    "src/app/core/compression/pdf-native-optimization.ts",
+    "src/app/core/engines/compress.engine.ts",
+    "src/app/features/tools/compress/compress-workspace/compress-workspace.component.html",
+    "src/app/features/tools/compress/compress-workspace/compress-workspace.component.scss",
+    "src/app/features/tools/compress/compress-workspace/compress-workspace.component.spec.ts",
+    "src/app/features/tools/compress/compress-workspace/compress-workspace.component.ts",
+    "src/app/pages/tool/tool.component.html"
+  ],
+  "newRuntimeFiles": [
+    "src/app/core/compression/target-image-budget.ts"
+  ],
+  "newTests": [
+    "src/app/core/compression/target-image-budget.spec.ts"
+  ],
+  "visualReview": {
+    "pages": [
+      40,
+      120
+    ],
+    "scope": "Representative rendered pages, not every character or page. Small text becomes softer. Structural checks do not establish legibility."
+  },
+  "limits": [
+    "5 MB was not achieved for this document.",
+    "Grayscale removes colour from supported images and can be unavailable on lower-memory compatibility paths.",
+    "Inputs above 200 MB retain the existing lossless policy.",
+    "Canvas sizing and quality attempts are bounded; arbitrary targets cannot be guaranteed."
+  ],
+  "dataHandling": "The test PDF and screenshots are excluded from the code package."
+}

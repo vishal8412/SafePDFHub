@@ -47,7 +47,7 @@ export class LargeCompressionService {
     if (delay) setTimeout(() => { void remove(); }, delay);
     else await remove();
   }
-  async compress(file: File, signal: AbortSignal, progress: (n: number) => void, options: { level?: CompressionLevel; targetBytes?: number } = {}, onActivity?: CompressionActivityObserver): Promise<{file: File; pages: number; strategy: 'safe' | 'smart' | 'strong'; note: string}> {
+  async compress(file: File, signal: AbortSignal, progress: (n: number) => void, options: { level?: CompressionLevel; targetBytes?: number; allowGrayscale?: boolean; sizePriority?: boolean } = {}, onActivity?: CompressionActivityObserver): Promise<{file: File; pages: number; strategy: 'safe' | 'smart' | 'strong'; note: string}> {
     if (this.running) throw new Error('A large PDF is already being processed.');
     this.running = true;
     this.activityObserver = onActivity;
@@ -82,7 +82,7 @@ export class LargeCompressionService {
         try {
           const directory = await root.getDirectoryHandle(name, { create: true });
           let native = file.size <= nativeCompressionLimit(this.capability.budget ?? compressionBudget(null, 'desktop', true));
-          const requestedQualities = native ? [] : imageQualities(file.size, level, file.size, options.targetBytes);
+          const requestedQualities = native ? [] : imageQualities(file.size, level, file.size, options.targetBytes, options.sizePriority);
           let firstQuality = requestedQualities.shift();
           let firstFailed = false;
           let pages: number;
@@ -126,11 +126,35 @@ export class LargeCompressionService {
               break;
             }
           }
+          // A missed target must also consider the exact normal Maximum
+          // Reduction recipe. Start from the source, not the lossy output, and
+          // compare the actual validated files within this job's storage lease.
+          if (native && options.targetBytes !== undefined && Math.min(stored.size, file.size) > options.targetBytes) {
+            const candidateName = 'output-999.pdf';
+            try {
+              if (Date.now() >= deadline) throw new Error('Comparison time budget exhausted.');
+              const candidatePages = await this.runWorker(file, directory, signal,
+                n => progress(Math.min(95, Math.round(75 + n * 0.20))),
+                { outputName: candidateName, nativeOptions: { level: 'strong' }, timeoutMs: Math.max(1, Math.min(240_000, deadline - Date.now())) });
+              throwIfCompressionCancelled(signal);
+              const candidate = await (await directory.getFileHandle(candidateName)).getFile();
+              if (candidatePages !== pages || candidate.size <= 0) throw new Error('Maximum Reduction candidate failed validation.');
+              if (candidate.size < stored.size) {
+                await directory.removeEntry(bestName); bestName = candidateName; stored = candidate;
+              } else await directory.removeEntry(candidateName);
+            } catch (error) {
+              throwIfCompressionCancelled(signal);
+              if (error instanceof CompressionCancelledError) throw error;
+              try { await this.removeTemporaryEntry(directory, candidateName); } catch {}
+              fallback = ' Further compression stopped at a device resource or validation limit; the best validated result was retained.';
+            }
+          }
           throwIfCompressionCancelled(signal);
           const strategy = native ? (level === 'light' ? 'safe' : level === 'recommended' ? 'smart' : 'strong') : selectedQuality === undefined ? 'safe' : level === 'recommended' ? 'smart' : 'strong';
           const note = (native ? 'Duplicate PDF data was consolidated; image optimization followed the selected quality and target settings. Text, page geometry and metadata were retained.' : selectedQuality === undefined
             ? 'Disk-backed processing retained a lossless result.'
             : `Disk-backed image compression used JPEG quality ${selectedQuality}.`) +
+            (options.allowGrayscale && native ? ' Grayscale was allowed for supported images; review fine text and coloured markings.' : options.allowGrayscale ? ' Grayscale was unavailable on this device; colour was retained.' : '') +
             (file.size > LOSSLESS_ONLY_THRESHOLD ? ' Inputs above 200 MB use lossless compression only.' : '') + fallback;
           if (stored.size >= file.size) return { file, pages, strategy: 'safe' as const, note: 'The original PDF was retained because no smaller validated output was produced.' + fallback };
           const result = new File([stored], file.name.replace(/\.pdf$/i, '') + '-compressed.pdf', { type: 'application/pdf' });
@@ -158,7 +182,7 @@ export class LargeCompressionService {
       }
     }
   }
-  private runWorker(file: File, directory: FileSystemDirectoryHandle, signal: AbortSignal, progress: (n: number) => void, pass: { outputName: string; quality?: number; nativeOptions?: { level?: CompressionLevel; targetBytes?: number }; timeoutMs: number } = { outputName: 'output.pdf', timeoutMs: 300_000 }): Promise<number> {
+  private runWorker(file: File, directory: FileSystemDirectoryHandle, signal: AbortSignal, progress: (n: number) => void, pass: { outputName: string; quality?: number; nativeOptions?: { level?: CompressionLevel; targetBytes?: number; allowGrayscale?: boolean; sizePriority?: boolean }; timeoutMs: number } = { outputName: 'output.pdf', timeoutMs: 300_000 }): Promise<number> {
     throwIfCompressionCancelled(signal);
     return new Promise((resolve, reject) => {
       const worker = new Worker(new URL('./large-compression.worker', import.meta.url), { type: 'module' });

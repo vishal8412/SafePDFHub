@@ -154,3 +154,37 @@ describe('200 MB native routing and fallback', () => {
     });
   }
 });
+
+describe('target result compared with Maximum Reduction', () => {
+  for (const native of [true, false]) {
+    for (const maximumBytes of [13604, 18000]) {
+      it(`keeps the smaller validated candidate on ${native ? 'native' : 'disk'} processing (${maximumBytes} bytes)`, async () => {
+        const source = new File(['pdf'], 'input.pdf'); Object.defineProperty(source, 'size', { value: 39_514_672 });
+        const files = new Map<string, File>();
+        const removed: string[] = [];
+        const directory = { getFileHandle: async (name: string) => ({ getFile: async () => files.get(name)! }),
+          removeEntry: async (name: string) => { removed.push(name); files.delete(name); } };
+        const root = { entries: async function* () {}, getDirectoryHandle: async () => directory, removeEntry: vi.fn() };
+        vi.stubGlobal('navigator', { storage: { getDirectory: async () => root }, locks: {
+          query: async () => ({ held: [] }), request: (_name: string, ...args: any[]) => args.at(-1)({}) } });
+        try {
+          const service = new LargeCompressionService({ assertFile: vi.fn(), checkStorage: vi.fn(),
+            budget: { memoryMiB: native ? 512 : 192 } } as never);
+          const run = vi.spyOn(service as any, 'runWorker').mockImplementation(async (...args: any[]) => {
+            expect(args[0]).toBe(source);
+            const pass = args[4];
+            const normalMaximum = native ? pass.nativeOptions.targetBytes === undefined : pass.quality === 55;
+            const size = normalMaximum ? maximumBytes : pass.quality === 20 ? 17_000 : 15_134;
+            files.set(pass.outputName, new File([new Uint8Array(size)], 'candidate.pdf'));
+            return 201;
+          });
+          const result = await service.compress(source, new AbortController().signal, () => {}, { level: 'strong', targetBytes: 10_000, allowGrayscale: true });
+          expect(result.file.size).toBe(Math.min(15134, maximumBytes));
+          expect(run).toHaveBeenCalledTimes(native ? 2 : 3);
+          expect(files.size).toBe(1);
+          await service.release();
+        } finally { vi.unstubAllGlobals(); }
+      });
+    }
+  }
+});

@@ -105,7 +105,7 @@ export class PdfVisualFidelityService {
 
   /** Reuse documents owned by final certification; do not reload or destroy them. */
   async validateDocuments(
-    source: any, candidate: any, level: 'light' | 'recommended' | 'strong', signal?: AbortSignal,
+    source: any, candidate: any, level: 'light' | 'recommended' | 'strong', signal?: AbortSignal, grayscale = false,
   ): Promise<PdfVisualFidelityResult> {
     const thresholds = this.thresholds(level);
     const count = Math.min(this.maxSamplePages, source.numPages);
@@ -127,7 +127,7 @@ export class PdfVisualFidelityService {
             await this.render(page, canvas, viewport, signal);
             const sample = { pageNumber, width: canvas.width, height: canvas.height,
               imageData: new Uint8ClampedArray(canvas.context.getImageData(0, 0, canvas.width, canvas.height).data) };
-            pages.push(await this.compareRenderedSample(candidate, sample, thresholds, signal));
+            pages.push(await this.compareRenderedSample(candidate, sample, thresholds, signal, grayscale));
           } finally { canvas.cleanup(); }
         } finally { try { page.cleanup?.(); } catch { /* best effort */ } }
       }
@@ -206,6 +206,7 @@ export class PdfVisualFidelityService {
     sourceSample: RenderedSample,
     thresholds: { meanAbsoluteError: number; changedPixelRatio: number },
     signal?: AbortSignal,
+    grayscale = false,
   ): Promise<PdfVisualFidelityPageResult> {
     const page = await candidatePdf.getPage(sourceSample.pageNumber);
     try {
@@ -223,7 +224,7 @@ export class PdfVisualFidelityService {
       try {
         await this.render(page, canvas, viewport, signal);
         const candidateData = canvas.context.getImageData(0, 0, width, height).data;
-        const metrics = this.comparePixels(sourceSample.imageData, candidateData);
+        const metrics = this.comparePixels(sourceSample.imageData, candidateData, grayscale);
         return {
           pageNumber: sourceSample.pageNumber,
           meanAbsoluteError: metrics.meanAbsoluteError,
@@ -279,7 +280,7 @@ export class PdfVisualFidelityService {
     throw new Error('Canvas rendering is unavailable in this environment.');
   }
 
-  private comparePixels(source: Uint8ClampedArray, candidate: Uint8ClampedArray): {
+  private comparePixels(source: Uint8ClampedArray, candidate: Uint8ClampedArray, grayscale = false): {
     meanAbsoluteError: number;
     changedPixelRatio: number;
   } {
@@ -296,7 +297,14 @@ export class PdfVisualFidelityService {
       const r = Math.abs(source[index] - candidate[index]) / 255;
       const g = Math.abs(source[index + 1] - candidate[index + 1]) / 255;
       const b = Math.abs(source[index + 2] - candidate[index + 2]) / 255;
-      const difference = (r + g + b) / 3;
+      // Compare luminance only when the user explicitly allowed grayscale.
+      // Round to the same 8-bit luminance as the encoder: float noise must
+      // not turn an exact 12-level difference into a changed pixel.
+      // Pixel geometry, thresholds, text and annotation checks are unchanged.
+      const difference = grayscale
+        ? Math.abs(Math.round(0.299 * source[index] + 0.587 * source[index + 1] + 0.114 * source[index + 2]) -
+          Math.round(0.299 * candidate[index] + 0.587 * candidate[index + 1] + 0.114 * candidate[index + 2])) / 255
+        : (r + g + b) / 3;
       totalDifference += difference;
       if (difference > changedThreshold) changedPixels += 1;
     }

@@ -30,6 +30,18 @@ function passedResult(): PdfFinalIntegrityResult {
 }
 
 describe('PdfCandidateCertificationService — V2.7', () => {
+  it('separates certification cache entries for permitted grayscale and original colours', async () => {
+    const finalIntegrity = { certify: vi.fn(async (...args: any[]) => args[5]
+      ? passedResult() : { ...passedResult(), status: 'rejected' as const, reason: 'colour mismatch' }) };
+    const service = new PdfCandidateCertificationService(finalIntegrity as never);
+    const source = makeFile(100_000, 'source.pdf'), candidate = makeFile(50_000, 'candidate.pdf');
+    expect((await service.certifySmallest(source, [candidate], undefined, undefined, 'strong')).selected).toBeNull();
+    expect((await service.certifySmallest(source, [candidate], undefined, undefined, 'strong', true)).selected).toBe(candidate);
+    expect((await service.certifySmallest(source, [candidate], undefined, undefined, 'strong', true)).cacheHits).toBe(1);
+    expect((await service.certifySmallest(source, [candidate], undefined, undefined, 'strong')).selected).toBeNull();
+    expect(finalIntegrity.certify).toHaveBeenCalledTimes(2);
+  });
+
   it('certifies candidates from smallest to largest and returns the first passing candidate', async () => {
     const finalIntegrity = {
       certify: vi.fn(async (_source: File, candidate: File) =>

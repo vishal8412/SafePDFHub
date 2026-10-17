@@ -16,6 +16,14 @@ export class CompressionState {
   get targetSizeMB(): number | null { return this.targetSizeMBValue(); }
   set targetSizeMB(value: number | null) { this.targetSizeMBValue.set(value); }
 
+  private readonly allowGrayscaleValue = signal(false);
+  get allowGrayscale(): boolean { return this.allowGrayscaleValue(); }
+  set allowGrayscale(value: boolean) { this.allowGrayscaleValue.set(value); }
+
+  private readonly sizePriorityValue = signal(false);
+  get sizePriority(): boolean { return this.sizePriorityValue(); }
+  set sizePriority(value: boolean) { this.sizePriorityValue.set(value); }
+
   /** Planner-only values. They must remain estimates throughout the lifecycle. */
   private readonly estimatedReductionValue = signal<number>(0);
   get estimatedReduction(): number { return this.estimatedReductionValue(); }
@@ -92,6 +100,8 @@ export class CompressionState {
   reset(): void {
     this.compressionLevel = 'recommended';
     this.targetSizeMB = null;
+    this.allowGrayscale = false;
+    this.sizePriority = false;
     this.estimatedReduction = 0;
     this.estimatedFinalSize = 0;
     this.analyzedPdfType = null;

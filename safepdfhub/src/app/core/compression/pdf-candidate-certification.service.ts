@@ -38,8 +38,10 @@ export class PdfCandidateCertificationService {
     onProgress?: (progress: number) => void,
     signal?: AbortSignal,
     level: 'light' | 'recommended' | 'strong' = 'light',
+    grayscale = false,
   ): Promise<PdfCandidateCertificationRun> {
     const startedAt = performance.now();
+    const validationKey = grayscale ? `${level}:grayscale` : level;
     const smallerCandidates = candidates
       .filter((candidate): candidate is File => candidate !== null && candidate !== undefined && candidate.size < source.size)
       .sort((a, b) => a.size - b.size);
@@ -62,7 +64,7 @@ export class PdfCandidateCertificationService {
 
       if (firstCandidate) {
         duplicateCandidatesSkipped += 1;
-        const cached = this.certificationCache.get(this.cacheKey(sourceFingerprint, fingerprint, level));
+        const cached = this.certificationCache.get(this.cacheKey(sourceFingerprint, fingerprint, validationKey));
         if (cached) {
           cacheHits += 1;
           evaluations.push({
@@ -82,7 +84,7 @@ export class PdfCandidateCertificationService {
       }
 
       fingerprintToFirstCandidate.set(fingerprint, candidate);
-      const key = this.cacheKey(sourceFingerprint, fingerprint, level);
+      const key = this.cacheKey(sourceFingerprint, fingerprint, validationKey);
       const cached = this.certificationCache.get(key);
 
       let result: PdfFinalIntegrityResult;
@@ -100,6 +102,7 @@ export class PdfCandidateCertificationService {
           progress => onProgress?.(this.progressFor(index + progress / 100, smallerCandidates.length)),
           signal,
           level,
+          grayscale,
         );
         throwIfCompressionCancelled(signal);
         this.putCache(key, { result: this.compactResult(result), fingerprint });

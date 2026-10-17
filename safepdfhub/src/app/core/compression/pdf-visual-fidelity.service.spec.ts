@@ -27,6 +27,24 @@ function forensic(): PdfForensicAnalysis {
 }
 
 describe('PdfVisualFidelityService — V2.4', () => {
+  it('compares grayscale luminance only with explicit permission and still detects missing content', () => {
+    const service = new PdfVisualFidelityService({} as never);
+    const source = new Uint8ClampedArray([255, 0, 0, 255]);
+    const gray = new Uint8ClampedArray([76, 76, 76, 255]);
+    expect((service as any).comparePixels(source, gray).meanAbsoluteError).toBeGreaterThan(0.3);
+    expect((service as any).comparePixels(source, gray, true).meanAbsoluteError).toBeLessThan(0.002);
+    expect((service as any).comparePixels(source, new Uint8ClampedArray([255,255,255,255]), true).meanAbsoluteError).toBeGreaterThan(0.5);
+  });
+
+  it('uses 8-bit grayscale values at the exact changed-pixel threshold', () => {
+    const service = new PdfVisualFidelityService({} as never);
+    const pixel = (value: number) => new Uint8ClampedArray([value, value, value, 255]);
+    for (let value = 12; value <= 255; value++) {
+      expect((service as any).comparePixels(pixel(value), pixel(value - 12), true).changedPixelRatio).toBe(0);
+    }
+    expect((service as any).comparePixels(pixel(255), pixel(242), true).changedPixelRatio).toBe(1);
+  });
+
   it('rejects safely when browser rendering is unavailable', async () => {
     const loader = { load: vi.fn(async () => { throw new Error('browser unavailable'); }) } as unknown as PdfJsLoaderService;
     const service = new PdfVisualFidelityService(loader);

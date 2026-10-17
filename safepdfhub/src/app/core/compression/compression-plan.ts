@@ -1,5 +1,7 @@
 export interface CompressionPlan {
     targetBytes?: number;
+    allowGrayscale?: boolean;
+    sizePriority?: boolean;
     strategy: 'safe' | 'smart' | 'strong';
 
     quality: number;
